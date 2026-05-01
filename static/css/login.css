@@ -1,0 +1,57 @@
+body {
+  background: linear-gradient(135deg, #1a4731 0%, #2e7d52 60%, #4caf50 100%);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card {
+  border: none;
+  border-radius: 1rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+.card-header {
+  border-radius: 1rem 1rem 0 0 !important;
+  background: #1a4731;
+}
+
+.nav-pills .nav-link.active {
+  background-color: #2e7d52;
+}
+
+.nav-pills .nav-link {
+  color: #2e7d52;
+}
+
+.btn-primary {
+  background-color: #2e7d52;
+  border-color: #2e7d52;
+}
+
+.btn-primary:hover {
+  background-color: #1a4731;
+  border-color: #1a4731;
+}
+
+.worker-preview {
+  border: 1px solid rgba(46, 125, 82, 0.25);
+  border-radius: 0.8rem;
+  background: #f8fbf9;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.worker-preview img {
+  width: 100%;
+  max-height: 210px;
+  object-fit: cover;
+  border-radius: 0.6rem;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #0f1115;
+}
+
+.login-shell {
+  max-width: 480px;
+}

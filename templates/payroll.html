@@ -205,37 +205,7 @@
 
 {% block extra_js %}
 <script src="https://cdn.datatables.net/2.3.8/js/dataTables.min.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-  new DataTable('#payrollTable', {
-    order: [[0, 'desc']],
-    pageLength: 10,
-    columnDefs: [{ orderable: false, targets: 8 }],
-  });
-
-  document.addEventListener('click', function (e) {
-    const editBtn = e.target.closest('.edit-payroll-btn');
-    if (!editBtn) return;
-
-    let record = {};
-    try {
-      record = JSON.parse(editBtn.getAttribute('data-record') || '{}');
-    } catch (_) {
-      record = {};
-    }
-
-    document.getElementById('editPayrollForm').action = `/config/payroll/${record.payroll_id}/update`;
-    document.getElementById('editPayrollWorker').value = record.worker_id || '';
-    document.getElementById('editPayrollWeekEnding').value = record.week_ending || '';
-    document.getElementById('editPayrollPaymentDate').value = record.payment_date || '';
-    document.getElementById('editPayrollHours').value = record.total_hours || '';
-    document.getElementById('editPayrollRate').value = record.hourly_rate || '';
-    document.getElementById('editPayrollGross').value = record.gross_pay || '';
-    document.getElementById('editPayrollStatus').value = (record.paid_status || 'pending').toLowerCase();
-    document.getElementById('editPayrollNapsa').value = record.napsa_deduction || '';
-    document.getElementById('editPayrollNhima').value = record.nhima_deduction || '';
-    document.getElementById('editPayrollNet').value = record.net_pay || '';
-  });
-});
-</script>
+<script src="{{ url_for('static', filename='js/components.js') }}"></script>
+<script src="{{ url_for('static', filename='js/edit-modals.js') }}"></script>
+<script src="{{ url_for('static', filename='js/payroll-page.js') }}"></script>
 {% endblock %}

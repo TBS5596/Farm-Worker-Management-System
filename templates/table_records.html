@@ -47,12 +47,6 @@
 
 {% block extra_js %}
 <script src="https://cdn.datatables.net/2.3.8/js/dataTables.min.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-  new DataTable('#recordsTable', {
-    order: [[0, 'desc']],
-    pageLength: 20,
-  });
-});
-</script>
+<script src="{{ url_for('static', filename='js/components.js') }}"></script>
+<script src="{{ url_for('static', filename='js/table-records-page.js') }}"></script>
 {% endblock %}

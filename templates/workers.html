@@ -60,7 +60,7 @@
               {{ worker.enrollment_date.strftime('%d %b %Y') if worker.enrollment_date else '—' }}
             </td>
             <td>
-              {% if worker.is_active %}
+              {% if (worker.status or 'active') == 'active' %}
                 <span class="badge bg-success">Yes</span>
               {% else %}
                 <span class="badge bg-danger">No</span>
@@ -100,10 +100,10 @@
               </button>
 
               <form method="POST" action="{{ url_for('toggle_worker', worker_pk=worker.id) }}" class="d-inline">
-                <button class="btn btn-sm {% if worker.is_active %}btn-outline-warning{% else %}btn-outline-success{% endif %}"
+                <button class="btn btn-sm {% if (worker.status or 'active') == 'active' %}btn-outline-warning{% else %}btn-outline-success{% endif %}"
                         type="submit"
-                        title="{% if worker.is_active %}Deactivate{% else %}Activate{% endif %}">
-                  <i class="bi {% if worker.is_active %}bi-pause-circle{% else %}bi-play-circle{% endif %}"></i>
+                        title="{% if (worker.status or 'active') == 'active' %}Deactivate{% else %}Activate{% endif %}">
+                  <i class="bi {% if (worker.status or 'active') == 'active' %}bi-pause-circle{% else %}bi-play-circle{% endif %}"></i>
                 </button>
               </form>
 
@@ -191,9 +191,7 @@
 <div class="modal fade" id="editWorkerModal" tabindex="-1">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
-      <form method="POST" id="editWorkerForm" action="/workers/update">
-        <input type="hidden" name="worker_pk" id="editWorkerPk" value="0">
-        <input type="hidden" name="worker_id" id="editWorkerId" value="">
+      <form method="POST" id="editWorkerForm" action="#">
         <div class="modal-header">
           <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Edit Worker</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" title="Close modal"></button>
@@ -251,9 +249,7 @@
 <div class="modal fade" id="resetPinModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
-      <form method="POST" id="resetPinForm" action="/workers/reset-pin">
-        <input type="hidden" name="worker_pk" id="resetPinPk" value="0">
-        <input type="hidden" name="worker_id" id="resetPinWorkerId" value="">
+      <form method="POST" id="resetPinForm" action="#">
         <div class="modal-header">
           <h5 class="modal-title"><i class="bi bi-key-fill me-2"></i>Reset Worker PIN</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" title="Close modal"></button>
@@ -278,5 +274,7 @@
 
 {% block extra_js %}
 <script src="https://cdn.datatables.net/2.3.8/js/dataTables.min.js"></script>
+<script src="{{ url_for('static', filename='js/components.js') }}"></script>
+<script src="{{ url_for('static', filename='js/edit-modals.js') }}"></script>
 <script src="{{ url_for('static', filename='js/workers.js') }}"></script>
 {% endblock %}

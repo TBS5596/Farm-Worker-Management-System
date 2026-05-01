@@ -203,32 +203,7 @@
 
 {% block extra_js %}
 <script src="https://cdn.datatables.net/2.3.8/js/dataTables.min.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-  new DataTable('#feedsTable', {
-    order: [[0, 'desc']],
-    pageLength: 10,
-    columnDefs: [{ orderable: false, targets: 6 }],
-  });
-  new DataTable('#recordingsTable', { order: [[0, 'desc']], pageLength: 10 });
-
-  document.addEventListener('click', function (e) {
-    const editBtn = e.target.closest('.edit-feed-btn');
-    if (!editBtn) return;
-
-    let record = {};
-    try {
-      record = JSON.parse(editBtn.getAttribute('data-record') || '{}');
-    } catch (_) {
-      record = {};
-    }
-
-    document.getElementById('editFeedForm').action = `/config/cctv-feeds/${record.feed_id}/update`;
-    document.getElementById('editFeedName').value = record.camera_name || '';
-    document.getElementById('editFeedLocation').value = record.camera_location || '';
-    document.getElementById('editFeedSource').value = record.rtsp_url || '';
-    document.getElementById('editFeedStatus').value = (record.status || 'offline').toLowerCase();
-  });
-});
-</script>
+<script src="{{ url_for('static', filename='js/components.js') }}"></script>
+<script src="{{ url_for('static', filename='js/edit-modals.js') }}"></script>
+<script src="{{ url_for('static', filename='js/cctv-page.js') }}"></script>
 {% endblock %}

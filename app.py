@@ -8,12 +8,12 @@ import secrets
 import string
 from datetime import datetime, date
 from functools import wraps
+from geopy.point import Point
 
 from flask import (
     Flask, render_template, request, redirect,
-    url_for, session, flash, jsonify, send_from_directory, Response, abort
+    url_for, session, flash, send_from_directory, Response, abort
 )
-from sqlalchemy import text
 
 from database import db
 from models import (
@@ -60,7 +60,6 @@ def create_app() -> Flask:
 
     with app.app_context():
         db.create_all()
-        _ensure_schema()
         _seed_defaults()
 
     os.makedirs(CAPTURES_DIR, exist_ok=True)
@@ -136,64 +135,6 @@ def _ensure_default_cctv_entries() -> None:
     db.session.commit()
 
 
-def _ensure_schema() -> None:
-    """Apply lightweight schema updates for existing SQLite databases."""
-    columns = db.session.execute(text("PRAGMA table_info(workers)")).fetchall()
-    existing_cols = {row[1] for row in columns}
-
-    if "pin_fingerprint" not in existing_cols:
-        db.session.execute(text("ALTER TABLE workers ADD COLUMN pin_fingerprint VARCHAR(64)"))
-    if "phone_number" not in existing_cols:
-        db.session.execute(text("ALTER TABLE workers ADD COLUMN phone_number VARCHAR(30)"))
-    if "address" not in existing_cols:
-        db.session.execute(text("ALTER TABLE workers ADD COLUMN address VARCHAR(255)"))
-    if "emergency_contact" not in existing_cols:
-        db.session.execute(text("ALTER TABLE workers ADD COLUMN emergency_contact VARCHAR(120)"))
-    if "nrc_number" not in existing_cols:
-        db.session.execute(text("ALTER TABLE workers ADD COLUMN nrc_number VARCHAR(20)"))
-    if "fingerprint_template" not in existing_cols:
-        db.session.execute(text("ALTER TABLE workers ADD COLUMN fingerprint_template BLOB"))
-    if "enrollment_date" not in existing_cols:
-        db.session.execute(text("ALTER TABLE workers ADD COLUMN enrollment_date DATETIME"))
-    if "status" not in existing_cols:
-        db.session.execute(text("ALTER TABLE workers ADD COLUMN status VARCHAR(20) DEFAULT 'active'"))
-
-    # Extend users table with profile fields
-    user_cols = db.session.execute(text("PRAGMA table_info(users)")).fetchall()
-    user_existing = {row[1] for row in user_cols}
-    if "name" not in user_existing:
-        db.session.execute(text("ALTER TABLE users ADD COLUMN name VARCHAR(120)"))
-    if "email" not in user_existing:
-        db.session.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(120)"))
-    if "phone" not in user_existing:
-        db.session.execute(text("ALTER TABLE users ADD COLUMN phone VARCHAR(30)"))
-    if "role" not in user_existing:
-        db.session.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR(30) DEFAULT 'supervisor'"))
-    if "linked_worker_id" not in user_existing:
-        db.session.execute(text("ALTER TABLE users ADD COLUMN linked_worker_id INTEGER"))
-
-    # Extend audit_logs table with user linkage
-    audit_cols = db.session.execute(text("PRAGMA table_info(audit_logs)")).fetchall()
-    audit_existing = {row[1] for row in audit_cols}
-    if "user_id" not in audit_existing:
-        db.session.execute(text("ALTER TABLE audit_logs ADD COLUMN user_id INTEGER"))
-
-    # Move fully to Attendance table and remove legacy event table.
-    db.session.execute(text("DROP TABLE IF EXISTS attendance_logs"))
-
-    # Ensure Attendance table has geolocation and CCTV verification fields.
-    att_cols = db.session.execute(text("PRAGMA table_info(attendance)")).fetchall()
-    att_existing = {row[1] for row in att_cols}
-    if "latitude" not in att_existing:
-        db.session.execute(text("ALTER TABLE attendance ADD COLUMN latitude FLOAT"))
-    if "longitude" not in att_existing:
-        db.session.execute(text("ALTER TABLE attendance ADD COLUMN longitude FLOAT"))
-    if "verified_by_cctv" not in att_existing:
-        db.session.execute(text("ALTER TABLE attendance ADD COLUMN verified_by_cctv BOOLEAN DEFAULT 0"))
-
-    db.session.commit()
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -230,8 +171,6 @@ def _normalize_coordinates(lat_raw, lon_raw) -> tuple[float | None, float | None
     if lat_raw in (None, "") or lon_raw in (None, ""):
         return None, None
     try:
-        from geopy.point import Point
-
         point = Point(float(lat_raw), float(lon_raw))
         return float(point.latitude), float(point.longitude)
     except Exception:
@@ -312,6 +251,38 @@ def _get_camera_sources() -> list[dict]:
     return sources
 
 
+def _verify_face_on_camera(timeout_seconds: float = 3.0, required_hits: int = 2) -> bool:
+    """Validate worker presence by requiring repeated face+eye detections."""
+    try:
+        primary_source = _get_camera_sources()[0]["source"]
+        cap = _open_camera(primary_source)
+        if not cap.isOpened():
+            cap.release()
+            fallback_source = _coerce_camera_source(_get_setting("camera_index", "0"))
+            cap = _open_camera(fallback_source)
+        if not cap.isOpened():
+            cap.release()
+            return False
+
+        start = time.time()
+        hits = 0
+        while time.time() - start < timeout_seconds:
+            ok, frame = cap.read()
+            if not ok:
+                continue
+            detections = _detect_faces_and_eyes(frame)
+            valid = any(len(item.get("eyes", [])) > 0 for item in detections)
+            if valid:
+                hits += 1
+                if hits >= required_hits:
+                    cap.release()
+                    return True
+        cap.release()
+        return False
+    except Exception:
+        return False
+
+
 def _capture_photo(worker_id: str, require_face: bool = False) -> tuple[str | None, str]:
     """Capture a single frame from a camera source and save it locally.
 
@@ -331,7 +302,12 @@ def _capture_photo(worker_id: str, require_face: bool = False) -> tuple[str | No
             cap.release()
             return None, "camera_error"
 
+        # Capture a clean, raw frame from camera buffer without drawing overlays.
         ret, frame = cap.read()
+        for _ in range(2):
+            ok, newer = cap.read()
+            if ok:
+                ret, frame = ok, newer
         cap.release()
 
         if not ret:
@@ -532,11 +508,20 @@ def _camera_frame_generator(source, fallback_source, overlay_faces: bool = False
     for _ in range(3):
         cap.read()
 
+    prev_gray = None
     try:
         while True:
             ok, frame = cap.read()
             if not ok:
                 break
+
+            if overlay_motion:
+                boxes, prev_gray = _detect_motion_regions(prev_gray, frame)
+                _draw_motion_regions(frame, boxes)
+
+            if overlay_faces:
+                detections = _detect_faces_and_eyes(frame)
+                _draw_detections(frame, detections)
 
             ok, buffer = cv2.imencode(".jpg", frame)
             if not ok:
@@ -585,7 +570,7 @@ def _register_routes(app: Flask) -> None:
         source = sources[0]["source"]
         fallback_source = _coerce_camera_source(_get_setting("camera_index", "0"))
         return Response(
-            _camera_frame_generator(source, fallback_source),
+            _camera_frame_generator(source, fallback_source, overlay_faces=True, overlay_motion=True),
             mimetype="multipart/x-mixed-replace; boundary=frame",
         )
 
@@ -616,10 +601,18 @@ def _register_routes(app: Flask) -> None:
                     request.form.get("longitude"),
                 )
 
-                worker = Worker.query.filter_by(worker_id=worker_id, is_active=True).first()
+                worker = Worker.query.filter_by(worker_id=worker_id).filter(Worker.status == "active").first()
                 if not worker or not worker.check_pin(pin):
                     flash("Worker ID or PIN is incorrect.", "danger")
                     return render_template("login.html", org_name=_get_setting("org_name", "FMS Farm"))
+
+                face_verified = False
+                if log_type == "IN":
+                    face_verified = _verify_face_on_camera()
+                    if not face_verified:
+                        _log_audit("attendance.verification_failed", f"Face verification failed for {worker_id}")
+                        flash("Face verification failed. Please position your face clearly and try again.", "danger")
+                        return render_template("login.html", org_name=_get_setting("org_name", "FMS Farm"))
 
                 # Capture clean snapshot (no live feed overlays).
                 local_path, capture_status = _capture_photo(worker_id, require_face=False)
@@ -663,7 +656,7 @@ def _register_routes(app: Flask) -> None:
                         check_in_time=datetime.utcnow(),
                         latitude=lat,
                         longitude=lon,
-                        verified_by_cctv=False,
+                        verified_by_cctv=face_verified,
                     )
                     db.session.add(attendance_row)
                     db.session.flush()
@@ -697,6 +690,7 @@ def _register_routes(app: Flask) -> None:
     @admin_required
     def dashboard():
         workers = Worker.query.order_by(Worker.created_at.desc()).all()
+        active_workers_count = sum(1 for w in workers if (w.status or "").lower() == "active")
         attendance_rows = Attendance.query.order_by(Attendance.check_in_time.asc()).limit(400).all()
         sessions = _build_attendance_sessions(attendance_rows)
         today_count = sum(1 for s in sessions if s["_sort_key"].date() == date.today())
@@ -705,6 +699,7 @@ def _register_routes(app: Flask) -> None:
         return render_template(
             "dashboard.html",
             workers=workers,
+            active_workers_count=active_workers_count,
             sessions=sessions,
             today_count=today_count,
             camera_sources=camera_sources,
@@ -803,7 +798,6 @@ def _register_routes(app: Flask) -> None:
             department=department,
             enrollment_date=enrollment_date,
             status=status,
-            is_active=(status == "active"),
             pin_fingerprint=_pin_fingerprint(pin),
         )
         worker.set_pin(pin)
@@ -843,8 +837,6 @@ def _register_routes(app: Flask) -> None:
                 flash("Enrollment date is invalid.", "danger")
                 return redirect(url_for("workers_page"))
 
-        worker.is_active = worker.status == "active"
-
         db.session.commit()
         _log_audit("worker.update", f"Updated worker {worker.worker_id}")
         flash(f"Worker '{worker.worker_id}' updated successfully.", "success")
@@ -875,21 +867,11 @@ def _register_routes(app: Flask) -> None:
     @admin_required
     def toggle_worker(worker_pk):
         worker = Worker.query.get_or_404(worker_pk)
-        worker.is_active = not worker.is_active
+        worker.status = "inactive" if (worker.status or "active").lower() == "active" else "active"
         db.session.commit()
-        status = "activated" if worker.is_active else "deactivated"
+        status = "activated" if worker.status == "active" else "deactivated"
         _log_audit("worker.toggle", f"Worker {worker.worker_id} {status}")
         flash(f"Worker '{worker.name}' has been {status}.", "info")
-        return redirect(url_for("workers_page"))
-
-    @app.route("/workers/<int:worker_pk>/delete", methods=["POST"])
-    @admin_required
-    def delete_worker(worker_pk):
-        worker = Worker.query.get_or_404(worker_pk)
-        worker.is_active = False
-        db.session.commit()
-        _log_audit("worker.deactivate", f"Deletion blocked; deactivated worker {worker.worker_id}")
-        flash(f"Worker '{worker.name}' was deactivated. Permanent deletion is disabled.", "warning")
         return redirect(url_for("workers_page"))
 
     # ---- Settings -------------------------------------------------------- #
@@ -919,79 +901,6 @@ def _register_routes(app: Flask) -> None:
             active_page="settings",
             org_name=_get_setting("org_name"),
         )
-
-    # ---- Manual ---------------------------------------------------------- #
-
-    # ---- Flat worker routes (forms post here via hidden worker_pk) ------- #
-
-    @app.route("/workers/update", methods=["POST"])
-    @admin_required
-    def update_worker_flat():
-        worker_pk = request.form.get("worker_pk", type=int)
-        worker_id = request.form.get("worker_id", "").strip().upper()
-        worker = Worker.query.get(worker_pk) if worker_pk else None
-        if worker is None and worker_id:
-            worker = Worker.query.filter_by(worker_id=worker_id).first()
-        if worker is None:
-            flash("Invalid request.", "danger")
-            return redirect(url_for("workers_page"))
-
-        worker.name = request.form.get("name", "").strip()
-        worker.phone_number = request.form.get("phone_number", "").strip()
-        worker.address = request.form.get("address", "").strip()
-        worker.emergency_contact = request.form.get("emergency_contact", "").strip()
-        worker.department = request.form.get("department", "").strip()
-        worker.nrc_number = request.form.get("nrc_number", "").strip() or None
-        worker.status = request.form.get("status", "active").strip().lower() or "active"
-        enrollment_date_raw = request.form.get("enrollment_date", "").strip()
-        if not worker.name or not worker.phone_number:
-            flash("Name and phone number are required.", "danger")
-            return redirect(url_for("workers_page"))
-
-        if worker.nrc_number:
-            existing = Worker.query.filter_by(nrc_number=worker.nrc_number).first()
-            if existing and existing.id != worker.id:
-                flash("NRC number already exists for another worker.", "danger")
-                return redirect(url_for("workers_page"))
-
-        if enrollment_date_raw:
-            try:
-                worker.enrollment_date = datetime.strptime(enrollment_date_raw, "%Y-%m-%d")
-            except ValueError:
-                flash("Enrollment date is invalid.", "danger")
-                return redirect(url_for("workers_page"))
-
-        worker.is_active = worker.status == "active"
-        db.session.commit()
-        _log_audit("worker.update", f"Updated worker {worker.worker_id}")
-        flash(f"Worker '{worker.worker_id}' updated successfully.", "success")
-        return redirect(url_for("workers_page"))
-
-    @app.route("/workers/reset-pin", methods=["POST"])
-    @admin_required
-    def reset_worker_pin_flat():
-        worker_pk = request.form.get("worker_pk", type=int)
-        worker_id = request.form.get("worker_id", "").strip().upper()
-        worker = Worker.query.get(worker_pk) if worker_pk else None
-        if worker is None and worker_id:
-            worker = Worker.query.filter_by(worker_id=worker_id).first()
-        if worker is None:
-            flash("Invalid request.", "danger")
-            return redirect(url_for("workers_page"))
-
-        new_pin = request.form.get("new_pin", "").strip()
-        if len(new_pin) < 4:
-            flash("New PIN must be at least 4 digits.", "danger")
-            return redirect(url_for("workers_page"))
-        if not _is_pin_unique(new_pin, exclude_worker_id=worker.worker_id):
-            flash("PIN already in use. Choose a unique PIN.", "danger")
-            return redirect(url_for("workers_page"))
-        worker.set_pin(new_pin)
-        worker.pin_fingerprint = _pin_fingerprint(new_pin)
-        db.session.commit()
-        _log_audit("worker.reset_pin", f"PIN reset for {worker.worker_id}")
-        flash(f"PIN reset for {worker.name} ({worker.worker_id}).", "success")
-        return redirect(url_for("workers_page"))
 
     # ---- User management ------------------------------------------------- #
 
@@ -1034,17 +943,10 @@ def _register_routes(app: Flask) -> None:
         flash(f"User '{username}' created. Default password: {password}", "success")
         return redirect(url_for("users_page"))
 
-    @app.route("/users/update", methods=["POST"])
+    @app.route("/users/<int:user_pk>/update", methods=["POST"])
     @admin_required
-    def update_user():
-        user_pk = request.form.get("user_pk", type=int)
-        username = request.form.get("username", "").strip().lower()
-        user = User.query.get(user_pk) if user_pk else None
-        if user is None and username:
-            user = User.query.filter_by(username=username).first()
-        if user is None:
-            flash("Invalid request.", "danger")
-            return redirect(url_for("users_page"))
+    def update_user(user_pk: int):
+        user = User.query.get_or_404(user_pk)
 
         user.name = request.form.get("name", "").strip()
         user.email = request.form.get("email", "").strip()
@@ -1059,17 +961,10 @@ def _register_routes(app: Flask) -> None:
         flash(f"User '{user.username}' updated.", "success")
         return redirect(url_for("users_page"))
 
-    @app.route("/users/reset-password", methods=["POST"])
+    @app.route("/users/<int:user_pk>/reset-password", methods=["POST"])
     @admin_required
-    def reset_user_password():
-        user_pk = request.form.get("user_pk", type=int)
-        username = request.form.get("username", "").strip().lower()
-        user = User.query.get(user_pk) if user_pk else None
-        if user is None and username:
-            user = User.query.filter_by(username=username).first()
-        if user is None:
-            flash("Invalid request.", "danger")
-            return redirect(url_for("users_page"))
+    def reset_user_password(user_pk: int):
+        user = User.query.get_or_404(user_pk)
 
         password = _generate_password()
         user.set_password(password)
@@ -1446,24 +1341,6 @@ def _register_routes(app: Flask) -> None:
         org_name = _get_setting("org_name", "FMS Farm")
         return render_template("manual.html", active_page="manual", org_name=org_name)
 
-    # ---- API: live attendance feed (JSON) -------------------------------- #
-
-    @app.route("/api/logs")
-    @admin_required
-    def api_logs():
-        logs = Attendance.query.order_by(Attendance.check_in_time.desc()).limit(20).all()
-        payload = []
-        for log in logs:
-            worker = Worker.query.get(log.worker_id)
-            payload.append({
-                "id": log.attendance_id,
-                "worker_id": worker.worker_id if worker else str(log.worker_id),
-                "timestamp": log.check_in_time.isoformat() if log.check_in_time else None,
-                "type": "SESSION",
-                "image": None,
-            })
-        return jsonify(payload)
-
     @app.route("/camera-stream/<int:camera_idx>")
     @admin_required
     def camera_stream(camera_idx: int):
@@ -1476,7 +1353,7 @@ def _register_routes(app: Flask) -> None:
         # never needs to touch the database.
         fallback_source = _coerce_camera_source(_get_setting("camera_index", "0"))
         return Response(
-            _camera_frame_generator(source, fallback_source),
+            _camera_frame_generator(source, fallback_source, overlay_faces=True, overlay_motion=True),
             mimetype="multipart/x-mixed-replace; boundary=frame",
         )
 

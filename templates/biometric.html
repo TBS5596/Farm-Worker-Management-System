@@ -176,34 +176,7 @@
 
 {% block extra_js %}
 <script src="https://cdn.datatables.net/2.3.8/js/dataTables.min.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-  new DataTable('#devicesTable', {
-    order: [[0, 'desc']],
-    pageLength: 10,
-    columnDefs: [{ orderable: false, targets: 8 }],
-  });
-
-  document.addEventListener('click', function (e) {
-    const editBtn = e.target.closest('.edit-device-btn');
-    if (!editBtn) return;
-
-    let record = {};
-    try {
-      record = JSON.parse(editBtn.getAttribute('data-record') || '{}');
-    } catch (_) {
-      record = {};
-    }
-
-    document.getElementById('editDeviceForm').action = `/config/biometric-devices/${record.device_id}/update`;
-    document.getElementById('editDeviceName').value = record.device_name || '';
-    document.getElementById('editDeviceSerial').value = record.device_serial || '';
-    document.getElementById('editDeviceType').value = (record.device_type || 'fingerprint').toLowerCase();
-    document.getElementById('editDeviceIp').value = record.ip_address || '';
-    document.getElementById('editDeviceUsb').value = record.usb_port || '';
-    document.getElementById('editDeviceStatus').value = (record.status || 'offline').toLowerCase();
-    document.getElementById('editDeviceLocation').value = record.location || '';
-  });
-});
-</script>
+<script src="{{ url_for('static', filename='js/components.js') }}"></script>
+<script src="{{ url_for('static', filename='js/edit-modals.js') }}"></script>
+<script src="{{ url_for('static', filename='js/biometric-page.js') }}"></script>
 {% endblock %}

@@ -155,9 +155,7 @@
 <div class="modal fade" id="editUserModal" tabindex="-1">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
-      <form method="POST" action="{{ url_for('update_user') }}">
-        <input type="hidden" name="user_pk" id="editUserPk" value="0">
-        <input type="hidden" name="username" id="editUserUsernameInput" value="">
+      <form method="POST" id="editUserForm" action="#">
         <div class="modal-header">
           <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Edit User</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" title="Close"></button>
@@ -210,9 +208,7 @@
 <div class="modal fade" id="resetPasswordModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
-      <form method="POST" action="{{ url_for('reset_user_password') }}">
-        <input type="hidden" name="user_pk" id="resetPasswordPk" value="0">
-        <input type="hidden" name="username" id="resetPasswordUsernameInput" value="">
+      <form method="POST" id="resetPasswordForm" action="#">
         <div class="modal-header">
           <h5 class="modal-title"><i class="bi bi-key-fill me-2"></i>Reset Password</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" title="Close"></button>
@@ -235,42 +231,7 @@
 
 {% block extra_js %}
 <script src="https://cdn.datatables.net/2.3.8/js/dataTables.min.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-  new DataTable('#usersTable', {
-    order: [[6, 'desc']],
-    pageLength: 10,
-    columnDefs: [{ orderable: false, targets: 7 }],
-    language: { search: 'Search users:' },
-  });
-
-  document.addEventListener('click', function (e) {
-    const editBtn = e.target.closest('.edit-user-btn');
-    if (editBtn) {
-      let record = {};
-      try {
-        record = JSON.parse(editBtn.getAttribute('data-record') || '{}');
-      } catch (_) {
-        record = {};
-      }
-
-      document.getElementById('editUserPk').value = record.id || 0;
-      document.getElementById('editUserUsernameInput').value = record.username || '';
-      document.getElementById('editUserUsername').textContent = record.username || '-';
-      document.getElementById('editUserName').value = record.name || '';
-      document.getElementById('editUserEmail').value = record.email || '';
-      document.getElementById('editUserPhone').value = record.phone || '';
-      document.getElementById('editUserRole').value = record.role || 'supervisor';
-      document.getElementById('editUserLinkedWorker').value = record.linked_worker_id || '';
-    }
-
-    const resetBtn = e.target.closest('.reset-password-btn');
-    if (resetBtn) {
-      document.getElementById('resetPasswordPk').value = resetBtn.dataset.userId;
-      document.getElementById('resetPasswordUsernameInput').value = resetBtn.dataset.username;
-      document.getElementById('resetPasswordUsername').textContent = resetBtn.dataset.username;
-    }
-  });
-});
-</script>
+<script src="{{ url_for('static', filename='js/components.js') }}"></script>
+<script src="{{ url_for('static', filename='js/edit-modals.js') }}"></script>
+<script src="{{ url_for('static', filename='js/users-page.js') }}"></script>
 {% endblock %}

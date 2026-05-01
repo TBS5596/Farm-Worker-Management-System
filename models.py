@@ -73,7 +73,6 @@ class Worker(db.Model):
     enrollment_date = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(20), default="active", nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    is_active = db.Column(db.Boolean, default=True)
 
     def set_pin(self, pin: str) -> None:
         self.pin_hash = generate_password_hash(pin)

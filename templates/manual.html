@@ -9,51 +9,137 @@
 {% block content %}
 <div class="manual-shell">
   <h3 class="mb-3"><i class="bi bi-book-half me-2 text-success"></i>System Manual</h3>
-  <p class="text-muted">Use this guide for onboarding workers, attendance operations, grouped data pages, and troubleshooting.</p>
+  <p class="text-muted">Use this manual for day-to-day operations, onboarding, attendance verification, and troubleshooting.</p>
 
-  <h5 class="section-title">1) Worker Management</h5>
+  <h5 class="section-title">1) Quick Start Checklist</h5>
   <ul>
-    <li>Open Workers page, click Add Worker, and fill in all configurable fields: full name, phone, emergency contact, NRC number, department, enrollment date, status, address, and unique PIN.</li>
-    <li>Worker IDs are auto-generated as a strict 4-digit series (0001, 0002, 0003...).</li>
-    <li>Use Edit to update any worker profile field later.</li>
-    <li>Use key icon to reset PIN. PIN must remain unique.</li>
+    <li>Sign in as admin from the login page.</li>
+    <li>Open <strong>Workers</strong> and create at least one active worker with a unique PIN.</li>
+    <li>Open <strong>CCTV</strong> and confirm your camera source is available.</li>
+    <li>Test a worker <strong>Clock In</strong> and verify it appears in <strong>Attendance</strong>.</li>
   </ul>
 
-  <h5 class="section-title">2) Attendance Workflow</h5>
+  <h5 class="section-title">2) Worker Onboarding (Example)</h5>
+  <div class="example-box">
+    <p class="mb-2"><strong>Example:</strong> Add a new worker named "Moses Banda".</p>
+    <ol class="mb-0">
+      <li>Go to <strong>Workers</strong> and click <strong>Add Worker</strong>.</li>
+      <li>Enter name, phone, NRC, department, and set status to <strong>active</strong>.</li>
+      <li>Create a unique PIN (at least 4 digits).</li>
+      <li>Click <strong>Save Worker</strong>. A 4-digit worker ID is generated automatically.</li>
+    </ol>
+  </div>
+
+  <h6 class="flow-title">Flowchart: Worker Onboarding</h6>
+  <pre class="flowchart-block">[Open Workers Page]
+        |
+        v
+[Click Add Worker]
+        |
+        v
+[Fill Profile + Unique PIN]
+        |
+        v
+[Save Worker]
+        |
+        v
+[Generated Worker ID + Ready for Attendance]</pre>
+
+  <h5 class="section-title">3) Attendance Capture (Clock In / Clock Out)</h5>
+  <div class="example-box">
+    <p class="mb-2"><strong>Example:</strong> Worker "0001" clocks in at start of shift.</p>
+    <ol class="mb-0">
+      <li>On the login page, choose <strong>Worker Clock-In</strong>.</li>
+      <li>Enter Worker ID and PIN, then choose <strong>Clock In</strong>.</li>
+      <li>System validates credentials, checks face/eyes from camera, then captures photo.</li>
+      <li>Record is written to Attendance and visible in the Attendance page.</li>
+    </ol>
+  </div>
+
+  <h6 class="flow-title">Flowchart: Worker Clock In</h6>
+  <pre class="flowchart-block">[Worker Enters ID + PIN]
+          |
+          v
+[Validate Credentials]
+     |              \\
+   pass             fail
+     |                \\
+     v                 [Show Error]
+[Face/Eye Verification]
+     |              \\
+   pass             fail
+     |                \\
+     v                 [Retry Prompt]
+[Capture Clean Snapshot]
+          |
+          v
+[Create Attendance IN + EventSnapshot]</pre>
+
+  <h6 class="flow-title">Flowchart: Worker Clock Out</h6>
+  <pre class="flowchart-block">[Worker Selects Clock Out]
+          |
+          v
+[Find Open Check-In Session]
+     |              \\
+   found            not found
+     |                \\
+     v                 [Show "Clock in first"]
+[Capture Snapshot]
+          |
+          v
+[Set Check-Out Time + Save]</pre>
+
+  <h5 class="section-title">4) Edit and Reset Operations (Example)</h5>
+  <div class="example-box">
+    <p class="mb-2"><strong>Example:</strong> Update a worker phone number and reset PIN.</p>
+    <ol class="mb-0">
+      <li>In <strong>Workers</strong>, click the <strong>Edit</strong> icon on the worker row.</li>
+      <li>Modal opens with current data pre-filled.</li>
+      <li>Update values and click <strong>Save Changes</strong>.</li>
+      <li>To reset PIN, click the key icon and submit a new unique PIN.</li>
+    </ol>
+  </div>
+
+  <h6 class="flow-title">Flowchart: Edit Modal Operation</h6>
+  <pre class="flowchart-block">[Click Edit Button]
+       |
+       v
+[Read data-record JSON]
+       |
+       v
+[Populate Modal Fields]
+       |
+       v
+[Set Form Action to /entity/{id}/update]
+       |
+       v
+[Submit Update]</pre>
+
+  <h5 class="section-title">5) CCTV and Device Operations</h5>
   <ul>
-    <li>Workers use login page with Worker ID and PIN.</li>
-    <li>System verifies credentials, captures a photo, and stores geolocation when available.</li>
-    <li>Attendance page shows paired IN/OUT records with photos.</li>
+    <li><strong>CCTV:</strong> Manage camera index, camera sources JSON, and feed records.</li>
+    <li><strong>Biometric:</strong> Register devices and maintain device status/location.</li>
+    <li><strong>Payroll:</strong> Create weekly payroll rows and track payment status.</li>
+    <li><strong>Cloud Sync:</strong> Configure cloud keys and monitor sync queues.</li>
   </ul>
 
-  <h5 class="section-title">3) CCTV Page</h5>
-  <ul>
-    <li>Open CCTV page from the sidebar to manage camera index and camera sources JSON.</li>
-    <li>Use Add CCTV Feed to register camera feeds.</li>
-    <li>If no camera sources are configured, built-in camera fallback is used.</li>
-    <li>The system maintains a default built-in camera entry in feed and recording tables.</li>
-  </ul>
+  <h5 class="section-title">6) Troubleshooting Guide</h5>
+  <div class="example-box">
+    <p class="mb-2"><strong>Problem:</strong> Live feed is blank</p>
+    <ul class="mb-0">
+      <li>Confirm camera is not in use by another app.</li>
+      <li>Check CCTV camera source configuration.</li>
+      <li>Restart app and retest built-in camera fallback.</li>
+    </ul>
+  </div>
 
-  <h5 class="section-title">4) Grouped Data Pages</h5>
-  <ul>
-    <li>Data Hub is the launcher for grouped components: CCTV, Biometric, Payroll, and Cloud Sync.</li>
-    <li>Biometric page covers device setup and links to biometric-related tables.</li>
-    <li>Payroll page supports payroll entry and payroll records.</li>
-    <li>Cloud Sync page contains Firebase configuration and sync queue/metadata views.</li>
-  </ul>
-
-  <h5 class="section-title">5) Settings and Users</h5>
-  <ul>
-    <li>Settings page is organisation-focused (for example organisation name).</li>
-    <li>Users page includes all configurable fields: username, full name, email, phone, role, and linked worker.</li>
-    <li>Password reset generates a new random password shown in a flash message.</li>
-  </ul>
-
-  <h5 class="section-title">6) Troubleshooting</h5>
-  <ul>
-    <li>If live camera panel is black, verify camera source and ensure no other app is locking the camera.</li>
-    <li>If workers cannot clock in, check worker status is Active and PIN is correct.</li>
-    <li>If imports show unresolved warnings in editor, select the project .venv interpreter in VS Code.</li>
-  </ul>
+  <div class="example-box mt-3">
+    <p class="mb-2"><strong>Problem:</strong> Worker cannot clock in</p>
+    <ul class="mb-0">
+      <li>Verify worker status is <strong>active</strong>.</li>
+      <li>Verify PIN is correct and still unique in system.</li>
+      <li>Ensure face is visible in camera for verification step.</li>
+    </ul>
+  </div>
 </div>
 {% endblock %}
