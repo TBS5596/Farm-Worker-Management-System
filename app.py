@@ -1153,12 +1153,14 @@ def _register_routes(app: Flask) -> None:
     @admin_required
     def payroll_page():
         workers = Worker.query.order_by(Worker.worker_id.asc()).all()
+        worker_lookup = {w.id: w for w in workers}
         payroll_rows = Payroll.query.order_by(Payroll.payroll_id.desc()).limit(200).all()
         return render_template(
             "payroll.html",
             active_page="payroll",
             org_name=_get_setting("org_name", "FMS Farm"),
             workers=workers,
+            worker_lookup=worker_lookup,
             payroll_rows=payroll_rows,
         )
 
@@ -1244,6 +1246,38 @@ def _register_routes(app: Flask) -> None:
         flash("CCTV feed saved.", "success")
         return redirect(url_for("cctv_page"))
 
+    @app.route("/config/cctv-feeds/<int:feed_id>/update", methods=["POST"])
+    @admin_required
+    def update_cctv_feed(feed_id: int):
+        feed = CCTVFeed.query.get_or_404(feed_id)
+        camera_name = request.form.get("camera_name", "").strip()
+        if not camera_name:
+            flash("Camera name is required.", "danger")
+            return redirect(url_for("cctv_page"))
+
+        feed.camera_name = camera_name
+        feed.camera_location = request.form.get("camera_location", "").strip()
+        feed.rtsp_url = request.form.get("rtsp_url", "").strip()
+        status = request.form.get("status", "offline").strip().lower() or "offline"
+        feed.status = status
+        if status == "online":
+            feed.last_heartbeat = datetime.utcnow()
+
+        db.session.commit()
+        _log_audit("config.cctv_feed.update", f"Updated CCTV feed '{feed.camera_name}' (id={feed.feed_id})")
+        flash("CCTV feed updated.", "success")
+        return redirect(url_for("cctv_page"))
+
+    @app.route("/config/cctv-feeds/<int:feed_id>/deactivate", methods=["POST"])
+    @admin_required
+    def deactivate_cctv_feed(feed_id: int):
+        feed = CCTVFeed.query.get_or_404(feed_id)
+        feed.status = "inactive"
+        db.session.commit()
+        _log_audit("config.cctv_feed.deactivate", f"Deactivated CCTV feed '{feed.camera_name}' (id={feed.feed_id})")
+        flash("CCTV feed deactivated.", "info")
+        return redirect(url_for("cctv_page"))
+
     @app.route("/config/cctv/settings", methods=["POST"])
     @admin_required
     def save_cctv_settings():
@@ -1293,6 +1327,41 @@ def _register_routes(app: Flask) -> None:
         flash("Biometric device saved.", "success")
         return redirect(url_for("biometric_page"))
 
+    @app.route("/config/biometric-devices/<int:device_id>/update", methods=["POST"])
+    @admin_required
+    def update_biometric_device(device_id: int):
+        device = BiometricDevice.query.get_or_404(device_id)
+        device_name = request.form.get("device_name", "").strip()
+        if not device_name:
+            flash("Device name is required.", "danger")
+            return redirect(url_for("biometric_page"))
+
+        device.device_name = device_name
+        device.device_serial = request.form.get("device_serial", "").strip() or None
+        device.device_type = request.form.get("device_type", "fingerprint").strip().lower() or "fingerprint"
+        device.ip_address = request.form.get("ip_address", "").strip() or None
+        device.usb_port = request.form.get("usb_port", "").strip() or None
+        device.location = request.form.get("location", "").strip()
+        status = request.form.get("status", "offline").strip().lower() or "offline"
+        device.status = status
+        if status == "online":
+            device.last_heartbeat = datetime.utcnow()
+
+        db.session.commit()
+        _log_audit("config.biometric_device.update", f"Updated biometric device '{device.device_name}' (id={device.device_id})")
+        flash("Biometric device updated.", "success")
+        return redirect(url_for("biometric_page"))
+
+    @app.route("/config/biometric-devices/<int:device_id>/deactivate", methods=["POST"])
+    @admin_required
+    def deactivate_biometric_device(device_id: int):
+        device = BiometricDevice.query.get_or_404(device_id)
+        device.status = "inactive"
+        db.session.commit()
+        _log_audit("config.biometric_device.deactivate", f"Deactivated biometric device '{device.device_name}' (id={device.device_id})")
+        flash("Biometric device deactivated.", "info")
+        return redirect(url_for("biometric_page"))
+
     @app.route("/config/payroll", methods=["POST"])
     @admin_required
     def add_payroll_record():
@@ -1318,6 +1387,56 @@ def _register_routes(app: Flask) -> None:
         db.session.commit()
         _log_audit("config.payroll.add", f"Added payroll row for worker_id={worker_pk}")
         flash("Payroll record saved.", "success")
+        return redirect(url_for("payroll_page"))
+
+    @app.route("/config/payroll/<int:payroll_id>/update", methods=["POST"])
+    @admin_required
+    def update_payroll_record(payroll_id: int):
+        row = Payroll.query.get_or_404(payroll_id)
+        worker_pk = request.form.get("worker_id", type=int)
+        week_ending_raw = request.form.get("week_ending", "").strip()
+        if not worker_pk or not week_ending_raw:
+            flash("Worker and week ending are required.", "danger")
+            return redirect(url_for("payroll_page"))
+        try:
+            week_ending = datetime.strptime(week_ending_raw, "%Y-%m-%d").date()
+        except ValueError:
+            flash("Week ending date format is invalid.", "danger")
+            return redirect(url_for("payroll_page"))
+
+        payment_date_raw = request.form.get("payment_date", "").strip()
+        payment_date = None
+        if payment_date_raw:
+            try:
+                payment_date = datetime.strptime(payment_date_raw, "%Y-%m-%d").date()
+            except ValueError:
+                flash("Payment date format is invalid.", "danger")
+                return redirect(url_for("payroll_page"))
+
+        row.worker_id = worker_pk
+        row.week_ending = week_ending
+        row.total_hours = request.form.get("total_hours", type=float)
+        row.hourly_rate = request.form.get("hourly_rate", type=float)
+        row.gross_pay = request.form.get("gross_pay", type=float)
+        row.napsa_deduction = request.form.get("napsa_deduction", type=float)
+        row.nhima_deduction = request.form.get("nhima_deduction", type=float)
+        row.net_pay = request.form.get("net_pay", type=float)
+        row.paid_status = request.form.get("paid_status", "pending").strip().lower() or "pending"
+        row.payment_date = payment_date
+
+        db.session.commit()
+        _log_audit("config.payroll.update", f"Updated payroll row id={row.payroll_id}")
+        flash("Payroll record updated.", "success")
+        return redirect(url_for("payroll_page"))
+
+    @app.route("/config/payroll/<int:payroll_id>/deactivate", methods=["POST"])
+    @admin_required
+    def deactivate_payroll_record(payroll_id: int):
+        row = Payroll.query.get_or_404(payroll_id)
+        row.paid_status = "inactive"
+        db.session.commit()
+        _log_audit("config.payroll.deactivate", f"Deactivated payroll row id={row.payroll_id}")
+        flash("Payroll record deactivated.", "info")
         return redirect(url_for("payroll_page"))
 
     # ---- Manual ---------------------------------------------------------- #

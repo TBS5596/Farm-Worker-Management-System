@@ -75,6 +75,7 @@
             <th>Source</th>
             <th>Status</th>
             <th>Heartbeat</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -86,12 +87,76 @@
             <td class="font-monospace">{{ feed.rtsp_url or '—' }}</td>
             <td>{{ feed.status }}</td>
             <td>{{ feed.last_heartbeat.strftime('%Y-%m-%d %H:%M:%S') if feed.last_heartbeat else '—' }}</td>
+            <td>
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-info edit-feed-btn"
+                data-bs-toggle="modal"
+                data-bs-target="#editFeedModal"
+                data-record='{{ {
+                  "feed_id": feed.feed_id,
+                  "camera_name": feed.camera_name or "",
+                  "camera_location": feed.camera_location or "",
+                  "rtsp_url": feed.rtsp_url or "",
+                  "status": feed.status or "offline"
+                } | tojson | forceescape }}'
+                title="Edit feed"
+              >
+                <i class="bi bi-pencil-square"></i>
+              </button>
+              <form method="POST" action="{{ url_for('deactivate_cctv_feed', feed_id=feed.feed_id) }}" class="d-inline">
+                <button type="submit" class="btn btn-sm btn-outline-warning" title="Deactivate feed">
+                  <i class="bi bi-pause-circle"></i>
+                </button>
+              </form>
+            </td>
           </tr>
           {% else %}
-          <tr><td colspan="6" class="text-center text-muted py-4">No CCTV feeds yet.</td></tr>
+          <tr><td colspan="7" class="text-center text-muted py-4">No CCTV feeds yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="editFeedModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form method="POST" id="editFeedForm" action="#">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Edit CCTV Feed</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" title="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Camera Name</label>
+              <input type="text" class="form-control" name="camera_name" id="editFeedName" title="Camera name" required />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Status</label>
+              <select class="form-select" name="status" id="editFeedStatus" title="Feed status">
+                <option value="online">online</option>
+                <option value="offline">offline</option>
+                <option value="inactive">inactive</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Location</label>
+              <input type="text" class="form-control" name="camera_location" id="editFeedLocation" title="Camera location" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Source URL</label>
+              <input type="text" class="form-control" name="rtsp_url" id="editFeedSource" title="RTSP or built-in URL" />
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-info text-white">Save Changes</button>
+        </div>
+      </form>
     </div>
   </div>
 </div>
@@ -140,8 +205,30 @@
 <script src="https://cdn.datatables.net/2.3.8/js/dataTables.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-  new DataTable('#feedsTable', { order: [[0, 'desc']], pageLength: 10 });
+  new DataTable('#feedsTable', {
+    order: [[0, 'desc']],
+    pageLength: 10,
+    columnDefs: [{ orderable: false, targets: 6 }],
+  });
   new DataTable('#recordingsTable', { order: [[0, 'desc']], pageLength: 10 });
+
+  document.addEventListener('click', function (e) {
+    const editBtn = e.target.closest('.edit-feed-btn');
+    if (!editBtn) return;
+
+    let record = {};
+    try {
+      record = JSON.parse(editBtn.getAttribute('data-record') || '{}');
+    } catch (_) {
+      record = {};
+    }
+
+    document.getElementById('editFeedForm').action = `/config/cctv-feeds/${record.feed_id}/update`;
+    document.getElementById('editFeedName').value = record.camera_name || '';
+    document.getElementById('editFeedLocation').value = record.camera_location || '';
+    document.getElementById('editFeedSource').value = record.rtsp_url || '';
+    document.getElementById('editFeedStatus').value = (record.status || 'offline').toLowerCase();
+  });
 });
 </script>
 {% endblock %}

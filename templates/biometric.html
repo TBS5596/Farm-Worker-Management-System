@@ -66,6 +66,7 @@
             <th>USB Port</th>
             <th>Status</th>
             <th>Location</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -79,12 +80,95 @@
             <td>{{ d.usb_port or '—' }}</td>
             <td>{{ d.status }}</td>
             <td>{{ d.location or '—' }}</td>
+            <td>
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-info edit-device-btn"
+                data-bs-toggle="modal"
+                data-bs-target="#editDeviceModal"
+                data-record='{{ {
+                  "device_id": d.device_id,
+                  "device_name": d.device_name or "",
+                  "device_serial": d.device_serial or "",
+                  "device_type": d.device_type or "fingerprint",
+                  "ip_address": d.ip_address or "",
+                  "usb_port": d.usb_port or "",
+                  "status": d.status or "offline",
+                  "location": d.location or ""
+                } | tojson | forceescape }}'
+                title="Edit device"
+              >
+                <i class="bi bi-pencil-square"></i>
+              </button>
+              <form method="POST" action="{{ url_for('deactivate_biometric_device', device_id=d.device_id) }}" class="d-inline">
+                <button type="submit" class="btn btn-sm btn-outline-warning" title="Deactivate device">
+                  <i class="bi bi-pause-circle"></i>
+                </button>
+              </form>
+            </td>
           </tr>
           {% else %}
-          <tr><td colspan="8" class="text-center text-muted py-4">No biometric devices yet.</td></tr>
+          <tr><td colspan="9" class="text-center text-muted py-4">No biometric devices yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="editDeviceModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form method="POST" id="editDeviceForm" action="#">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Edit Biometric Device</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" title="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Device Name</label>
+              <input type="text" class="form-control" name="device_name" id="editDeviceName" title="Device name" required />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Serial</label>
+              <input type="text" class="form-control" name="device_serial" id="editDeviceSerial" title="Device serial" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Type</label>
+              <select class="form-select" name="device_type" id="editDeviceType" title="Device type">
+                <option value="fingerprint">fingerprint</option>
+                <option value="face">face</option>
+                <option value="hybrid">hybrid</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Status</label>
+              <select class="form-select" name="status" id="editDeviceStatus" title="Device status">
+                <option value="online">online</option>
+                <option value="offline">offline</option>
+                <option value="inactive">inactive</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">IP Address</label>
+              <input type="text" class="form-control" name="ip_address" id="editDeviceIp" title="Device IP address" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">USB Port</label>
+              <input type="text" class="form-control" name="usb_port" id="editDeviceUsb" title="Device USB port" />
+            </div>
+            <div class="col-12">
+              <label class="form-label">Location</label>
+              <input type="text" class="form-control" name="location" id="editDeviceLocation" title="Device location" />
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-info text-white">Save Changes</button>
+        </div>
+      </form>
     </div>
   </div>
 </div>
@@ -94,7 +178,32 @@
 <script src="https://cdn.datatables.net/2.3.8/js/dataTables.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-  new DataTable('#devicesTable', { order: [[0, 'desc']], pageLength: 10 });
+  new DataTable('#devicesTable', {
+    order: [[0, 'desc']],
+    pageLength: 10,
+    columnDefs: [{ orderable: false, targets: 8 }],
+  });
+
+  document.addEventListener('click', function (e) {
+    const editBtn = e.target.closest('.edit-device-btn');
+    if (!editBtn) return;
+
+    let record = {};
+    try {
+      record = JSON.parse(editBtn.getAttribute('data-record') || '{}');
+    } catch (_) {
+      record = {};
+    }
+
+    document.getElementById('editDeviceForm').action = `/config/biometric-devices/${record.device_id}/update`;
+    document.getElementById('editDeviceName').value = record.device_name || '';
+    document.getElementById('editDeviceSerial').value = record.device_serial || '';
+    document.getElementById('editDeviceType').value = (record.device_type || 'fingerprint').toLowerCase();
+    document.getElementById('editDeviceIp').value = record.ip_address || '';
+    document.getElementById('editDeviceUsb').value = record.usb_port || '';
+    document.getElementById('editDeviceStatus').value = (record.status || 'offline').toLowerCase();
+    document.getElementById('editDeviceLocation').value = record.location || '';
+  });
 });
 </script>
 {% endblock %}

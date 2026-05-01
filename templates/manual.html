@@ -9,37 +9,47 @@
 {% block content %}
 <div class="manual-shell">
   <h3 class="mb-3"><i class="bi bi-book-half me-2 text-success"></i>System Manual</h3>
-  <p class="text-muted">Use this guide for onboarding workers, attendance operations, camera setup, and troubleshooting.</p>
+  <p class="text-muted">Use this guide for onboarding workers, attendance operations, grouped data pages, and troubleshooting.</p>
 
   <h5 class="section-title">1) Worker Management</h5>
   <ul>
-    <li>Open Workers page, click Add Worker, and fill in name, phone number, optional address, emergency contact, department, and unique PIN.</li>
-    <li>Worker IDs are auto-generated from Settings (prefix + digits).</li>
-    <li>Use Edit to update worker details later.</li>
+    <li>Open Workers page, click Add Worker, and fill in all configurable fields: full name, phone, emergency contact, NRC number, department, enrollment date, status, address, and unique PIN.</li>
+    <li>Worker IDs are auto-generated as a strict 4-digit series (0001, 0002, 0003...).</li>
+    <li>Use Edit to update any worker profile field later.</li>
     <li>Use key icon to reset PIN. PIN must remain unique.</li>
   </ul>
 
   <h5 class="section-title">2) Attendance Workflow</h5>
   <ul>
     <li>Workers use login page with Worker ID and PIN.</li>
-    <li>System verifies credentials and captures a photo immediately.</li>
+    <li>System verifies credentials, captures a photo, and stores geolocation when available.</li>
     <li>Attendance page shows paired IN/OUT records with photos.</li>
   </ul>
 
-  <h5 class="section-title">3) Cameras and Live Feeds</h5>
+  <h5 class="section-title">3) CCTV Page</h5>
   <ul>
-    <li>Dashboard displays live feeds for all configured camera sources.</li>
-    <li>Settings accepts camera source JSON for usb, bluetooth, ip, builtin.</li>
+    <li>Open CCTV page from the sidebar to manage camera index and camera sources JSON.</li>
+    <li>Use Add CCTV Feed to register camera feeds.</li>
     <li>If no camera sources are configured, built-in camera fallback is used.</li>
+    <li>The system maintains a default built-in camera entry in feed and recording tables.</li>
   </ul>
 
-  <h5 class="section-title">4) Settings</h5>
+  <h5 class="section-title">4) Grouped Data Pages</h5>
   <ul>
-    <li>Configure organisation name, worker ID format, camera sources, and optional Firebase storage values.</li>
-    <li>Keep camera JSON valid array format.</li>
+    <li>Data Hub is the launcher for grouped components: CCTV, Biometric, Payroll, and Cloud Sync.</li>
+    <li>Biometric page covers device setup and links to biometric-related tables.</li>
+    <li>Payroll page supports payroll entry and payroll records.</li>
+    <li>Cloud Sync page contains Firebase configuration and sync queue/metadata views.</li>
   </ul>
 
-  <h5 class="section-title">5) Troubleshooting</h5>
+  <h5 class="section-title">5) Settings and Users</h5>
+  <ul>
+    <li>Settings page is organisation-focused (for example organisation name).</li>
+    <li>Users page includes all configurable fields: username, full name, email, phone, role, and linked worker.</li>
+    <li>Password reset generates a new random password shown in a flash message.</li>
+  </ul>
+
+  <h5 class="section-title">6) Troubleshooting</h5>
   <ul>
     <li>If live camera panel is black, verify camera source and ensure no other app is locking the camera.</li>
     <li>If workers cannot clock in, check worker status is Active and PIN is correct.</li>

@@ -22,7 +22,7 @@
         <thead class="table-light">
           <tr>
             {% for col in columns %}
-            <th>{{ col }}</th>
+            <th>{{ col.replace('_', ' ').title() }}</th>
             {% endfor %}
           </tr>
         </thead>
