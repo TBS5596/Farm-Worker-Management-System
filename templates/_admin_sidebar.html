@@ -1,8 +1,13 @@
-<nav class="sidebar d-flex flex-column py-3">
-  <div class="brand text-white">
-    <i class="bi bi-tree-fill fs-4 me-2"></i>
-    <span class="fw-bold">{{ org_name }}</span>
-    <div class="small opacity-75 mt-1">Admin Panel</div>
+<nav class="sidebar d-flex flex-column py-3" aria-label="Admin navigation sidebar">
+  <div class="brand text-white d-flex justify-content-between align-items-start gap-2">
+    <div>
+      <i class="bi bi-tree-fill fs-4 me-2"></i>
+      <span class="fw-bold">{{ org_name }}</span>
+      <div class="small opacity-75 mt-1">Admin Panel</div>
+    </div>
+    <button id="sidebarCloseBtn" type="button" class="btn btn-sm btn-outline-light d-lg-none" title="Close navigation" aria-label="Close navigation">
+      <i class="bi bi-x-lg"></i>
+    </button>
   </div>
 
   <ul class="nav flex-column mt-3 px-2 gap-1">
@@ -19,11 +24,6 @@
     <li class="nav-item">
       <a href="{{ url_for('attendance_page') }}" class="nav-link {% if active_page == 'attendance' %}active{% endif %}">
         <i class="bi bi-journal-text me-2"></i>Attendance
-      </a>
-    </li>
-    <li class="nav-item">
-      <a href="{{ url_for('settings') }}" class="nav-link {% if active_page == 'settings' %}active{% endif %}">
-        <i class="bi bi-gear-fill me-2"></i>Settings
       </a>
     </li>
     <li class="nav-item">
@@ -59,6 +59,11 @@
     <li class="nav-item">
       <a href="{{ url_for('tables_hub_page') }}" class="nav-link {% if active_page == 'tables_hub' %}active{% endif %}">
         <i class="bi bi-database-gear me-2"></i>Data Hub
+      </a>
+    </li>
+    <li class="nav-item">
+      <a href="{{ url_for('settings') }}" class="nav-link {% if active_page == 'settings' %}active{% endif %}">
+        <i class="bi bi-gear-fill me-2"></i>Settings
       </a>
     </li>
     <li class="nav-item">
