@@ -2,15 +2,16 @@
 
 ## Overview
 
-FMS is a Flask web application for farm workforce operations.
+FMS is a Flask web application for farm workforce and attendance operations.
 
-Key capabilities:
+Current capabilities include:
 
-- Worker clock-in / clock-out using Worker ID + PIN.
-- Camera photo capture on attendance events.
-- Frontend geolocation capture (latitude/longitude).
-- Admin panel for Workers, Users, Attendance, Audit, and grouped data operations.
-- Dedicated grouped pages for CCTV, Biometric, Payroll, and Cloud Sync.
+- Worker clock-in and clock-out using Worker ID + PIN.
+- Face verification on clock-in (face + eye detection loop before attendance is saved).
+- Clean image capture on attendance events, with optional Firebase upload.
+- Frontend geolocation capture (latitude/longitude) when available.
+- Live CCTV feed previews with motion and face overlays.
+- Admin pages for Workers, Users, Attendance, CCTV, Biometric, Payroll, Cloud Sync, Audit Log, and Data Hub.
 
 Tech stack:
 
@@ -24,52 +25,80 @@ Tech stack:
 
 ## Project Structure
 
-- `app.py`: App factory, helpers, schema updates, and all routes.
-- `models.py`: SQLAlchemy models (core + Workers.sql-aligned tables).
-- `database.py`: Shared SQLAlchemy instance.
-- `templates/`: Jinja templates for login/admin pages.
-- `static/`: CSS/JS files.
-- `captures/`: Saved attendance images.
-- `fms.db`: SQLite database.
+- `app.py`: app factory, business logic helpers, and routes.
+- `models.py`: SQLAlchemy schema definitions.
+- `database.py`: shared SQLAlchemy instance.
+- `templates/`: Jinja templates.
+- `static/css/`: page and shared styles.
+- `static/js/`: page scripts and shared UI helpers.
+- `captures/`: local attendance snapshots.
+- `fms.db`: SQLite database (created via `db.create_all()`).
 
 ---
 
 ## Current Functional Areas
 
-### 1) Core Admin
+### Core Admin
 
-- Dashboard
+- Dashboard (including upgraded Control Center quick actions)
 - Workers
 - Attendance
 - Users
+- Settings
 - Audit Log
-- Settings (organization-level settings)
+- Manual
 
-### 2) Grouped Data Operations
+### Grouped Operations
 
-- CCTV (`/cctv`): camera index, camera sources JSON, feed management, recordings.
-- Biometric (`/biometric`): device setup and access to biometric tables.
-- Payroll (`/payroll`): payroll entry and payroll records.
-- Cloud Sync (`/cloud-sync`): Firebase settings, metadata, and sync queue.
+- CCTV (`/cctv`): camera settings, feed management, recording visibility.
+- Biometric (`/biometric`): device setup and management.
+- Payroll (`/payroll`): payroll creation and updates.
+- Cloud Sync (`/cloud-sync`): Firebase settings and sync queue visibility.
 
-### 3) Data Hub
+### Data Hub
 
-- `/tables-hub` provides grouped launch points.
-- `/tables-hub/<table_key>` provides generic table records pages.
+- `/tables-hub` for grouped navigation.
+- `/tables-hub/<table_key>` for generic table browsing.
+
+---
+
+## Architecture Notes
+
+### Routing Model
+
+Edit and reset operations use parameterized routes, for example:
+
+- `/workers/<int:worker_pk>/update`
+- `/workers/<int:worker_pk>/reset-pin`
+- `/users/<int:user_pk>/update`
+- `/users/<int:user_pk>/reset-password`
+
+Legacy flat routes were removed.
+
+### Schema Initialization
+
+- Startup uses `db.create_all()`.
+- Runtime schema patching and `_ensure_schema()` were removed.
+
+### Frontend Organization
+
+- Inline JS/CSS was moved into `static/js` and `static/css`.
+- Shared helpers are in `static/js/components.js`.
+- Shared edit modal behavior is in `static/js/edit-modals.js`.
 
 ---
 
 ## Data Model Summary
 
-### Core tables
+### Core Tables
 
-- `settings`: key/value system config.
-- `users`: admin users, including `role` and `linked_worker_id`.
-- `workers`: worker profiles including contact, NRC, enrollment, and status fields.
-- `attendance`: check-in/check-out sessions including location fields.
-- `audit_logs`: admin audit trail.
+- `settings`: key/value system settings.
+- `users`: admin users with profile fields and optional linked worker.
+- `workers`: worker profile, status, PIN hash/fingerprint, enrollment and contact fields.
+- `attendance`: check-in/check-out session rows with location and CCTV verification flag.
+- `audit_logs`: admin activity trail.
 
-### Additional operational tables
+### Operational Tables
 
 - `cctv_feeds`, `cctv_recordings`, `event_snapshots`
 - `biometric_devices`, `biometric_transactions`, `face_templates`
@@ -83,23 +112,29 @@ Tech stack:
 
 ### Worker IDs
 
-- Worker IDs are auto-generated as a strict 4-digit sequence: `0001`, `0002`, `0003`, ...
+Worker IDs are auto-generated as strict 4-digit values (`0001`, `0002`, ...).
 
-### Attendance capture
+### Attendance Flow
 
-- Worker login captures a photo on IN/OUT events.
-- Geolocation is accepted from frontend when available.
-- Face/motion overlays are not required for attendance capture.
+- Clock-in requires successful face verification before attendance is created.
+- Clock-out requires an existing open check-in session.
+- Captured snapshots are saved as `EventSnapshot` records.
+- `Attendance.verified_by_cctv` is set on successful clock-in verification.
 
-### CCTV defaults
+### Live Feed
 
-- On startup, the app ensures a built-in default CCTV feed entry exists.
-- A default marker recording row is also ensured.
+- Live camera streams include optional motion and face/eye overlay boxes.
+- Snapshot capture uses clean frames (no overlays drawn into saved photo files).
 
-### Firebase / Cloud Sync
+### CCTV Defaults
 
-- Firebase settings are managed from `/cloud-sync`.
-- If Firebase is not configured, images stay local under `captures/`.
+- Built-in camera feed defaults are ensured at startup.
+- A default marker recording row is maintained.
+
+### Cloud Sync
+
+- Firebase settings are managed in `/cloud-sync`.
+- If Firebase is not configured, snapshots remain local under `captures/`.
 
 ---
 
@@ -107,23 +142,23 @@ Tech stack:
 
 ### Public
 
-- `GET/POST /` (admin + worker login)
+- `GET/POST /` (admin and worker login)
 - `GET /worker-camera-stream`
 - `GET /manual`
 
-### Admin-authenticated
+### Admin-Authenticated
 
 - `GET /dashboard`
 - `GET /workers`
 - `POST /workers/add`
-- `POST /workers/update`
-- `POST /workers/reset-pin`
+- `POST /workers/<int:worker_pk>/update`
+- `POST /workers/<int:worker_pk>/reset-pin`
 - `POST /workers/<int:worker_pk>/toggle`
 - `GET /attendance`
 - `GET /users`
 - `POST /users/add`
-- `POST /users/update`
-- `POST /users/reset-password`
+- `POST /users/<int:user_pk>/update`
+- `POST /users/<int:user_pk>/reset-password`
 - `GET /audit-log`
 - `GET/POST /settings`
 - `GET /tables-hub`
@@ -131,19 +166,24 @@ Tech stack:
 - `GET /cctv`
 - `POST /config/cctv/settings`
 - `POST /config/cctv-feeds`
+- `POST /config/cctv-feeds/<int:feed_id>/update`
+- `POST /config/cctv-feeds/<int:feed_id>/deactivate`
 - `GET /biometric`
 - `POST /config/biometric-devices`
+- `POST /config/biometric-devices/<int:device_id>/update`
+- `POST /config/biometric-devices/<int:device_id>/deactivate`
 - `GET /payroll`
 - `POST /config/payroll`
+- `POST /config/payroll/<int:payroll_id>/update`
+- `POST /config/payroll/<int:payroll_id>/deactivate`
 - `GET/POST /cloud-sync`
-- `GET /api/logs`
 - `GET /camera-stream/<int:camera_idx>`
 - `GET /captures/<path:filename>`
 - `GET /logout`
 
 ---
 
-## Run Locally
+## Local Setup
 
 ```bash
 python -m venv .venv
@@ -158,8 +198,9 @@ App URL:
 
 ---
 
-## Maintenance Notes
+## Documentation
 
-- Runtime schema adaptation is done in `app.py` via `_ensure_schema()`.
-- Default built-in CCTV seed records are ensured via `_ensure_default_cctv_entries()`.
-- Prefer proper migrations (Flask-Migrate/Alembic) for production environments.
+- In-app manual: `/manual`
+- Markdown manual: `docs/manual.md`
+
+The manual now includes workflow examples and flowcharts for onboarding, attendance, and edit/update operations.
