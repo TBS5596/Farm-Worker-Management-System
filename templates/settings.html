@@ -1,0 +1,38 @@
+{% extends 'base_admin.html' %}
+
+{% block title %}{{ org_name }} - Settings{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/settings.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="settings-shell">
+  <div class="card shadow-sm">
+    <div class="card-body p-4">
+      <h5 class="mb-3"><i class="bi bi-gear-fill me-2 text-success"></i>System Settings</h5>
+      <form method="POST">
+        <h6 class="text-muted text-uppercase fw-bold mb-3">General</h6>
+        <div class="mb-3">
+          <label class="form-label">Organisation Name</label>
+          <input type="text" class="form-control" name="org_name" value="{{ settings.get('org_name', '') }}" placeholder="Farm name" title="Organisation name" />
+        </div>
+
+        <hr />
+        <h6 class="text-muted text-uppercase fw-bold mb-3">Worker ID Generator</h6>
+        <div class="alert alert-secondary mb-4">
+          Worker IDs are auto-generated as a 4-digit series (0001, 0002, 0003...).
+        </div>
+
+        <hr />
+        <div class="alert alert-info mb-4">
+          <i class="bi bi-info-circle me-2"></i>
+          Camera source/index configuration has moved to the CCTV page. Firebase configuration has moved to Cloud Sync.
+        </div>
+
+        <button type="submit" class="btn btn-success w-100"><i class="bi bi-save me-2"></i>Save Settings</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

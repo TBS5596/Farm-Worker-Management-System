@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ org_name }} – Login</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" />
+  <style>
+    body {
+      background: linear-gradient(135deg, #1a4731 0%, #2e7d52 60%, #4caf50 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      border: none;
+      border-radius: 1rem;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+    }
+    .card-header {
+      border-radius: 1rem 1rem 0 0 !important;
+      background: #1a4731;
+    }
+    .nav-pills .nav-link.active {
+      background-color: #2e7d52;
+    }
+    .nav-pills .nav-link {
+      color: #2e7d52;
+    }
+    .btn-primary {
+      background-color: #2e7d52;
+      border-color: #2e7d52;
+    }
+    .btn-primary:hover {
+      background-color: #1a4731;
+      border-color: #1a4731;
+    }
+    .worker-preview {
+      border: 1px solid rgba(46, 125, 82, 0.25);
+      border-radius: 0.8rem;
+      background: #f8fbf9;
+      padding: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    .worker-preview img {
+      width: 100%;
+      max-height: 210px;
+      object-fit: cover;
+      border-radius: 0.6rem;
+      border: 1px solid rgba(0,0,0,0.08);
+      background: #0f1115;
+    }
+    .login-shell {
+      max-width: 480px;
+    }
+  </style>
+</head>
+<body>
+<div class="container login-shell">
+
+  <!-- Flash Messages -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show mb-3" role="alert">
+          {{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" title="Dismiss message"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <div class="card">
+    <div class="card-header text-white text-center py-4">
+      <i class="bi bi-tree-fill fs-2"></i>
+      <h4 class="mb-0 mt-2">{{ org_name }}</h4>
+      <small class="opacity-75">Farm Worker Management System</small>
+    </div>
+    <div class="card-body p-4">
+
+      <!-- Tab Navigation -->
+      <ul class="nav nav-pills nav-fill mb-4" id="loginTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button class="nav-link active" id="worker-tab" data-bs-toggle="pill"
+                  data-bs-target="#worker-pane" type="button" role="tab">
+            <i class="bi bi-person-badge me-1"></i>Worker Clock-In
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="admin-tab" data-bs-toggle="pill"
+                  data-bs-target="#admin-pane" type="button" role="tab">
+            <i class="bi bi-shield-lock me-1"></i>Admin Login
+          </button>
+        </li>
+      </ul>
+
+      <div class="tab-content">
+
+        <!-- Worker Panel -->
+        <div class="tab-pane fade show active" id="worker-pane" role="tabpanel">
+          <div class="worker-preview">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="small fw-semibold text-success">Live Camera Preview</span>
+              <span class="badge bg-dark">Live Feed</span>
+            </div>
+            <img src="{{ url_for('worker_camera_stream') }}" alt="Worker preview feed" />
+            <div class="small text-muted mt-2">
+              Ensure your face is clearly visible before you submit.
+            </div>
+          </div>
+
+          <form method="POST" action="{{ url_for('login') }}">
+            <input type="hidden" name="mode" value="worker" />
+            <input type="hidden" name="latitude" id="workerLatitude" />
+            <input type="hidden" name="longitude" id="workerLongitude" />
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Worker ID</label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-person-fill"></i></span>
+                <input type="text" class="form-control form-control-lg" name="worker_id"
+                       placeholder="e.g. FW001" required autofocus />
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">PIN</label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-key-fill"></i></span>
+                <input type="password" class="form-control form-control-lg" name="pin"
+                       placeholder="Enter your PIN" minlength="4" required />
+              </div>
+            </div>
+            <div class="mb-4">
+              <label class="form-label fw-semibold">Action</label>
+              <div class="d-flex gap-3">
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="radio" name="log_type" value="IN"
+                         id="radioIn" checked />
+                  <label class="form-check-label" for="radioIn">
+                    <i class="bi bi-box-arrow-in-right text-success"></i> Clock In
+                  </label>
+                </div>
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="radio" name="log_type" value="OUT"
+                         id="radioOut" />
+                  <label class="form-check-label" for="radioOut">
+                    <i class="bi bi-box-arrow-right text-danger"></i> Clock Out
+                  </label>
+                </div>
+              </div>
+            </div>
+            <button class="btn btn-primary btn-lg w-100" type="submit">
+              <i class="bi bi-camera-fill me-2"></i>Submit &amp; Capture Photo
+            </button>
+          </form>
+        </div>
+
+        <!-- Admin Panel -->
+        <div class="tab-pane fade" id="admin-pane" role="tabpanel">
+          <form method="POST" action="{{ url_for('login') }}">
+            <input type="hidden" name="mode" value="admin" />
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Username</label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-person-circle"></i></span>
+                <input type="text" class="form-control form-control-lg" name="username"
+                       placeholder="admin" required />
+              </div>
+            </div>
+            <div class="mb-4">
+              <label class="form-label fw-semibold">Password</label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-lock-fill"></i></span>
+                <input type="password" class="form-control form-control-lg" name="password"
+                       placeholder="••••••••" required />
+              </div>
+            </div>
+            <button class="btn btn-primary btn-lg w-100" type="submit">
+              <i class="bi bi-shield-check me-2"></i>Login to Dashboard
+            </button>
+          </form>
+        </div>
+
+      </div><!-- tab-content -->
+    </div><!-- card-body -->
+
+    <div class="card-footer text-center py-3">
+      <a href="{{ url_for('manual') }}" class="text-muted small">
+        <i class="bi bi-book me-1"></i>System Manual &amp; Help
+      </a>
+    </div>
+  </div><!-- card -->
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  // Re-activate the correct tab when flash messages are shown after a POST
+  (function () {
+    const url = new URL(window.location.href);
+    const tab = url.searchParams.get("tab");
+    if (tab === "admin") {
+      const trigger = document.getElementById("admin-tab");
+      if (trigger) bootstrap.Tab.getOrCreateInstance(trigger).show();
+    }
+  })();
+
+  // Capture current GPS coordinates (if available) and submit as hidden inputs.
+  (function () {
+    const latEl = document.getElementById("workerLatitude");
+    const lonEl = document.getElementById("workerLongitude");
+    if (!latEl || !lonEl || !navigator.geolocation) return;
+
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        latEl.value = String(pos.coords.latitude);
+        lonEl.value = String(pos.coords.longitude);
+      },
+      function () {
+        latEl.value = "";
+        lonEl.value = "";
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 5000,
+        maximumAge: 60000,
+      }
+    );
+  })();
+</script>
+</body>
+</html>

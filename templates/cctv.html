@@ -1,0 +1,147 @@
+{% extends 'base_admin.html' %}
+
+{% block title %}{{ org_name }} - CCTV{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.datatables.net/2.3.8/css/dataTables.dataTables.min.css" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/datatables.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0"><i class="bi bi-camera-video-fill me-2 text-success"></i>CCTV</h5>
+  <span class="text-muted small">Camera setup, feeds, and recordings</span>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-xl-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header fw-semibold">Camera Configuration</div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('save_cctv_settings') }}" class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">Built-in Camera Index</label>
+            <input type="number" class="form-control" name="camera_index" min="0" max="9" value="{{ settings.get('camera_index', '0') }}" title="Built-in camera index" />
+          </div>
+          <div class="col-12">
+            <label class="form-label">Camera Sources JSON</label>
+            <textarea class="form-control font-monospace" name="camera_sources" rows="6" placeholder='[{"name":"Front Gate USB","type":"usb","source":"0"}]'>{{ settings.get('camera_sources', '') }}</textarea>
+            <div class="form-text">If empty, the built-in camera index is used as default.</div>
+          </div>
+          <div class="col-12">
+            <button type="submit" class="btn btn-success">Save CCTV Settings</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header fw-semibold">Add CCTV Feed</div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('add_cctv_feed') }}" class="row g-2">
+          <div class="col-12">
+            <input type="text" class="form-control" name="camera_name" placeholder="Camera name" required />
+          </div>
+          <div class="col-12">
+            <input type="text" class="form-control" name="camera_location" placeholder="Location" />
+          </div>
+          <div class="col-12">
+            <input type="text" class="form-control" name="rtsp_url" placeholder="rtsp://... or builtin://0" />
+          </div>
+          <div class="col-12">
+            <button class="btn btn-success" type="submit">Save Feed</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span class="fw-semibold">CCTV Feeds</span>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('tables_hub_table_page', table_key='cctv-feeds') }}">Open Full Table</a>
+  </div>
+  <div class="card-body">
+    <div class="table-responsive">
+      <table id="feedsTable" class="table table-sm table-hover align-middle w-100">
+        <thead class="table-light">
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Location</th>
+            <th>Source</th>
+            <th>Status</th>
+            <th>Heartbeat</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for feed in feeds %}
+          <tr>
+            <td>{{ feed.feed_id }}</td>
+            <td>{{ feed.camera_name }}</td>
+            <td>{{ feed.camera_location or '—' }}</td>
+            <td class="font-monospace">{{ feed.rtsp_url or '—' }}</td>
+            <td>{{ feed.status }}</td>
+            <td>{{ feed.last_heartbeat.strftime('%Y-%m-%d %H:%M:%S') if feed.last_heartbeat else '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="text-center text-muted py-4">No CCTV feeds yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span class="fw-semibold">CCTV Recordings</span>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('tables_hub_table_page', table_key='cctv-recordings') }}">Open Full Table</a>
+  </div>
+  <div class="card-body">
+    <div class="table-responsive">
+      <table id="recordingsTable" class="table table-sm table-hover align-middle w-100">
+        <thead class="table-light">
+          <tr>
+            <th>ID</th>
+            <th>Camera</th>
+            <th>Recording Path</th>
+            <th>Start</th>
+            <th>End</th>
+            <th>Storage</th>
+            <th>Uploaded</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for rec in recordings %}
+          <tr>
+            <td>{{ rec.recording_id }}</td>
+            <td>{{ rec.camera_id or '—' }}</td>
+            <td class="font-monospace">{{ rec.recording_path }}</td>
+            <td>{{ rec.start_time.strftime('%Y-%m-%d %H:%M:%S') if rec.start_time else '—' }}</td>
+            <td>{{ rec.end_time.strftime('%Y-%m-%d %H:%M:%S') if rec.end_time else '—' }}</td>
+            <td>{{ rec.storage_location }}</td>
+            <td>{{ 'Yes' if rec.uploaded_to_cloud else 'No' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="text-center text-muted py-4">No recordings yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.datatables.net/2.3.8/js/dataTables.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  new DataTable('#feedsTable', { order: [[0, 'desc']], pageLength: 10 });
+  new DataTable('#recordingsTable', { order: [[0, 'desc']], pageLength: 10 });
+});
+</script>
+{% endblock %}

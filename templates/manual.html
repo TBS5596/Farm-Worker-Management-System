@@ -1,0 +1,49 @@
+{% extends 'base_admin.html' %}
+
+{% block title %}{{ org_name }} - Manual{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/manual.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="manual-shell">
+  <h3 class="mb-3"><i class="bi bi-book-half me-2 text-success"></i>System Manual</h3>
+  <p class="text-muted">Use this guide for onboarding workers, attendance operations, camera setup, and troubleshooting.</p>
+
+  <h5 class="section-title">1) Worker Management</h5>
+  <ul>
+    <li>Open Workers page, click Add Worker, and fill in name, phone number, optional address, emergency contact, department, and unique PIN.</li>
+    <li>Worker IDs are auto-generated from Settings (prefix + digits).</li>
+    <li>Use Edit to update worker details later.</li>
+    <li>Use key icon to reset PIN. PIN must remain unique.</li>
+  </ul>
+
+  <h5 class="section-title">2) Attendance Workflow</h5>
+  <ul>
+    <li>Workers use login page with Worker ID and PIN.</li>
+    <li>System verifies credentials and captures a photo immediately.</li>
+    <li>Attendance page shows paired IN/OUT records with photos.</li>
+  </ul>
+
+  <h5 class="section-title">3) Cameras and Live Feeds</h5>
+  <ul>
+    <li>Dashboard displays live feeds for all configured camera sources.</li>
+    <li>Settings accepts camera source JSON for usb, bluetooth, ip, builtin.</li>
+    <li>If no camera sources are configured, built-in camera fallback is used.</li>
+  </ul>
+
+  <h5 class="section-title">4) Settings</h5>
+  <ul>
+    <li>Configure organisation name, worker ID format, camera sources, and optional Firebase storage values.</li>
+    <li>Keep camera JSON valid array format.</li>
+  </ul>
+
+  <h5 class="section-title">5) Troubleshooting</h5>
+  <ul>
+    <li>If live camera panel is black, verify camera source and ensure no other app is locking the camera.</li>
+    <li>If workers cannot clock in, check worker status is Active and PIN is correct.</li>
+    <li>If imports show unresolved warnings in editor, select the project .venv interpreter in VS Code.</li>
+  </ul>
+</div>
+{% endblock %}

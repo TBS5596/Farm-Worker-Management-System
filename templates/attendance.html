@@ -1,0 +1,131 @@
+{% extends 'base_admin.html' %}
+
+{% block title %}{{ org_name }} - Attendance{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.datatables.net/2.3.8/css/dataTables.dataTables.min.css" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/datatables.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/attendance.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-2">
+    <div class="card shadow-sm p-2">
+      <div class="small text-muted">Total</div>
+      <div class="fs-5 fw-bold">{{ attendance_stats.total }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="card shadow-sm p-2">
+      <div class="small text-muted">Today</div>
+      <div class="fs-5 fw-bold text-primary">{{ attendance_stats.today }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="card shadow-sm p-2">
+      <div class="small text-muted">Complete</div>
+      <div class="fs-5 fw-bold text-success">{{ attendance_stats.complete }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card shadow-sm p-2">
+      <div class="small text-muted">In Progress</div>
+      <div class="fs-5 fw-bold text-warning">{{ attendance_stats.in_progress }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card shadow-sm p-2">
+      <div class="small text-muted">Out Only</div>
+      <div class="fs-5 fw-bold text-secondary">{{ attendance_stats.out_only }}</div>
+    </div>
+  </div>
+</div>
+
+<h5 class="mb-3"><i class="bi bi-journal-text me-2 text-primary"></i>Attendance Records</h5>
+<div class="card shadow-sm">
+  <div class="card-body">
+    <div class="table-responsive">
+    <table id="attendanceTable" class="table table-hover align-middle w-100">
+      <thead class="table-light">
+        <tr>
+          <th>Worker ID</th>
+          <th>Name</th>
+          <th>Date</th>
+          <th>Clock In</th>
+          <th>In Photo</th>
+          <th>Clock Out</th>
+          <th>Out Photo</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in sessions %}
+        <tr>
+          <td><span class="badge bg-secondary">{{ s.worker_id }}</span></td>
+          <td>{{ s.worker_name }}</td>
+          <td data-order="{{ s._sort_key.strftime('%Y%m%d') }}">{{ s.date }}</td>
+          <td data-order="{{ s.clock_in_time or '00:00:00' }}">{{ s.clock_in_time or '—' }}</td>
+          <td class="text-center">
+            {% if s.clock_in_image %}
+              {% if s.clock_in_image.startswith('http') %}
+                <img src="{{ s.clock_in_image }}" class="capture-thumb" alt="Clock-in" data-bs-toggle="modal" data-bs-target="#photoModal" data-src="{{ s.clock_in_image }}" data-label="{{ s.worker_name }} - Clock In {{ s.date }}" />
+              {% else %}
+                {% set in_file = s.clock_in_image.replace('captures/', '').replace('captures\\', '') %}
+                <img src="{{ url_for('captured_image', filename=in_file) }}" class="capture-thumb" alt="Clock-in" data-bs-toggle="modal" data-bs-target="#photoModal" data-src="{{ url_for('captured_image', filename=in_file) }}" data-label="{{ s.worker_name }} - Clock In {{ s.date }}" />
+              {% endif %}
+            {% else %}
+              <span class="text-muted small">—</span>
+            {% endif %}
+          </td>
+          <td data-order="{{ s.clock_out_time or '99:99:99' }}">{{ s.clock_out_time or '—' }}</td>
+          <td class="text-center">
+            {% if s.clock_out_image %}
+              {% if s.clock_out_image.startswith('http') %}
+                <img src="{{ s.clock_out_image }}" class="capture-thumb" alt="Clock-out" data-bs-toggle="modal" data-bs-target="#photoModal" data-src="{{ s.clock_out_image }}" data-label="{{ s.worker_name }} - Clock Out {{ s.date }}" />
+              {% else %}
+                {% set out_file = s.clock_out_image.replace('captures/', '').replace('captures\\', '') %}
+                <img src="{{ url_for('captured_image', filename=out_file) }}" class="capture-thumb" alt="Clock-out" data-bs-toggle="modal" data-bs-target="#photoModal" data-src="{{ url_for('captured_image', filename=out_file) }}" data-label="{{ s.worker_name }} - Clock Out {{ s.date }}" />
+              {% endif %}
+            {% else %}
+              <span class="text-muted small">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if s.clock_in_time and s.clock_out_time %}
+              <span class="badge bg-success">Complete</span>
+            {% elif s.clock_in_time %}
+              <span class="badge bg-warning text-dark">In Progress</span>
+            {% else %}
+              <span class="badge bg-secondary">Out Only</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="text-center text-muted py-4">No attendance records yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="photoModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="photoModalLabel">Captured Photo</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" title="Close modal"></button>
+      </div>
+      <div class="modal-body text-center p-2">
+        <img id="photoModalImg" src="" class="img-fluid rounded" alt="attendance capture" />
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.datatables.net/2.3.8/js/dataTables.min.js"></script>
+<script src="{{ url_for('static', filename='js/attendance.js') }}"></script>
+{% endblock %}

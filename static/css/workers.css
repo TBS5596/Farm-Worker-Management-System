@@ -1,0 +1,4 @@
+.workers-page .table td,
+.workers-page .table th {
+  vertical-align: middle;
+}

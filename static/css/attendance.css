@@ -1,0 +1,8 @@
+.capture-thumb {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 0.4rem;
+  cursor: pointer;
+  border: 2px solid #dee2e6;
+}

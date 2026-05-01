@@ -1,0 +1,100 @@
+{% extends 'base_admin.html' %}
+
+{% block title %}{{ org_name }} - Biometric{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.datatables.net/2.3.8/css/dataTables.dataTables.min.css" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/datatables.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0"><i class="bi bi-fingerprint me-2 text-success"></i>Biometric</h5>
+  <span class="text-muted small">Devices, templates, and transactions</span>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-5">
+    <div class="card shadow-sm h-100">
+      <div class="card-header fw-semibold">Add Biometric Device</div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('add_biometric_device') }}" class="row g-2">
+          <div class="col-12">
+            <input type="text" class="form-control" name="device_name" placeholder="Device name" required />
+          </div>
+          <div class="col-12">
+            <input type="text" class="form-control" name="device_serial" placeholder="Serial" />
+          </div>
+          <div class="col-12">
+            <input type="text" class="form-control" name="location" placeholder="Location" />
+          </div>
+          <div class="col-12">
+            <button class="btn btn-success" type="submit">Save Device</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="card shadow-sm h-100">
+      <div class="card-header fw-semibold">Table Access</div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-md-6"><a class="btn btn-outline-secondary w-100" href="{{ url_for('tables_hub_table_page', table_key='biometric-devices') }}">Biometric Devices</a></div>
+          <div class="col-md-6"><a class="btn btn-outline-secondary w-100" href="{{ url_for('tables_hub_table_page', table_key='face-templates') }}">Face Templates</a></div>
+          <div class="col-md-6"><a class="btn btn-outline-secondary w-100" href="{{ url_for('tables_hub_table_page', table_key='biometric-transactions') }}">Biometric Transactions</a></div>
+          <div class="col-md-6"><a class="btn btn-outline-secondary w-100" href="{{ url_for('tables_hub_table_page', table_key='hardware-health-logs') }}">Hardware Health Logs</a></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header fw-semibold">Recent Devices</div>
+  <div class="card-body">
+    <div class="table-responsive">
+      <table id="devicesTable" class="table table-sm table-hover align-middle w-100">
+        <thead class="table-light">
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Serial</th>
+            <th>Type</th>
+            <th>IP</th>
+            <th>USB Port</th>
+            <th>Status</th>
+            <th>Location</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in devices %}
+          <tr>
+            <td>{{ d.device_id }}</td>
+            <td>{{ d.device_name }}</td>
+            <td>{{ d.device_serial or '—' }}</td>
+            <td>{{ d.device_type }}</td>
+            <td>{{ d.ip_address or '—' }}</td>
+            <td>{{ d.usb_port or '—' }}</td>
+            <td>{{ d.status }}</td>
+            <td>{{ d.location or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8" class="text-center text-muted py-4">No biometric devices yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.datatables.net/2.3.8/js/dataTables.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  new DataTable('#devicesTable', { order: [[0, 'desc']], pageLength: 10 });
+});
+</script>
+{% endblock %}

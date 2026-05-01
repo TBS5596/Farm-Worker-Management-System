@@ -1,0 +1,71 @@
+{% extends 'base_admin.html' %}
+
+{% block title %}{{ org_name }} - Data Hub{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.datatables.net/2.3.8/css/dataTables.dataTables.min.css" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/datatables.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0"><i class="bi bi-database-fill-gear me-2 text-success"></i>Data Hub</h5>
+  <span class="text-muted small">Grouped access to all operational data components</span>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-6 col-xl-3">
+    <div class="card shadow-sm h-100">
+      <div class="card-body d-flex flex-column">
+        <h6 class="fw-bold mb-2"><i class="bi bi-camera-video-fill me-2 text-success"></i>CCTV</h6>
+        <p class="text-muted small mb-3">Camera index, camera sources, feed setup, and recordings.</p>
+        <a class="btn btn-outline-success mt-auto" href="{{ url_for('cctv_page') }}">Open CCTV</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6 col-xl-3">
+    <div class="card shadow-sm h-100">
+      <div class="card-body d-flex flex-column">
+        <h6 class="fw-bold mb-2"><i class="bi bi-fingerprint me-2 text-success"></i>Biometric</h6>
+        <p class="text-muted small mb-3">Device onboarding, face templates, and biometric transaction tables.</p>
+        <a class="btn btn-outline-success mt-auto" href="{{ url_for('biometric_page') }}">Open Biometric</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6 col-xl-3">
+    <div class="card shadow-sm h-100">
+      <div class="card-body d-flex flex-column">
+        <h6 class="fw-bold mb-2"><i class="bi bi-cash-stack me-2 text-success"></i>Payroll</h6>
+        <p class="text-muted small mb-3">Payroll entry and payroll records table for all workers.</p>
+        <a class="btn btn-outline-success mt-auto" href="{{ url_for('payroll_page') }}">Open Payroll</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6 col-xl-3">
+    <div class="card shadow-sm h-100">
+      <div class="card-body d-flex flex-column">
+        <h6 class="fw-bold mb-2"><i class="bi bi-cloud-arrow-up-fill me-2 text-success"></i>Cloud Sync</h6>
+        <p class="text-muted small mb-3">Firebase settings, sync queue, metadata, and cloud state tracking.</p>
+        <a class="btn btn-outline-success mt-auto" href="{{ url_for('cloud_sync_page') }}">Open Cloud Sync</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm mt-4">
+  <div class="card-header fw-semibold">Quick Table Links</div>
+  <div class="card-body">
+    <div class="row g-2">
+      <div class="col-md-4"><a class="btn btn-outline-secondary w-100" href="{{ url_for('tables_hub_table_page', table_key='event-snapshots') }}">Event Snapshots</a></div>
+      <div class="col-md-4"><a class="btn btn-outline-secondary w-100" href="{{ url_for('tables_hub_table_page', table_key='daily-attendance-summary') }}">Daily Attendance Summary</a></div>
+      <div class="col-md-4"><a class="btn btn-outline-secondary w-100" href="{{ url_for('tables_hub_table_page', table_key='hardware-health-logs') }}">Hardware Health Logs</a></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% endblock %}

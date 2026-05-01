@@ -1,0 +1,136 @@
+{% extends 'base_admin.html' %}
+
+{% block title %}{{ org_name }} - Cloud Sync{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.datatables.net/2.3.8/css/dataTables.dataTables.min.css" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/datatables.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0"><i class="bi bi-cloud-arrow-up-fill me-2 text-success"></i>Cloud Sync</h5>
+  <span class="text-muted small">Firebase settings and sync pipeline tables</span>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-xl-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header fw-semibold">Firebase Configuration (Optional)</div>
+      <div class="card-body">
+        <form method="POST" class="row g-3">
+          <div class="col-12">
+            <label class="form-label">Firebase API Key / Service Account Private Key</label>
+            <input type="password" class="form-control" name="firebase_api_key" value="{{ settings.get('firebase_api_key', '') }}" placeholder="AIza... or -----BEGIN RSA PRIVATE KEY-----" />
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Project ID</label>
+            <input type="text" class="form-control" name="firebase_project_id" value="{{ settings.get('firebase_project_id', '') }}" placeholder="my-project-id" />
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Storage Bucket</label>
+            <input type="text" class="form-control" name="firebase_bucket" value="{{ settings.get('firebase_bucket', '') }}" placeholder="my-project-id.appspot.com" />
+          </div>
+          <div class="col-12">
+            <button type="submit" class="btn btn-success">Save Cloud Sync Settings</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header fw-semibold">Table Access</div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-md-6"><a class="btn btn-outline-secondary w-100" href="{{ url_for('tables_hub_table_page', table_key='cloud-sync-metadata') }}">Cloud Sync Metadata</a></div>
+          <div class="col-md-6"><a class="btn btn-outline-secondary w-100" href="{{ url_for('tables_hub_table_page', table_key='offline-sync-queue') }}">Offline Sync Queue</a></div>
+          <div class="col-md-6"><a class="btn btn-outline-secondary w-100" href="{{ url_for('tables_hub_table_page', table_key='event-snapshots') }}">Event Snapshots</a></div>
+          <div class="col-md-6"><a class="btn btn-outline-secondary w-100" href="{{ url_for('tables_hub_table_page', table_key='daily-attendance-summary') }}">Daily Attendance Summary</a></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header fw-semibold">Cloud Sync Metadata</div>
+  <div class="card-body">
+    <div class="table-responsive">
+      <table id="metadataTable" class="table table-sm table-hover align-middle w-100">
+        <thead class="table-light">
+          <tr>
+            <th>ID</th>
+            <th>Table</th>
+            <th>Record ID</th>
+            <th>Status</th>
+            <th>Cloud Record</th>
+            <th>Synced At</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in metadata_rows %}
+          <tr>
+            <td>{{ row.sync_id }}</td>
+            <td>{{ row.table_name }}</td>
+            <td>{{ row.record_id }}</td>
+            <td>{{ row.cloud_status }}</td>
+            <td>{{ row.cloud_record_id or '—' }}</td>
+            <td>{{ row.synced_at.strftime('%Y-%m-%d %H:%M:%S') if row.synced_at else '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="text-center text-muted py-4">No cloud sync metadata rows.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header fw-semibold">Offline Sync Queue</div>
+  <div class="card-body">
+    <div class="table-responsive">
+      <table id="queueTable" class="table table-sm table-hover align-middle w-100">
+        <thead class="table-light">
+          <tr>
+            <th>ID</th>
+            <th>Device ID</th>
+            <th>Worker ID</th>
+            <th>Operation</th>
+            <th>Status</th>
+            <th>Retry</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in queue_rows %}
+          <tr>
+            <td>{{ row.sync_id }}</td>
+            <td>{{ row.device_id or '—' }}</td>
+            <td>{{ row.worker_id or '—' }}</td>
+            <td>{{ row.operation_type }}</td>
+            <td>{{ row.sync_status }}</td>
+            <td>{{ row.retry_count }}</td>
+            <td>{{ row.created_at.strftime('%Y-%m-%d %H:%M:%S') if row.created_at else '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="text-center text-muted py-4">No queued sync operations.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.datatables.net/2.3.8/js/dataTables.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  new DataTable('#metadataTable', { order: [[0, 'desc']], pageLength: 10 });
+  new DataTable('#queueTable', { order: [[0, 'desc']], pageLength: 10 });
+});
+</script>
+{% endblock %}

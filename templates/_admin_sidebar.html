@@ -1,0 +1,76 @@
+<nav class="sidebar d-flex flex-column py-3">
+  <div class="brand text-white">
+    <i class="bi bi-tree-fill fs-4 me-2"></i>
+    <span class="fw-bold">{{ org_name }}</span>
+    <div class="small opacity-75 mt-1">Admin Panel</div>
+  </div>
+
+  <ul class="nav flex-column mt-3 px-2 gap-1">
+    <li class="nav-item">
+      <a href="{{ url_for('dashboard') }}" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}">
+        <i class="bi bi-speedometer2 me-2"></i>Dashboard
+      </a>
+    </li>
+    <li class="nav-item">
+      <a href="{{ url_for('workers_page') }}" class="nav-link {% if active_page == 'workers' %}active{% endif %}">
+        <i class="bi bi-people-fill me-2"></i>Workers
+      </a>
+    </li>
+    <li class="nav-item">
+      <a href="{{ url_for('attendance_page') }}" class="nav-link {% if active_page == 'attendance' %}active{% endif %}">
+        <i class="bi bi-journal-text me-2"></i>Attendance
+      </a>
+    </li>
+    <li class="nav-item">
+      <a href="{{ url_for('settings') }}" class="nav-link {% if active_page == 'settings' %}active{% endif %}">
+        <i class="bi bi-gear-fill me-2"></i>Settings
+      </a>
+    </li>
+    <li class="nav-item">
+      <a href="{{ url_for('cctv_page') }}" class="nav-link {% if active_page == 'cctv' %}active{% endif %}">
+        <i class="bi bi-camera-video-fill me-2"></i>CCTV
+      </a>
+    </li>
+    <li class="nav-item">
+      <a href="{{ url_for('biometric_page') }}" class="nav-link {% if active_page == 'biometric' %}active{% endif %}">
+        <i class="bi bi-fingerprint me-2"></i>Biometric
+      </a>
+    </li>
+    <li class="nav-item">
+      <a href="{{ url_for('payroll_page') }}" class="nav-link {% if active_page == 'payroll' %}active{% endif %}">
+        <i class="bi bi-cash-stack me-2"></i>Payroll
+      </a>
+    </li>
+    <li class="nav-item">
+      <a href="{{ url_for('cloud_sync_page') }}" class="nav-link {% if active_page == 'cloud_sync' %}active{% endif %}">
+        <i class="bi bi-cloud-arrow-up-fill me-2"></i>Cloud Sync
+      </a>
+    </li>
+    <li class="nav-item">
+      <a href="{{ url_for('users_page') }}" class="nav-link {% if active_page == 'users' %}active{% endif %}">
+        <i class="bi bi-person-badge-fill me-2"></i>Users
+      </a>
+    </li>
+    <li class="nav-item">
+      <a href="{{ url_for('audit_log_page') }}" class="nav-link {% if active_page == 'audit_log' %}active{% endif %}">
+        <i class="bi bi-shield-check me-2"></i>Audit Log
+      </a>
+    </li>
+    <li class="nav-item">
+      <a href="{{ url_for('tables_hub_page') }}" class="nav-link {% if active_page == 'tables_hub' %}active{% endif %}">
+        <i class="bi bi-database-gear me-2"></i>Data Hub
+      </a>
+    </li>
+    <li class="nav-item">
+      <a href="{{ url_for('manual') }}" class="nav-link {% if active_page == 'manual' %}active{% endif %}">
+        <i class="bi bi-book me-2"></i>Manual
+      </a>
+    </li>
+  </ul>
+
+  <div class="mt-auto px-2 pb-2">
+    <a href="{{ url_for('logout') }}" class="nav-link text-danger">
+      <i class="bi bi-box-arrow-left me-2"></i>Logout
+    </a>
+  </div>
+</nav>

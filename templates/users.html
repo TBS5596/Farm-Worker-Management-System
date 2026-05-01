@@ -1,0 +1,267 @@
+{% extends 'base_admin.html' %}
+
+{% block title %}{{ org_name }} - Users{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.datatables.net/2.3.8/css/dataTables.dataTables.min.css" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/datatables.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="users-page">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0"><i class="bi bi-person-badge-fill me-2 text-success"></i>System Users</h5>
+    <button class="btn btn-success btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#addUserModal">
+      <i class="bi bi-plus-lg me-1"></i>Add User
+    </button>
+  </div>
+
+  <div class="alert alert-info alert-dismissible fade show" role="alert">
+    <i class="bi bi-info-circle me-2"></i>
+    When a user is created or their password is reset, the new password is shown in a flash message above.
+    Make sure to note it down before navigating away.
+    <button type="button" class="btn-close" data-bs-dismiss="alert" title="Dismiss message"></button>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <div class="table-responsive">
+      <table id="usersTable" class="table table-hover align-middle w-100">
+        <thead class="table-light">
+          <tr>
+            <th>Username</th>
+            <th>Name</th>
+            <th>Role</th>
+            <th>Linked Worker</th>
+            <th>Email</th>
+            <th>Phone</th>
+            <th>Created</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for user in users %}
+          <tr>
+            <td><span class="badge bg-secondary font-monospace">{{ user.username }}</span></td>
+            <td>{{ user.name or '—' }}</td>
+            <td><span class="badge bg-info text-dark">{{ user.role or 'supervisor' }}</span></td>
+            <td>{{ user.linked_worker_id or '—' }}</td>
+            <td>{{ user.email or '—' }}</td>
+            <td>{{ user.phone or '—' }}</td>
+            <td data-order="{{ user.created_at.strftime('%Y%m%d') }}">{{ user.created_at.strftime('%d %b %Y') }}</td>
+            <td>
+              <button class="btn btn-sm btn-outline-info edit-user-btn"
+                      type="button"
+                      data-bs-toggle="modal"
+                      data-bs-target="#editUserModal"
+                      data-user-id="{{ user.id }}"
+                      data-username="{{ user.username }}"
+                      data-name="{{ user.name or '' }}"
+                      data-email="{{ user.email or '' }}"
+                      data-phone="{{ user.phone or '' }}"
+                      data-role="{{ user.role or 'supervisor' }}"
+                      data-linked-worker-id="{{ user.linked_worker_id or '' }}"
+                      title="Edit user">
+                <i class="bi bi-pencil-square"></i>
+              </button>
+
+              <button class="btn btn-sm btn-outline-primary reset-password-btn"
+                      type="button"
+                      data-bs-toggle="modal"
+                      data-bs-target="#resetPasswordModal"
+                      data-user-id="{{ user.id }}"
+                      data-username="{{ user.username }}"
+                      title="Reset password">
+                <i class="bi bi-key-fill"></i>
+              </button>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="8" class="text-center text-muted py-4">No users found.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add User Modal -->
+<div class="modal fade" id="addUserModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form method="POST" action="{{ url_for('add_user') }}">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-person-plus-fill me-2"></i>Add User</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" title="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small mb-3">
+            <i class="bi bi-info-circle me-1"></i>
+            A random 8-character password will be generated and shown in a flash message after saving.
+          </p>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Username <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" name="username" placeholder="e.g. jsmith" title="Login username" required />
+              <div class="form-text">Lowercase, no spaces.</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Full Name <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" name="name" placeholder="e.g. John Smith" title="Full name" required />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Email</label>
+              <input type="email" class="form-control" name="email" placeholder="e.g. john@farm.com" title="Email address" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Phone</label>
+              <input type="text" class="form-control" name="phone" placeholder="e.g. +260971234567" title="Phone number" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Role</label>
+              <select class="form-select" name="role" title="User role">
+                <option value="admin">admin</option>
+                <option value="manager">manager</option>
+                <option value="supervisor" selected>supervisor</option>
+                <option value="viewer">viewer</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Linked Worker</label>
+              <select class="form-select" name="linked_worker_id" title="Linked worker">
+                <option value="">None</option>
+                {% for worker in workers %}
+                <option value="{{ worker.id }}">{{ worker.worker_id }} - {{ worker.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success">Create User</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Edit User Modal -->
+<div class="modal fade" id="editUserModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form method="POST" action="{{ url_for('update_user') }}">
+        <input type="hidden" name="user_pk" id="editUserPk" value="0">
+        <input type="hidden" name="username" id="editUserUsernameInput" value="">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Edit User</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" title="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-2">Username: <strong id="editUserUsername" class="font-monospace">-</strong></p>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Full Name <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" name="name" id="editUserName" placeholder="e.g. John Smith" title="Full name" required />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Email</label>
+              <input type="email" class="form-control" name="email" id="editUserEmail" placeholder="e.g. john@farm.com" title="Email address" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Phone</label>
+              <input type="text" class="form-control" name="phone" id="editUserPhone" placeholder="e.g. +260971234567" title="Phone number" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Role</label>
+              <select class="form-select" name="role" id="editUserRole" title="User role">
+                <option value="admin">admin</option>
+                <option value="manager">manager</option>
+                <option value="supervisor">supervisor</option>
+                <option value="viewer">viewer</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Linked Worker</label>
+              <select class="form-select" name="linked_worker_id" id="editUserLinkedWorker" title="Linked worker">
+                <option value="">None</option>
+                {% for worker in workers %}
+                <option value="{{ worker.id }}">{{ worker.worker_id }} - {{ worker.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-info text-white">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div class="modal fade" id="resetPasswordModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" action="{{ url_for('reset_user_password') }}">
+        <input type="hidden" name="user_pk" id="resetPasswordPk" value="0">
+        <input type="hidden" name="username" id="resetPasswordUsernameInput" value="">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-key-fill me-2"></i>Reset Password</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" title="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-1">Reset password for: <strong id="resetPasswordUsername">-</strong></p>
+          <p class="text-muted small">
+            A new random 8-character password will be generated and displayed in a flash message.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning">Reset Password</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.datatables.net/2.3.8/js/dataTables.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  new DataTable('#usersTable', {
+    order: [[6, 'desc']],
+    pageLength: 10,
+    columnDefs: [{ orderable: false, targets: 7 }],
+    language: { search: 'Search users:' },
+  });
+
+  document.addEventListener('click', function (e) {
+    const editBtn = e.target.closest('.edit-user-btn');
+    if (editBtn) {
+      document.getElementById('editUserPk').value = editBtn.dataset.userId;
+      document.getElementById('editUserUsernameInput').value = editBtn.dataset.username;
+      document.getElementById('editUserUsername').textContent = editBtn.dataset.username;
+      document.getElementById('editUserName').value = editBtn.dataset.name || '';
+      document.getElementById('editUserEmail').value = editBtn.dataset.email || '';
+      document.getElementById('editUserPhone').value = editBtn.dataset.phone || '';
+      document.getElementById('editUserRole').value = editBtn.dataset.role || 'supervisor';
+      document.getElementById('editUserLinkedWorker').value = editBtn.dataset.linkedWorkerId || '';
+    }
+
+    const resetBtn = e.target.closest('.reset-password-btn');
+    if (resetBtn) {
+      document.getElementById('resetPasswordPk').value = resetBtn.dataset.userId;
+      document.getElementById('resetPasswordUsernameInput').value = resetBtn.dataset.username;
+      document.getElementById('resetPasswordUsername').textContent = resetBtn.dataset.username;
+    }
+  });
+});
+</script>
+{% endblock %}

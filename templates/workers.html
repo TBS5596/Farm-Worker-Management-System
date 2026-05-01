@@ -1,0 +1,280 @@
+{% extends 'base_admin.html' %}
+
+{% block title %}{{ org_name }} - Workers{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.datatables.net/2.3.8/css/dataTables.dataTables.min.css" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/datatables.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/workers.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="workers-page">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0"><i class="bi bi-people-fill me-2 text-success"></i>Workers</h5>
+    <button class="btn btn-success btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#addWorkerModal">
+      <i class="bi bi-plus-lg me-1"></i>Add Worker
+    </button>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <div class="table-responsive">
+      <table id="workersTable" class="table table-hover align-middle w-100">
+        <thead class="table-light">
+          <tr>
+            <th>Worker ID</th>
+            <th>Name</th>
+            <th>NRC</th>
+            <th>Phone</th>
+            <th>Emergency Contact</th>
+            <th>Department</th>
+            <th>Address</th>
+            <th>Status</th>
+            <th>Enrolled</th>
+            <th>Active</th>
+            <th>Registered</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for worker in workers %}
+          <tr>
+            <td><span class="badge bg-secondary">{{ worker.worker_id }}</span></td>
+            <td>{{ worker.name }}</td>
+            <td>{{ worker.nrc_number or '—' }}</td>
+            <td>{{ worker.phone_number or '—' }}</td>
+            <td>{{ worker.emergency_contact or '—' }}</td>
+            <td>{{ worker.department or '—' }}</td>
+            <td>{{ worker.address or '—' }}</td>
+            <td>
+              {% if (worker.status or 'active') == 'active' %}
+                <span class="badge bg-success">active</span>
+              {% elif (worker.status or '') == 'inactive' %}
+                <span class="badge bg-secondary">inactive</span>
+              {% else %}
+                <span class="badge bg-info text-dark">{{ worker.status }}</span>
+              {% endif %}
+            </td>
+            <td data-order="{{ worker.enrollment_date.strftime('%Y%m%d') if worker.enrollment_date else 0 }}">
+              {{ worker.enrollment_date.strftime('%d %b %Y') if worker.enrollment_date else '—' }}
+            </td>
+            <td>
+              {% if worker.is_active %}
+                <span class="badge bg-success">Yes</span>
+              {% else %}
+                <span class="badge bg-danger">No</span>
+              {% endif %}
+            </td>
+            <td data-order="{{ worker.created_at.strftime('%Y%m%d') }}">{{ worker.created_at.strftime('%d %b %Y') }}</td>
+            <td>
+              <button class="btn btn-sm btn-outline-info edit-worker-btn"
+                      type="button"
+                      data-bs-toggle="modal"
+                      data-bs-target="#editWorkerModal"
+                      data-worker-id="{{ worker.id }}"
+                      data-worker-code="{{ worker.worker_id }}"
+                      data-name="{{ worker.name }}"
+                      data-phone="{{ worker.phone_number or '' }}"
+                      data-address="{{ worker.address or '' }}"
+                      data-emergency="{{ worker.emergency_contact or '' }}"
+                      data-department="{{ worker.department or '' }}"
+                      data-nrc="{{ worker.nrc_number or '' }}"
+                      data-status="{{ worker.status or 'active' }}"
+                      data-enrollment-date="{{ worker.enrollment_date.strftime('%Y-%m-%d') if worker.enrollment_date else '' }}"
+                      title="Edit worker">
+                <i class="bi bi-pencil-square"></i>
+              </button>
+
+              <button class="btn btn-sm btn-outline-primary reset-pin-btn"
+                      type="button"
+                      data-bs-toggle="modal"
+                      data-bs-target="#resetPinModal"
+                      data-worker-id="{{ worker.id }}"
+                      data-worker-name="{{ worker.name }}"
+                      data-worker-code="{{ worker.worker_id }}"
+                      title="Reset PIN">
+                <i class="bi bi-key-fill"></i>
+              </button>
+
+              <form method="POST" action="{{ url_for('toggle_worker', worker_pk=worker.id) }}" class="d-inline">
+                <button class="btn btn-sm {% if worker.is_active %}btn-outline-warning{% else %}btn-outline-success{% endif %}"
+                        type="submit"
+                        title="{% if worker.is_active %}Deactivate{% else %}Activate{% endif %}">
+                  <i class="bi {% if worker.is_active %}bi-pause-circle{% else %}bi-play-circle{% endif %}"></i>
+                </button>
+              </form>
+
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="11" class="text-center text-muted py-4">No workers onboarded yet.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="addWorkerModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form method="POST" action="{{ url_for('add_worker') }}">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-person-plus-fill me-2"></i>Add Worker</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" title="Close modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Worker ID</label>
+            <input type="text" class="form-control" value="Auto-generated" placeholder="Auto-generated" title="Worker ID is auto-generated" disabled />
+            <div class="form-text">Generated automatically as a 4-digit sequence (0001, 0002, ...).</div>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Full Name <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" name="name" placeholder="e.g. Musonda B. Worker" title="Worker full name" required />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Phone Number <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" name="phone_number" placeholder="e.g. +260971234567" title="Worker phone number" required />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Emergency Contact</label>
+              <input type="text" class="form-control" name="emergency_contact" placeholder="Name and phone" title="Emergency contact" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">NRC Number</label>
+              <input type="text" class="form-control" name="nrc_number" placeholder="e.g. 123456/78/1" title="National registration number" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Department</label>
+              <input type="text" class="form-control" name="department" placeholder="e.g. Harvesting" title="Worker department" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Enrollment Date</label>
+              <input type="date" class="form-control" name="enrollment_date" title="Enrollment date" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Status</label>
+              <select class="form-select" name="status" title="Worker status">
+                <option value="active" selected>active</option>
+                <option value="inactive">inactive</option>
+                <option value="suspended">suspended</option>
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Address</label>
+              <input type="text" class="form-control" name="address" placeholder="e.g. Plot 22, East Farm" title="Worker address" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">PIN <span class="text-danger">*</span></label>
+              <input type="password" class="form-control" name="pin" minlength="4" placeholder="Enter unique PIN" title="Worker PIN" required />
+              <div class="form-text">Must be unique across all workers.</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success">Save Worker</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="editWorkerModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form method="POST" id="editWorkerForm" action="/workers/update">
+        <input type="hidden" name="worker_pk" id="editWorkerPk" value="0">
+        <input type="hidden" name="worker_id" id="editWorkerId" value="">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Edit Worker</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" title="Close modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-2">Worker ID: <strong id="editWorkerCode">-</strong></p>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Full Name <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" name="name" id="editName" placeholder="e.g. Musonda B. Worker" title="Worker full name" required />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Phone Number <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" name="phone_number" id="editPhone" placeholder="e.g. +260971234567" title="Worker phone number" required />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Emergency Contact</label>
+              <input type="text" class="form-control" name="emergency_contact" id="editEmergency" placeholder="Name and phone" title="Emergency contact" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">NRC Number</label>
+              <input type="text" class="form-control" name="nrc_number" id="editNrc" placeholder="e.g. 123456/78/1" title="National registration number" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Department</label>
+              <input type="text" class="form-control" name="department" id="editDepartment" placeholder="e.g. Harvesting" title="Worker department" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Enrollment Date</label>
+              <input type="date" class="form-control" name="enrollment_date" id="editEnrollmentDate" title="Enrollment date" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Status</label>
+              <select class="form-select" name="status" id="editStatus" title="Worker status">
+                <option value="active">active</option>
+                <option value="inactive">inactive</option>
+                <option value="suspended">suspended</option>
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Address</label>
+              <input type="text" class="form-control" name="address" id="editAddress" placeholder="e.g. Plot 22, East Farm" title="Worker address" />
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-info text-white">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="resetPinModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" id="resetPinForm" action="/workers/reset-pin">
+        <input type="hidden" name="worker_pk" id="resetPinPk" value="0">
+        <input type="hidden" name="worker_id" id="resetPinWorkerId" value="">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-key-fill me-2"></i>Reset Worker PIN</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" title="Close modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-2">Worker: <strong id="resetPinWorkerName">-</strong></p>
+          <p class="text-muted small">ID: <span id="resetPinWorkerCode">-</span></p>
+          <div class="mb-3">
+            <label class="form-label">New PIN <span class="text-danger">*</span></label>
+            <input type="password" class="form-control" name="new_pin" minlength="4" placeholder="Enter new unique PIN" required />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Reset PIN</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.datatables.net/2.3.8/js/dataTables.min.js"></script>
+<script src="{{ url_for('static', filename='js/workers.js') }}"></script>
+{% endblock %}

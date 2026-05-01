@@ -1,0 +1,22 @@
+.stat-card {
+  border-left: 4px solid;
+}
+
+.stat-card.green {
+  border-left-color: #2e7d52;
+}
+
+.stat-card.blue {
+  border-left-color: #0d6efd;
+}
+
+.stat-card.orange {
+  border-left-color: #fd7e14;
+}
+
+.camera-feed-frame {
+  min-height: 220px;
+  object-fit: cover;
+  background: #111;
+  border-radius: 0.5rem;
+}
