@@ -72,16 +72,18 @@
                       type="button"
                       data-bs-toggle="modal"
                       data-bs-target="#editWorkerModal"
-                      data-worker-id="{{ worker.id }}"
-                      data-worker-code="{{ worker.worker_id }}"
-                      data-name="{{ worker.name }}"
-                      data-phone="{{ worker.phone_number or '' }}"
-                      data-address="{{ worker.address or '' }}"
-                      data-emergency="{{ worker.emergency_contact or '' }}"
-                      data-department="{{ worker.department or '' }}"
-                      data-nrc="{{ worker.nrc_number or '' }}"
-                      data-status="{{ worker.status or 'active' }}"
-                      data-enrollment-date="{{ worker.enrollment_date.strftime('%Y-%m-%d') if worker.enrollment_date else '' }}"
+                      data-record='{{ {
+                        "id": worker.id,
+                        "worker_id": worker.worker_id or "",
+                        "name": worker.name or "",
+                        "phone_number": worker.phone_number or "",
+                        "address": worker.address or "",
+                        "emergency_contact": worker.emergency_contact or "",
+                        "department": worker.department or "",
+                        "nrc_number": worker.nrc_number or "",
+                        "status": worker.status or "active",
+                        "enrollment_date": worker.enrollment_date.strftime("%Y-%m-%d") if worker.enrollment_date else ""
+                      } | tojson | forceescape }}'
                       title="Edit worker">
                 <i class="bi bi-pencil-square"></i>
               </button>
@@ -109,7 +111,7 @@
           </tr>
           {% else %}
           <tr>
-            <td colspan="11" class="text-center text-muted py-4">No workers onboarded yet.</td>
+            <td colspan="12" class="text-center text-muted py-4">No workers onboarded yet.</td>
           </tr>
           {% endfor %}
         </tbody>

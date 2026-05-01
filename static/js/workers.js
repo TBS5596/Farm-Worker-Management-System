@@ -18,17 +18,24 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const editBtn = e.target.closest('.edit-worker-btn');
     if (editBtn) {
-      document.getElementById('editWorkerPk').value = editBtn.dataset.workerId;
-      document.getElementById('editWorkerId').value = editBtn.dataset.workerCode;
-      document.getElementById('editWorkerCode').textContent = editBtn.dataset.workerCode;
-      document.getElementById('editName').value = editBtn.dataset.name || '';
-      document.getElementById('editPhone').value = editBtn.dataset.phone || '';
-      document.getElementById('editAddress').value = editBtn.dataset.address || '';
-      document.getElementById('editEmergency').value = editBtn.dataset.emergency || '';
-      document.getElementById('editDepartment').value = editBtn.dataset.department || '';
-      document.getElementById('editNrc').value = editBtn.dataset.nrc || '';
-      document.getElementById('editStatus').value = editBtn.dataset.status || 'active';
-      document.getElementById('editEnrollmentDate').value = editBtn.dataset.enrollmentDate || '';
+      let record = {};
+      try {
+        record = JSON.parse(editBtn.getAttribute('data-record') || '{}');
+      } catch (_) {
+        record = {};
+      }
+
+      document.getElementById('editWorkerPk').value = record.id || 0;
+      document.getElementById('editWorkerId').value = record.worker_id || '';
+      document.getElementById('editWorkerCode').textContent = record.worker_id || '-';
+      document.getElementById('editName').value = record.name || '';
+      document.getElementById('editPhone').value = record.phone_number || '';
+      document.getElementById('editAddress').value = record.address || '';
+      document.getElementById('editEmergency').value = record.emergency_contact || '';
+      document.getElementById('editDepartment').value = record.department || '';
+      document.getElementById('editNrc').value = record.nrc_number || '';
+      document.getElementById('editStatus').value = record.status || 'active';
+      document.getElementById('editEnrollmentDate').value = record.enrollment_date || '';
     }
   });
 });

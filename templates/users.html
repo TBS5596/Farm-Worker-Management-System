@@ -54,13 +54,15 @@
                       type="button"
                       data-bs-toggle="modal"
                       data-bs-target="#editUserModal"
-                      data-user-id="{{ user.id }}"
-                      data-username="{{ user.username }}"
-                      data-name="{{ user.name or '' }}"
-                      data-email="{{ user.email or '' }}"
-                      data-phone="{{ user.phone or '' }}"
-                      data-role="{{ user.role or 'supervisor' }}"
-                      data-linked-worker-id="{{ user.linked_worker_id or '' }}"
+                      data-record='{{ {
+                        "id": user.id,
+                        "username": user.username or "",
+                        "name": user.name or "",
+                        "email": user.email or "",
+                        "phone": user.phone or "",
+                        "role": user.role or "supervisor",
+                        "linked_worker_id": user.linked_worker_id if user.linked_worker_id is not none else ""
+                      } | tojson | forceescape }}'
                       title="Edit user">
                 <i class="bi bi-pencil-square"></i>
               </button>
@@ -245,14 +247,21 @@ document.addEventListener('DOMContentLoaded', function () {
   document.addEventListener('click', function (e) {
     const editBtn = e.target.closest('.edit-user-btn');
     if (editBtn) {
-      document.getElementById('editUserPk').value = editBtn.dataset.userId;
-      document.getElementById('editUserUsernameInput').value = editBtn.dataset.username;
-      document.getElementById('editUserUsername').textContent = editBtn.dataset.username;
-      document.getElementById('editUserName').value = editBtn.dataset.name || '';
-      document.getElementById('editUserEmail').value = editBtn.dataset.email || '';
-      document.getElementById('editUserPhone').value = editBtn.dataset.phone || '';
-      document.getElementById('editUserRole').value = editBtn.dataset.role || 'supervisor';
-      document.getElementById('editUserLinkedWorker').value = editBtn.dataset.linkedWorkerId || '';
+      let record = {};
+      try {
+        record = JSON.parse(editBtn.getAttribute('data-record') || '{}');
+      } catch (_) {
+        record = {};
+      }
+
+      document.getElementById('editUserPk').value = record.id || 0;
+      document.getElementById('editUserUsernameInput').value = record.username || '';
+      document.getElementById('editUserUsername').textContent = record.username || '-';
+      document.getElementById('editUserName').value = record.name || '';
+      document.getElementById('editUserEmail').value = record.email || '';
+      document.getElementById('editUserPhone').value = record.phone || '';
+      document.getElementById('editUserRole').value = record.role || 'supervisor';
+      document.getElementById('editUserLinkedWorker').value = record.linked_worker_id || '';
     }
 
     const resetBtn = e.target.closest('.reset-password-btn');
