@@ -3,6 +3,7 @@ import sys
 import cv2
 import json
 import time
+import numpy as np
 import hashlib
 import secrets
 import string
@@ -393,6 +394,19 @@ def _build_attendance_sessions(rows: list[Attendance]) -> list:
 
 def _open_camera(source):
     """Open a VideoCapture using the best backend for the current platform."""
+    if sys.platform.startswith("linux") and isinstance(source, int):
+        # On Linux, avoid FFMPEG fallback for integer device indexes because
+        # hosts without /dev/video* emit noisy "index out of range" errors.
+        device_path = f"/dev/video{source}"
+        if not os.path.exists(device_path):
+            return cv2.VideoCapture()
+
+        cap = cv2.VideoCapture(source, cv2.CAP_V4L2)
+        if not cap.isOpened():
+            cap.release()
+            return cv2.VideoCapture()
+        return cap
+
     if sys.platform == "darwin":
         backend = cv2.CAP_AVFOUNDATION
     elif sys.platform == "win32":
@@ -494,6 +508,44 @@ def _draw_motion_regions(frame, boxes: list[tuple]) -> None:
         )
 
 
+def _build_camera_unavailable_frame(message: str):
+    """Create a readable fallback frame when a camera cannot be opened."""
+    frame = np.zeros((420, 760, 3), dtype=np.uint8)
+    frame[:, :] = (22, 28, 36)
+
+    cv2.putText(
+        frame,
+        "Camera Stream Unavailable",
+        (36, 120),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.95,
+        (245, 245, 245),
+        2,
+        cv2.LINE_AA,
+    )
+    cv2.putText(
+        frame,
+        message,
+        (36, 170),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.62,
+        (180, 210, 255),
+        2,
+        cv2.LINE_AA,
+    )
+    cv2.putText(
+        frame,
+        "Tip: attach a webcam or set a valid RTSP/USB camera source in CCTV settings.",
+        (36, 220),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.5,
+        (180, 180, 180),
+        1,
+        cv2.LINE_AA,
+    )
+    return frame
+
+
 def _camera_frame_generator(source, fallback_source, overlay_faces: bool = False, overlay_motion: bool = False):
     """Yield clean MJPEG frames from a camera source with built-in fallback."""
     cap = _open_camera(source)
@@ -502,7 +554,16 @@ def _camera_frame_generator(source, fallback_source, overlay_faces: bool = False
         cap = _open_camera(fallback_source)
         if not cap.isOpened():
             cap.release()
-            return
+            while True:
+                frame = _build_camera_unavailable_frame("No camera device detected on this host")
+                ok, buffer = cv2.imencode(".jpg", frame)
+                if ok:
+                    frame_bytes = buffer.tobytes()
+                    yield (
+                        b"--frame\r\n"
+                        b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
+                    )
+                time.sleep(1.0)
 
     # Warm up: discard the first few frames so the sensor stabilises
     for _ in range(3):
