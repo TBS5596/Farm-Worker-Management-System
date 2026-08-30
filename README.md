@@ -78,6 +78,10 @@ to set a real password before anything else opens.
 > service, backups and per-platform troubleshooting. Read that instead of this
 > section if you are setting up a machine for the first time.
 
+> **New to the codebase?** The developer wiki in **[wiki/](wiki/README.md)**
+> explains how everything works, with diagrams — start at
+> [01 — Start Here](wiki/01-start-here.md).
+
 > **Install from `requirements.txt`, not by hand.** Two pins in it are load
 > bearing. OpenCV must be the **contrib** build, because the LBPH recognizer
 > lives in `cv2.face` and ships only there. And it must stay **below 5.0**:
@@ -406,6 +410,7 @@ the daily summaries from the Attendance page if sessions were imported directly.
 
 | Document | What it covers |
 | --- | --- |
+| **[wiki/](wiki/README.md)** | **The developer manual.** How the code works, with diagrams: a guided tour plus a page per module |
 | [INSTALL.md](INSTALL.md) | Installing on Windows, Linux, macOS and Docker; services, backups, troubleshooting |
 | `/manual` (in the app) | Operator manual, reachable from the sidebar while signed in |
 | [manual.md](manual.md) | The same operator manual as a file, for printing |
