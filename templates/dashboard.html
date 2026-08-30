@@ -1,5 +1,25 @@
 {% extends 'base_admin.html' %}
 
+{# ===========================================================================
+   dashboard.html - the landing page after signing in.
+
+   Reads top to bottom as "is the system healthy, and what happened today":
+
+     1. Four stat cards      workers, faces enrolled, today's sessions,
+                             share of identity checks accepted
+     2. Control Center       one-click routes to the pages used daily
+     3. Attendance trend     14 days of presence, verification and hours,
+                             drawn by static/js/dashboard-page.js
+     4. System Readiness     recognizer, detection models, geofence, cloud,
+                             queued uploads - the things that silently stop
+                             working on a remote farm
+     5. Live camera feeds    every active camera, attendance camera first
+
+   Context from the dashboard route: workers, active_workers_count, sessions,
+   today_count, camera_sources, enrolled_count, verification, engine,
+   sync_stats, open_sessions, geofence_ready, geofence_enforced, trend.
+   =========================================================================== #}
+
 {% block title %}{{ org_name }} - Dashboard{% endblock %}
 
 {% block extra_css %}
@@ -7,27 +27,45 @@
 {% endblock %}
 
 {% block content %}
+{# --- 1. Stat cards: the four numbers worth seeing first ---------------- #}
 <div class="row g-3 mb-4">
-  <div class="col-md-4">
+  <div class="col-6 col-md-3">
     <div class="card stat-card green p-3">
       <div class="text-muted small">Total Workers</div>
       <div class="fs-2 fw-bold text-success">{{ workers | length }}</div>
+      <div class="small text-muted">{{ active_workers_count }} active</div>
     </div>
   </div>
-  <div class="col-md-4">
-    <div class="card stat-card blue p-3">
-      <div class="text-muted small">Active Workers</div>
-      <div class="fs-2 fw-bold text-primary">{{ active_workers_count }}</div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card teal p-3">
+      <div class="text-muted small">Faces Enrolled</div>
+      <div class="fs-2 fw-bold text-teal">{{ enrolled_count }}</div>
+      <div class="small text-muted">
+        {% if active_workers_count and enrolled_count < active_workers_count %}
+          {{ active_workers_count - enrolled_count }} still to enrol
+        {% else %}
+          all active workers ready
+        {% endif %}
+      </div>
     </div>
   </div>
-  <div class="col-md-4">
+  <div class="col-6 col-md-3">
     <div class="card stat-card orange p-3">
       <div class="text-muted small">Today's Sessions</div>
       <div class="fs-2 fw-bold text-warning">{{ today_count }}</div>
+      <div class="small text-muted">{{ open_sessions }} still clocked in</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card blue p-3">
+      <div class="text-muted small">Identity Checks Accepted</div>
+      <div class="fs-2 fw-bold text-primary">{{ verification.acceptance_rate }}%</div>
+      <div class="small text-muted">{{ verification.accepted }} of {{ verification.attempts }} attempts</div>
     </div>
   </div>
 </div>
 
+{# --- 2. Control Center: shortcuts to the pages used every day --------- #}
 <section class="control-center card shadow-sm mb-4">
   <div class="card-body p-4">
     <div class="row g-4 align-items-start">
@@ -40,6 +78,7 @@
           <span class="badge text-bg-light border"><i class="bi bi-people-fill me-1 text-success"></i>{{ workers|length }} workers</span>
           <span class="badge text-bg-light border"><i class="bi bi-journal-check me-1 text-primary"></i>{{ today_count }} sessions today</span>
           <span class="badge text-bg-light border"><i class="bi bi-camera-video-fill me-1 text-danger"></i>{{ camera_sources|length }} camera source(s)</span>
+          <span class="badge text-bg-light border"><i class="bi bi-person-check-fill me-1 text-success"></i>{{ enrolled_count }} enrolled</span>
         </div>
       </div>
       <div class="col-lg-8">
@@ -55,18 +94,18 @@
             </a>
           </div>
           <div class="col-6 col-md-4">
+            <a class="btn quick-action-btn quick-action-biometric w-100" href="{{ url_for('biometric_page') }}">
+              <i class="bi bi-person-badge me-1"></i>Enrol Faces
+            </a>
+          </div>
+          <div class="col-6 col-md-4">
+            <a class="btn quick-action-btn quick-action-payroll w-100" href="{{ url_for('payroll_page') }}">
+              <i class="bi bi-cash-stack me-1"></i>Payroll
+            </a>
+          </div>
+          <div class="col-6 col-md-4">
             <a class="btn quick-action-btn quick-action-cctv w-100" href="{{ url_for('cctv_page') }}">
               <i class="bi bi-camera-video-fill me-1"></i>CCTV
-            </a>
-          </div>
-          <div class="col-6 col-md-4">
-            <a class="btn quick-action-btn quick-action-users w-100" href="{{ url_for('users_page') }}">
-              <i class="bi bi-person-badge-fill me-1"></i>Users
-            </a>
-          </div>
-          <div class="col-6 col-md-4">
-            <a class="btn quick-action-btn quick-action-settings w-100" href="{{ url_for('settings') }}">
-              <i class="bi bi-gear-fill me-1"></i>Settings
             </a>
           </div>
           <div class="col-6 col-md-4">
@@ -80,6 +119,93 @@
   </div>
 </section>
 
+<div class="row g-3 mb-4">
+  <div class="col-lg-8">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span class="fw-semibold"><i class="bi bi-graph-up-arrow me-2 text-success"></i>Attendance Trend (last 14 days)</span>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('export_csv', export_key='daily-summary') }}" title="Download daily summary as CSV">
+          <i class="bi bi-download me-1"></i>CSV
+        </a>
+      </div>
+      <div class="card-body">
+        <div class="chart-shell">
+        {# The four series are handed to Chart.js as JSON data attributes,
+           so the chart needs no fetch and draws on first paint. #}
+        <canvas id="attendanceTrendChart"
+                data-labels='{{ trend.labels | tojson }}'
+                data-workers='{{ trend.workers | tojson }}'
+                data-verified='{{ trend.verified | tojson }}'
+                data-hours='{{ trend.hours | tojson }}'></canvas>
+        </div>
+        <p class="small text-muted mb-0 mt-3">
+          Built from the daily attendance summary table. If a day looks empty, rebuild the
+          summaries from the Attendance page.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card shadow-sm h-100">
+      {# --- 4. System Readiness -------------------------------------------
+           The things that fail quietly on a remote farm: a missing recognizer,
+           an unset geofence, uploads piling up because the link is down. #}
+      <div class="card-header bg-white fw-semibold">
+        <i class="bi bi-shield-check me-2 text-success"></i>System Readiness
+      </div>
+      <ul class="list-group list-group-flush readiness-list">
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <span>Face recognizer</span>
+          {% if engine.contrib_available %}
+            <span class="badge bg-success">LBPH ready</span>
+          {% else %}
+            <span class="badge bg-warning text-dark">Fallback matcher</span>
+          {% endif %}
+        </li>
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <span>Face detection models</span>
+          {% if engine.cascades_loaded %}
+            <span class="badge bg-success">Loaded</span>
+          {% else %}
+            <span class="badge bg-danger">Missing</span>
+          {% endif %}
+        </li>
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <span>Geofence</span>
+          {% if geofence_enforced %}
+            <span class="badge bg-success">Enforced</span>
+          {% elif geofence_ready %}
+            <span class="badge bg-info text-dark">Recording only</span>
+          {% else %}
+            <span class="badge bg-secondary">Not set</span>
+          {% endif %}
+        </li>
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <span>Cloud sync</span>
+          {% if sync_stats.configured %}
+            <span class="badge bg-success">Configured</span>
+          {% else %}
+            <span class="badge bg-secondary">Local only</span>
+          {% endif %}
+        </li>
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <span>Queued uploads</span>
+          <span class="badge {% if sync_stats.pending %}bg-warning text-dark{% else %}bg-light text-dark border{% endif %}">
+            {{ sync_stats.pending }}
+          </span>
+        </li>
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <span>Average match score</span>
+          <span class="badge bg-light text-dark border">{{ verification.avg_match_score }}%</span>
+        </li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+{# --- 5. Live camera feeds. loop.index0 is the stream index the route
+       expects, and the first source is always the attendance camera. #}
 <section id="camera-feeds-section" class="mb-5">
   <h5 class="mb-3"><i class="bi bi-camera-video-fill me-2 text-danger"></i>Live Camera Feeds</h5>
   <div class="row g-3">
@@ -88,7 +214,10 @@
       <div class="card shadow-sm">
         <div class="card-header d-flex justify-content-between align-items-center">
           <span class="fw-semibold">{{ camera.name }}</span>
-          <span class="badge bg-dark text-uppercase">{{ camera.type }}</span>
+          <span>
+            {% if loop.first %}<span class="badge bg-success me-1">Attendance camera</span>{% endif %}
+            <span class="badge bg-dark text-uppercase">{{ camera.type }}</span>
+          </span>
         </div>
         <div class="card-body p-2">
           <img src="{{ url_for('camera_stream', camera_idx=loop.index0) }}" class="img-fluid w-100 camera-feed-frame" alt="{{ camera.name }} live feed" />
@@ -102,4 +231,9 @@
     {% endfor %}
   </div>
 </section>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/dashboard-page.js') }}"></script>
 {% endblock %}

@@ -1,5 +1,39 @@
-Flask>=3.0.0
-Flask-SQLAlchemy>=3.1.1
-opencv-python>=4.9.0
-Werkzeug>=3.0.0
-geopy>=2.4.1
+# Farm Worker Management System - runtime dependencies
+#
+#   pip install -r requirements.txt
+#
+# Test-only extras live in requirements-dev.txt. Installation instructions for
+# Windows, Linux, macOS and Docker are in INSTALL.md.
+
+# --- Web application ------------------------------------------------------
+Flask>=3.0.0,<4.0
+Flask-SQLAlchemy>=3.1.1,<4.0
+Werkzeug>=3.0.0,<4.0
+
+# --- Computer vision ------------------------------------------------------
+# Two constraints on this line, and both matter.
+#
+# 1. It must be opencv-CONTRIB-python, never plain opencv-python. The LBPH
+#    recognizer used for identity verification lives in cv2.face, which ships
+#    only in the contrib build. Both packages install a module called cv2, so
+#    if the plain build is present as well it can shadow the contrib build:
+#    the import still succeeds, cv2.face is simply absent, and verification
+#    silently falls back to a much weaker correlation match. If in doubt:
+#        pip uninstall -y opencv-python opencv-python-headless
+#
+# 2. It must stay below 5.0. OpenCV 5 removed the Haar cascade XML files that
+#    used to ship inside the wheel, and face_engine.py loads its face and eye
+#    detectors from cv2.data.haarcascades. On OpenCV 5 that directory is empty,
+#    both cascades fail to load, and no face is ever detected. cv2.face itself
+#    still exists in 5.x - it is the detector, not the recognizer, that breaks.
+opencv-contrib-python>=4.10.0,<5.0
+numpy>=1.26.0,<3.0
+
+# --- Geofencing -----------------------------------------------------------
+geopy>=2.4.1,<3.0
+
+# --- Optional: cloud snapshot upload --------------------------------------
+# The application runs and records attendance without this. When the package
+# or the Firebase configuration is absent, snapshots are queued locally and
+# retried later, so nothing on the attendance path depends on it.
+firebase-admin>=6.5.0

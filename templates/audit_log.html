@@ -1,5 +1,22 @@
 {% extends 'base_admin.html' %}
 
+{# ===========================================================================
+   audit_log.html - the audit trail: who did what, when, from where.
+
+   Every mutation is recorded, including refused clock-ins. Searching the
+   action column is the main use:
+     "attendance.rejected"  every refused punch and its reason
+     "biometric.enroll"     who enrolled whom
+     "payroll.generate"     who ran payroll for which week
+     "login"                sign-ins, with the IP address
+
+   Read-only by design - there is no delete, because an audit trail that can be
+   edited proves nothing. Export it as CSV from the Attendance and Payroll
+   pages' sibling exports (/export/audit-log.csv).
+
+   Context: logs (the most recent 500 entries).
+   =========================================================================== #}
+
 {% block title %}{{ org_name }} - Audit Log{% endblock %}
 
 {% block extra_css %}

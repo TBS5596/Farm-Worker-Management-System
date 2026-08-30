@@ -1,5 +1,26 @@
 {% extends 'base_admin.html' %}
 
+{# ===========================================================================
+   attendance.html - every clock-in and clock-out session.
+
+   The three columns that make a row trustworthy:
+     Identity  a green badge with the match score means the face matched the
+               enrolled template, e.g. "74%". Grey "Unverified" means the
+               session was recorded without a match, which only happens if
+               face verification was switched off in Settings.
+     Location  "On site", or the distance when the worker was outside the
+               clock-in radius, e.g. "1218 m away".
+     Clip      the short video recorded around that punch.
+
+   Photos open full size in #photoModal (static/js/attendance.js).
+
+   "Rebuild Daily Summaries" recalculates hours, overtime and lateness for the
+   last 30 days - needed if sessions were imported or edited directly, since
+   payroll reads the summaries rather than the raw sessions.
+
+   Context: sessions (built by app._build_attendance_sessions), attendance_stats.
+   =========================================================================== #}
+
 {% block title %}{{ org_name }} - Attendance{% endblock %}
 
 {% block extra_css %}
@@ -9,6 +30,7 @@
 {% endblock %}
 
 {% block content %}
+{# --- Summary counters across the loaded sessions --------------------- #}
 <div class="row g-3 mb-3">
   <div class="col-6 col-md-2">
     <div class="card shadow-sm p-2">
@@ -28,21 +50,46 @@
       <div class="fs-5 fw-bold text-success">{{ attendance_stats.complete }}</div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-2">
     <div class="card shadow-sm p-2">
       <div class="small text-muted">In Progress</div>
       <div class="fs-5 fw-bold text-warning">{{ attendance_stats.in_progress }}</div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-2">
     <div class="card shadow-sm p-2">
       <div class="small text-muted">Out Only</div>
       <div class="fs-5 fw-bold text-secondary">{{ attendance_stats.out_only }}</div>
     </div>
   </div>
+  <div class="col-6 col-md-2">
+    <div class="card shadow-sm p-2">
+      <div class="small text-muted">Face Verified</div>
+      <div class="fs-5 fw-bold text-success">{{ attendance_stats.verified_rate }}%</div>
+    </div>
+  </div>
 </div>
 
-<h5 class="mb-3"><i class="bi bi-journal-text me-2 text-primary"></i>Attendance Records</h5>
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+  <h5 class="mb-0"><i class="bi bi-journal-text me-2 text-primary"></i>Attendance Records</h5>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('export_csv', export_key='attendance') }}" title="Download attendance as CSV">
+      <i class="bi bi-download me-1"></i>Export CSV
+    </a>
+    {% if can('attendance.manage') %}
+    <form method="POST" action="{{ url_for('refresh_summaries') }}" class="d-inline">
+      <button class="btn btn-outline-success btn-sm" type="submit"
+              title="Recalculate hours, lateness and overtime for the last 30 days">
+        <i class="bi bi-arrow-repeat me-1"></i>Rebuild Daily Summaries
+      </button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{# --- Session table. data-order attributes give the date, time and hours
+     columns a sortable value, so 07:00 sorts before 15:00 and 9.50 before
+     10.00 - alphabetical sorting would get both wrong. #}
 <div class="card shadow-sm">
   <div class="card-body">
     <div class="table-responsive">
@@ -56,6 +103,10 @@
           <th>In Photo</th>
           <th>Clock Out</th>
           <th>Out Photo</th>
+          <th>Hours</th>
+          <th>Identity</th>
+          <th>Location</th>
+          <th>Clip</th>
           <th>Status</th>
         </tr>
       </thead>
@@ -64,31 +115,63 @@
         <tr>
           <td><span class="badge bg-secondary">{{ s.worker_id }}</span></td>
           <td>{{ s.worker_name }}</td>
-          <td data-order="{{ s._sort_key.strftime('%Y%m%d') }}">{{ s.date }}</td>
-          <td data-order="{{ s.clock_in_time or '00:00:00' }}">{{ s.clock_in_time or '—' }}</td>
+          <td data-order="{{ s._sort_key.strftime('%Y%m%d') if s._sort_key else 0 }}">{{ s.date }}</td>
+          <td data-order="{{ s.clock_in_time or '00:00:00' }}">{{ s.clock_in_time or '-' }}</td>
           <td class="text-center">
             {% if s.clock_in_image %}
               {% if s.clock_in_image.startswith('http') %}
-                <img src="{{ s.clock_in_image }}" class="capture-thumb" alt="Clock-in" data-bs-toggle="modal" data-bs-target="#photoModal" data-src="{{ s.clock_in_image }}" data-label="{{ s.worker_name }} - Clock In {{ s.date }}" />
+                {% set in_src = s.clock_in_image %}
               {% else %}
-                {% set in_file = s.clock_in_image.replace('captures/', '').replace('captures\\', '') %}
-                <img src="{{ url_for('captured_image', filename=in_file) }}" class="capture-thumb" alt="Clock-in" data-bs-toggle="modal" data-bs-target="#photoModal" data-src="{{ url_for('captured_image', filename=in_file) }}" data-label="{{ s.worker_name }} - Clock In {{ s.date }}" />
+                {% set in_src = url_for('captured_image', filename=s.clock_in_image.replace('captures/', '').replace('captures\\', '')) %}
               {% endif %}
+              <img src="{{ in_src }}" class="capture-thumb" alt="Clock-in" data-bs-toggle="modal" data-bs-target="#photoModal" data-src="{{ in_src }}" data-label="{{ s.worker_name }} - Clock In {{ s.date }}" />
             {% else %}
-              <span class="text-muted small">—</span>
+              <span class="text-muted small">-</span>
             {% endif %}
           </td>
-          <td data-order="{{ s.clock_out_time or '99:99:99' }}">{{ s.clock_out_time or '—' }}</td>
+          <td data-order="{{ s.clock_out_time or '99:99:99' }}">{{ s.clock_out_time or '-' }}</td>
           <td class="text-center">
             {% if s.clock_out_image %}
               {% if s.clock_out_image.startswith('http') %}
-                <img src="{{ s.clock_out_image }}" class="capture-thumb" alt="Clock-out" data-bs-toggle="modal" data-bs-target="#photoModal" data-src="{{ s.clock_out_image }}" data-label="{{ s.worker_name }} - Clock Out {{ s.date }}" />
+                {% set out_src = s.clock_out_image %}
               {% else %}
-                {% set out_file = s.clock_out_image.replace('captures/', '').replace('captures\\', '') %}
-                <img src="{{ url_for('captured_image', filename=out_file) }}" class="capture-thumb" alt="Clock-out" data-bs-toggle="modal" data-bs-target="#photoModal" data-src="{{ url_for('captured_image', filename=out_file) }}" data-label="{{ s.worker_name }} - Clock Out {{ s.date }}" />
+                {% set out_src = url_for('captured_image', filename=s.clock_out_image.replace('captures/', '').replace('captures\\', '')) %}
               {% endif %}
+              <img src="{{ out_src }}" class="capture-thumb" alt="Clock-out" data-bs-toggle="modal" data-bs-target="#photoModal" data-src="{{ out_src }}" data-label="{{ s.worker_name }} - Clock Out {{ s.date }}" />
             {% else %}
-              <span class="text-muted small">—</span>
+              <span class="text-muted small">-</span>
+            {% endif %}
+          </td>
+          <td>{{ '%.2f'|format(s.hours) if s.hours is not none else '-' }}</td>
+          <td>
+            {% if s.verified_by_face %}
+              <span class="badge bg-success" title="Face matched the enrolled template">
+                <i class="bi bi-person-check-fill me-1"></i>{{ '%.0f'|format(s.match_score or 0) }}%
+              </span>
+            {% else %}
+              <span class="badge bg-secondary" title="Recorded without a face match">Unverified</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if s.within_geofence is none %}
+              <span class="text-muted small">-</span>
+            {% elif s.within_geofence %}
+              <span class="badge bg-success" title="{{ '%.0f'|format(s.distance_m or 0) }} m from farm centre">On site</span>
+            {% else %}
+              <span class="badge bg-danger" title="{{ '%.0f'|format(s.distance_m or 0) }} m from farm centre">
+                {{ '%.0f'|format(s.distance_m or 0) }} m away
+              </span>
+            {% endif %}
+          </td>
+          <td class="text-center">
+            {% if s.clip_path %}
+              <a class="btn btn-sm btn-outline-danger"
+                 href="{{ url_for('captured_image', filename=s.clip_path.replace('captures/', '')) }}"
+                 target="_blank" rel="noopener" title="Open the recorded clip">
+                <i class="bi bi-play-btn"></i>
+              </a>
+            {% else %}
+              <span class="text-muted small">-</span>
             {% endif %}
           </td>
           <td>
@@ -102,7 +185,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="8" class="text-center text-muted py-4">No attendance records yet.</td></tr>
+        <tr><td colspan="12" class="text-center text-muted py-4">No attendance records yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -110,6 +193,7 @@
   </div>
 </div>
 
+{# --- Full-size snapshot viewer, populated by static/js/attendance.js #}
 <div class="modal fade" id="photoModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">

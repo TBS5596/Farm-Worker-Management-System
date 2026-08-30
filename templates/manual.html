@@ -1,5 +1,16 @@
 {% extends 'base_admin.html' %}
 
+{# ===========================================================================
+   manual.html - the in-app operator manual at /manual.
+
+   Deliberately public (no login required): it is linked from the worker
+   clock-in page, so somebody standing at the gate terminal with a problem can
+   read the troubleshooting table without an account.
+
+   Mirrors manual.md at the project root. If you change one, change the other - the flowcharts
+   and the message table in particular are the parts people actually use.
+   =========================================================================== #}
+
 {% block title %}{{ org_name }} - Manual{% endblock %}
 
 {% block extra_css %}
@@ -9,137 +20,280 @@
 {% block content %}
 <div class="manual-shell">
   <h3 class="mb-3"><i class="bi bi-book-half me-2 text-success"></i>System Manual</h3>
-  <p class="text-muted">Use this manual for day-to-day operations, onboarding, attendance verification, and troubleshooting.</p>
+  <p class="text-muted">
+    Day-to-day operations: enrolling workers, verified clock-in, attendance, payroll,
+    cameras and troubleshooting.
+  </p>
 
-  <h5 class="section-title">1) Quick Start Checklist</h5>
-  <ul>
-    <li>Sign in as admin from the login page.</li>
-    <li>Open <strong>Workers</strong> and create at least one active worker with a unique PIN.</li>
-    <li>Open <strong>CCTV</strong> and confirm your camera source is available.</li>
-    <li>Test a worker <strong>Clock In</strong> and verify it appears in <strong>Attendance</strong>.</li>
-  </ul>
+  <div class="example-box mb-4">
+    <p class="mb-1"><strong>The one thing to understand first</strong></p>
+    <p class="mb-0">
+      A PIN on its own does not record attendance. When a worker clocks in, the camera
+      compares the face in front of it with the face samples enrolled for that Worker ID.
+      No match, no record. That is why <strong>enrolment is the setup step that matters
+      most</strong> - a worker with no enrolled samples cannot clock in at all.
+    </p>
+  </div>
 
-  <h5 class="section-title">2) Worker Onboarding (Example)</h5>
+  <h5 class="section-title">1) Setup Checklist, In Order</h5>
+  <ol>
+    <li>Sign in as <code>admin</code> / <code>admin</code> and set a real password when asked.</li>
+    <li><strong>Settings</strong> - organisation name, farm coordinates, geofence radius,
+        hourly rate, NAPSA and NHIMA rates, shift times.</li>
+    <li><strong>CCTV</strong> - add the clock-in camera, press <em>Test</em>, then the
+        <i class="bi bi-star"></i> button to make it the attendance camera.</li>
+    <li><strong>Workers</strong> - add each worker with an hourly rate and a unique PIN.</li>
+    <li><strong>Biometric</strong> - enrol at least three face samples per worker.</li>
+    <li>Have a worker clock in from the home page and check <strong>Attendance</strong>.</li>
+    <li><strong>Payroll</strong> - pick a week ending date and generate.</li>
+  </ol>
+
+  <h5 class="section-title">2) Worker Onboarding</h5>
   <div class="example-box">
-    <p class="mb-2"><strong>Example:</strong> Add a new worker named "Moses Banda".</p>
+    <p class="mb-2"><strong>Example:</strong> add a new worker named "Moses Banda".</p>
     <ol class="mb-0">
       <li>Go to <strong>Workers</strong> and click <strong>Add Worker</strong>.</li>
-      <li>Enter name, phone, NRC, department, and set status to <strong>active</strong>.</li>
+      <li>Enter name, phone, NRC, department and hourly rate; set status to <strong>active</strong>.</li>
       <li>Create a unique PIN (at least 4 digits).</li>
-      <li>Click <strong>Save Worker</strong>. A 4-digit worker ID is generated automatically.</li>
+      <li>Click <strong>Save Worker</strong>. A 4-digit Worker ID is generated automatically.</li>
+      <li>Go to <strong>Biometric</strong> and enrol his face before his first shift.</li>
     </ol>
   </div>
 
-  <h6 class="flow-title">Flowchart: Worker Onboarding</h6>
+  <h6 class="flow-title">Flowchart: Onboarding</h6>
   <pre class="flowchart-block">[Open Workers Page]
         |
         v
 [Click Add Worker]
         |
         v
-[Fill Profile + Unique PIN]
+[Fill Profile + Hourly Rate + Unique PIN]
         |
         v
-[Save Worker]
+[Save] --> [Worker ID Generated]
         |
         v
-[Generated Worker ID + Ready for Attendance]</pre>
+[Biometric Page: enrol 3-5 face samples]
+        |
+        v
+[Worker can now clock in]</pre>
 
-  <h5 class="section-title">3) Attendance Capture (Clock In / Clock Out)</h5>
-  <div class="example-box">
-    <p class="mb-2"><strong>Example:</strong> Worker "0001" clocks in at start of shift.</p>
-    <ol class="mb-0">
-      <li>On the login page, choose <strong>Worker Clock-In</strong>.</li>
-      <li>Enter Worker ID and PIN, then choose <strong>Clock In</strong>.</li>
-      <li>System validates credentials, checks face/eyes from camera, then captures photo.</li>
-      <li>Record is written to Attendance and visible in the Attendance page.</li>
-    </ol>
-  </div>
-
-  <h6 class="flow-title">Flowchart: Worker Clock In</h6>
-  <pre class="flowchart-block">[Worker Enters ID + PIN]
-          |
-          v
-[Validate Credentials]
-     |              \\
-   pass             fail
-     |                \\
-     v                 [Show Error]
-[Face/Eye Verification]
-     |              \\
-   pass             fail
-     |                \\
-     v                 [Retry Prompt]
-[Capture Clean Snapshot]
-          |
-          v
-[Create Attendance IN + EventSnapshot]</pre>
-
-  <h6 class="flow-title">Flowchart: Worker Clock Out</h6>
-  <pre class="flowchart-block">[Worker Selects Clock Out]
-          |
-          v
-[Find Open Check-In Session]
-     |              \\
-   found            not found
-     |                \\
-     v                 [Show "Clock in first"]
-[Capture Snapshot]
-          |
-          v
-[Set Check-Out Time + Save]</pre>
-
-  <h5 class="section-title">4) Edit and Reset Operations (Example)</h5>
-  <div class="example-box">
-    <p class="mb-2"><strong>Example:</strong> Update a worker phone number and reset PIN.</p>
-    <ol class="mb-0">
-      <li>In <strong>Workers</strong>, click the <strong>Edit</strong> icon on the worker row.</li>
-      <li>Modal opens with current data pre-filled.</li>
-      <li>Update values and click <strong>Save Changes</strong>.</li>
-      <li>To reset PIN, click the key icon and submit a new unique PIN.</li>
-    </ol>
-  </div>
-
-  <h6 class="flow-title">Flowchart: Edit Modal Operation</h6>
-  <pre class="flowchart-block">[Click Edit Button]
-       |
-       v
-[Read data-record JSON]
-       |
-       v
-[Populate Modal Fields]
-       |
-       v
-[Set Form Action to /entity/{id}/update]
-       |
-       v
-[Submit Update]</pre>
-
-  <h5 class="section-title">5) CCTV and Device Operations</h5>
+  <h5 class="section-title">3) Face Enrolment</h5>
+  <p>
+    On the <strong>Biometric</strong> page each worker has a row showing how many samples
+    are stored. Ask the worker to stand square to the camera in even light, with no hat
+    or sunglasses, then press the green camera button on their row. Repeat three to five
+    times with small changes of angle and expression.
+  </p>
   <ul>
-    <li><strong>CCTV:</strong> Manage camera index, camera sources JSON, and feed records.</li>
-    <li><strong>Biometric:</strong> Register devices and maintain device status/location.</li>
-    <li><strong>Payroll:</strong> Create weekly payroll rows and track payment status.</li>
-    <li><strong>Cloud Sync:</strong> Configure cloud keys and monitor sync queues.</li>
+    <li><span class="badge bg-success">3 / 8</span> green - enrolled and reliable.</li>
+    <li><span class="badge bg-warning text-dark">1 / 8</span> amber - enrolled but too few
+        samples; matching will be unreliable.</li>
+    <li><span class="badge bg-danger">Not enrolled</span> - cannot clock in.</li>
+  </ul>
+  <p class="mb-0">
+    No camera to hand? Use the <i class="bi bi-upload"></i> button to enrol from clear
+    front-facing photographs instead. The <i class="bi bi-trash"></i> button deletes all
+    samples for that worker so you can start again.
+  </p>
+
+  <h5 class="section-title">4) Verified Clock In and Out</h5>
+  <p>
+    Workers use the home page - they never sign in to the dashboard. They enter their
+    Worker ID and PIN, choose Clock In or Clock Out, and look at the camera.
+  </p>
+
+  <h6 class="flow-title">Flowchart: Clock In</h6>
+  <pre class="flowchart-block">[Worker ID + PIN]
+       |
+       v
+[Credentials checked] --fail--> [Error, nothing recorded]
+       |
+       v
+[Camera opened once, several frames grabbed]
+       |
+       v
+[Face matched against this worker's samples]
+       |            \
+     match          no match / wrong worker
+       |                     \
+       v                      [Refused + logged in biometric_transactions]
+[Location checked] --outside, if enforced--> [Refused]
+       |
+       v
+[Snapshot saved] -> [Attendance row] -> [Event clip] -> [Daily summary updated]</pre>
+
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered align-middle">
+      <thead class="table-light">
+        <tr><th>Message the worker sees</th><th>What it means</th><th>What to do</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Welcome ... recorded at 07:12 (face match 74%)</td>
+          <td>Verified and recorded</td>
+          <td>Nothing</td>
+        </tr>
+        <tr>
+          <td>Your face did not match the enrolled record</td>
+          <td>The face and the Worker ID disagree</td>
+          <td>Check they typed their own ID; add samples if a genuine worker keeps failing</td>
+        </tr>
+        <tr>
+          <td>The face at the camera belongs to a different worker</td>
+          <td>Somebody is punching for somebody else</td>
+          <td>Each worker must clock in personally</td>
+        </tr>
+        <tr>
+          <td>Your face is not enrolled yet</td>
+          <td>No samples stored</td>
+          <td>Enrol them on the Biometric page</td>
+        </tr>
+        <tr>
+          <td>No face was detected / eyes not clearly visible</td>
+          <td>Too far, too dark, or obscured</td>
+          <td>Move closer, improve the light, remove hat or sunglasses</td>
+        </tr>
+        <tr>
+          <td>You are already clocked in</td>
+          <td>An open session exists</td>
+          <td>Clock out first</td>
+        </tr>
+        <tr>
+          <td>No open check-in found</td>
+          <td>Clock-out with no clock-in</td>
+          <td>Clock in first</td>
+        </tr>
+        <tr>
+          <td>You are ... m from the farm</td>
+          <td>Outside the clock-in radius, with enforcement on</td>
+          <td>Punch on site</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h5 class="section-title">5) Attendance Records</h5>
+  <ul>
+    <li><strong>Identity</strong> - a green badge with the match score means the face
+        matched the enrolled template.</li>
+    <li><strong>Location</strong> - "On site", or the distance if outside the radius.</li>
+    <li><strong>Clip</strong> - opens the short video recorded at that punch.</li>
+    <li><strong>Rebuild Daily Summaries</strong> - recalculates hours, overtime and
+        lateness for the last 30 days.</li>
+    <li><strong>Export CSV</strong> - the whole table for a spreadsheet or report.</li>
   </ul>
 
-  <h5 class="section-title">6) Troubleshooting Guide</h5>
+  <h5 class="section-title">6) Payroll</h5>
   <div class="example-box">
-    <p class="mb-2"><strong>Problem:</strong> Live feed is blank</p>
-    <ul class="mb-0">
-      <li>Confirm camera is not in use by another app.</li>
-      <li>Check CCTV camera source configuration.</li>
-      <li>Restart app and retest built-in camera fallback.</li>
-    </ul>
+    <p class="mb-2"><strong>Example:</strong> pay the week ending Sunday 23 August.</p>
+    <ol class="mb-0">
+      <li>Go to <strong>Payroll</strong> and set <strong>Week Ending</strong> to that Sunday.</li>
+      <li>Click <strong>Generate Payroll</strong>.</li>
+      <li>Check the rows, then export the CSV as the payment list.</li>
+      <li>After paying, edit each row and set status to <em>paid</em> with the payment date.</li>
+    </ol>
+  </div>
+  <p class="mt-3">
+    Hours come from the recorded sessions; gross pay, NAPSA, NHIMA and net pay are
+    calculated from the worker's rate. Weeks already marked paid are never overwritten,
+    so re-running is safe. A hand-entered correction still has its pay calculated - you
+    enter hours and a rate, never an amount.
+  </p>
+
+  <h6 class="flow-title">Flowchart: Payroll</h6>
+  <pre class="flowchart-block">[Choose week ending]
+        |
+        v
+[Rebuild daily summaries for those 7 days]
+        |
+        v
+[Total hours per worker] --> [Split regular / overtime]
+        |
+        v
+[Gross = regular x rate + overtime x rate x multiplier]
+        |
+        v
+[NAPSA and NHIMA deducted] --> [Net pay]
+        |
+        v
+[Payroll row created or updated]  (paid weeks skipped)</pre>
+
+  <h5 class="section-title">7) Cameras and Clips</h5>
+  <ul>
+    <li><strong>Health Check</strong> opens every registered camera and records the result
+        under Hardware Health. Worth running each morning.</li>
+    <li><strong>Record 10s Clip</strong> records from the attendance camera on demand.</li>
+    <li>Clips are recorded around each punch instead of continuously, which keeps a small
+        disk from filling while still giving a supervisor something to review.</li>
+    <li>The <i class="bi bi-star"></i> button chooses which camera does verification and
+        snapshots; the rest are surveillance.</li>
+  </ul>
+
+  <h5 class="section-title">8) Users and Roles</h5>
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered align-middle">
+      <thead class="table-light"><tr><th>Role</th><th>Can do</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge bg-success">admin</span></td>
+            <td>Everything, including users and system settings</td></tr>
+        <tr><td><span class="badge bg-primary">supervisor</span></td>
+            <td>Workers, attendance, enrolment, payroll, CCTV, cloud sync</td></tr>
+        <tr><td><span class="badge bg-secondary">viewer</span></td>
+            <td>Read only</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="mb-0">
+    New accounts and password resets are temporary - the holder must set a new password
+    before the dashboard opens. The last active administrator cannot be demoted or
+    deactivated. Every action is recorded on the <strong>Audit Log</strong> page.
+  </p>
+
+  <h5 class="section-title">9) Edit and Reset Operations</h5>
+  <div class="example-box">
+    <ol class="mb-0">
+      <li>Click the row's <i class="bi bi-pencil-square"></i> button.</li>
+      <li>The modal loads the existing values.</li>
+      <li>Change what you need and submit.</li>
+      <li>For a worker PIN or a user password, use the key icon instead.</li>
+    </ol>
   </div>
 
-  <div class="example-box mt-3">
-    <p class="mb-2"><strong>Problem:</strong> Worker cannot clock in</p>
-    <ul class="mb-0">
-      <li>Verify worker status is <strong>active</strong>.</li>
-      <li>Verify PIN is correct and still unique in system.</li>
-      <li>Ensure face is visible in camera for verification step.</li>
-    </ul>
+  <h5 class="section-title">10) Troubleshooting</h5>
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered align-middle">
+      <thead class="table-light"><tr><th>Symptom</th><th>Cause and fix</th></tr></thead>
+      <tbody>
+        <tr><td>Page will not open</td>
+            <td>Check the address uses port <strong>8010</strong>. Browsers block port 6000 outright</td></tr>
+        <tr><td>Blank camera feed</td>
+            <td>Wrong source, another app holding the camera, or the USB device is not passed into Docker</td></tr>
+        <tr><td>Everyone rejected at clock-in</td>
+            <td>Camera not working, or nobody is enrolled. Check the Biometric page</td></tr>
+        <tr><td>One genuine worker keeps failing</td>
+            <td>Too few samples or poor light. Enrol more samples in the conditions they actually use</td></tr>
+        <tr><td>"Recognizer: correlation-fallback" warning</td>
+            <td><code>opencv-contrib-python</code> missing, or plain <code>opencv-python</code>
+                installed alongside it. Reinstall from <code>requirements.txt</code></td></tr>
+        <tr><td>Payroll generates nothing</td>
+            <td>No recorded hours that week, or rebuild the daily summaries first</td></tr>
+        <tr><td>Everyone signed out after a restart</td>
+            <td>Set <code>FMS_SECRET_KEY</code> so the session key is stable</td></tr>
+      </tbody>
+    </table>
   </div>
+
+  <h5 class="section-title">11) Weekly Routine</h5>
+  <ul class="mb-0">
+    <li><strong>Each morning:</strong> CCTV &rarr; Health Check; confirm the attendance
+        camera is online.</li>
+    <li><strong>During the day:</strong> watch Attendance; refused attempts and their
+        reasons appear on the Biometric page.</li>
+    <li><strong>Friday:</strong> Payroll &rarr; generate &rarr; export &rarr; mark paid.</li>
+    <li><strong>New worker:</strong> add on Workers, then enrol at least three samples.</li>
+    <li><strong>Worker leaves:</strong> deactivate on Workers. Records stay for the audit
+        trail; they can no longer clock in.</li>
+  </ul>
 </div>
 {% endblock %}

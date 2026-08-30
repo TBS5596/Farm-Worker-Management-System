@@ -1,0 +1,25 @@
+/* ===========================================================================
+   biometric.css - the face enrolment centre.
+
+   Enrolment is the step a worker cannot clock in without, so this page puts
+   the live camera next to the worker list: a supervisor watches the preview,
+   presses the capture button on a row, and repeats until the badge turns
+   green at three samples.
+   =========================================================================== */
+
+/* Same treatment as the login preview: an endless MJPEG stream over a dark
+   background, capped so it does not dominate the page. */
+.enrolment-preview {
+  max-height: 260px;
+  object-fit: cover;
+  background: #0f1115;
+  border: 1px solid rgba(46, 125, 82, 0.25);
+}
+
+/* The worker list scrolls inside its card so the camera preview beside it
+   stays in view. Example: with 40 workers the page would otherwise be metres
+   long and the supervisor would lose sight of the person in frame. */
+.enrolment-scroll {
+  max-height: 340px;
+  overflow-y: auto;
+}

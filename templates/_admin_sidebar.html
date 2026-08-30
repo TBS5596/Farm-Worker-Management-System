@@ -1,16 +1,44 @@
-<nav class="sidebar d-flex flex-column py-3" aria-label="Admin navigation sidebar">
+{# ===========================================================================
+   Sidebar navigation, included by base_admin.html on every signed-in page.
+
+   Structure matters here, because static/css/admin.css relies on it:
+
+     .sidebar            flex column, sticky, one viewport tall
+     |-- .brand          fixed at the top (farm name and role)
+     |-- .sidebar-nav    the only part that scrolls, so a short window can
+     |                   still reach every item
+     +-- .sidebar-footer pinned to the bottom (logout is always reachable)
+
+   `active_page` is passed by each route and decides which link is highlighted.
+   Example: the payroll route renders with active_page='payroll', so the
+   Payroll link gets the .active class.
+
+   `can()` is registered as a Jinja global in app.py and reads the signed-in
+   user's role. Links guarded by it disappear for roles that cannot use them -
+   the route enforces the same rule, so hiding the link is convenience, not
+   security. Example: a supervisor never sees the Users link, and a direct
+   visit to /users is redirected anyway.
+   =========================================================================== #}
+<nav class="sidebar" aria-label="Admin navigation sidebar">
+
+  {# --- Brand: farm name and the signed-in user's access level ------------ #}
   <div class="brand text-white d-flex justify-content-between align-items-start gap-2">
     <div>
       <i class="bi bi-tree-fill fs-4 me-2"></i>
       <span class="fw-bold">{{ org_name }}</span>
       <div class="small opacity-75 mt-1">Admin Panel</div>
+      <div class="small opacity-75">{{ session.get('admin_role', 'viewer') | capitalize }} access</div>
     </div>
+    {# Only used by the mobile drawer; hidden by CSS from 992px up. #}
     <button id="sidebarCloseBtn" type="button" class="btn btn-sm btn-outline-light d-lg-none" title="Close navigation" aria-label="Close navigation">
       <i class="bi bi-x-lg"></i>
     </button>
   </div>
 
-  <ul class="nav flex-column mt-3 px-2 gap-1">
+  {# --- Scrolling link list ------------------------------------------------
+       .sidebar-nav is what gains a scrollbar when the window is too short for
+       all twelve items. Keep the class on this element. #}
+  <ul class="nav flex-column mt-3 px-2 gap-1 sidebar-nav">
     <li class="nav-item">
       <a href="{{ url_for('dashboard') }}" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}">
         <i class="bi bi-speedometer2 me-2"></i>Dashboard
@@ -31,9 +59,10 @@
         <i class="bi bi-camera-video-fill me-2"></i>CCTV
       </a>
     </li>
+    {# Face enrolment lives here - the step a worker cannot clock in without. #}
     <li class="nav-item">
       <a href="{{ url_for('biometric_page') }}" class="nav-link {% if active_page == 'biometric' %}active{% endif %}">
-        <i class="bi bi-fingerprint me-2"></i>Biometric
+        <i class="bi bi-person-badge me-2"></i>Biometric
       </a>
     </li>
     <li class="nav-item">
@@ -46,11 +75,14 @@
         <i class="bi bi-cloud-arrow-up-fill me-2"></i>Cloud Sync
       </a>
     </li>
+    {# Administrators only: supervisors and viewers never see this. #}
+    {% if can('user.manage') %}
     <li class="nav-item">
       <a href="{{ url_for('users_page') }}" class="nav-link {% if active_page == 'users' %}active{% endif %}">
         <i class="bi bi-person-badge-fill me-2"></i>Users
       </a>
     </li>
+    {% endif %}
     <li class="nav-item">
       <a href="{{ url_for('audit_log_page') }}" class="nav-link {% if active_page == 'audit_log' %}active{% endif %}">
         <i class="bi bi-shield-check me-2"></i>Audit Log
@@ -73,7 +105,8 @@
     </li>
   </ul>
 
-  <div class="mt-auto px-2 pb-2">
+  {# --- Footer: outside the scrolling area, so logout is always on screen -- #}
+  <div class="sidebar-footer">
     <a href="{{ url_for('logout') }}" class="nav-link text-danger">
       <i class="bi bi-box-arrow-left me-2"></i>Logout
     </a>

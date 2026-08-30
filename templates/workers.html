@@ -1,5 +1,30 @@
 {% extends 'base_admin.html' %}
 
+{# ===========================================================================
+   workers.html - the worker roster: add, edit, reset PIN, activate, enrol.
+
+   The Face column is the one to watch. A worker cannot clock in until they
+   have enrolled samples, so the badge reads:
+     green  "3 / 8"      enrolled and reliable
+     amber  "1 / 8"      enrolled but too few samples to match reliably
+     red    "Not enrolled"  cannot clock in at all
+
+   The green camera button on each row captures one sample from the attendance
+   camera immediately - the fastest path when the worker is standing right
+   there. The Enrolment Centre link goes to the Biometric page for photo
+   uploads and sample management.
+
+   Rate/hr feeds payroll. Blank means the worker falls back to the default rate
+   from Settings, which the cell shows in grey so it is never a mystery where
+   the number came from.
+
+   Three modals at the bottom: add, edit (filled by
+   static/js/edit-modals.js from each row's data-record JSON) and reset PIN.
+   A PIN is write-only - it can be reset but never read back.
+
+   Context: workers, face_samples (worker.id -> sample count), default_rate.
+   =========================================================================== #}
+
 {% block title %}{{ org_name }} - Workers{% endblock %}
 
 {% block extra_css %}
@@ -12,11 +37,20 @@
 <div class="workers-page">
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h5 class="mb-0"><i class="bi bi-people-fill me-2 text-success"></i>Workers</h5>
-    <button class="btn btn-success btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#addWorkerModal">
-      <i class="bi bi-plus-lg me-1"></i>Add Worker
-    </button>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('biometric_page') }}" title="Face enrolment centre">
+        <i class="bi bi-person-badge me-1"></i>Enrolment Centre
+      </a>
+      {% if can('worker.manage') %}
+      <button class="btn btn-success btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#addWorkerModal">
+        <i class="bi bi-plus-lg me-1"></i>Add Worker
+      </button>
+      {% endif %}
+    </div>
   </div>
 
+  {# --- Roster table. Column indexes here must match the DataTables
+       configuration in static/js/workers.js. #}
   <div class="card shadow-sm">
     <div class="card-body">
       <div class="table-responsive">
@@ -30,9 +64,10 @@
             <th>Emergency Contact</th>
             <th>Department</th>
             <th>Address</th>
+            <th>Rate/hr</th>
+            <th>Face</th>
             <th>Status</th>
             <th>Enrolled</th>
-            <th>Active</th>
             <th>Registered</th>
             <th>Actions</th>
           </tr>
@@ -47,6 +82,31 @@
             <td>{{ worker.emergency_contact or '—' }}</td>
             <td>{{ worker.department or '—' }}</td>
             <td>{{ worker.address or '—' }}</td>
+            <td data-order="{{ worker.hourly_rate or 0 }}">
+              {% if worker.hourly_rate %}
+                ZMW {{ '%.2f'|format(worker.hourly_rate) }}
+              {% else %}
+                <span class="text-muted" title="Falls back to the default rate in Settings">
+                  ZMW {{ '%.2f'|format(default_rate) }} <small>(default)</small>
+                </span>
+              {% endif %}
+            </td>
+            <td data-order="{{ face_samples.get(worker.id, 0) }}">
+              {% set samples = face_samples.get(worker.id, 0) %}
+              {% if samples >= 3 %}
+                <span class="badge bg-success" title="Enrolled with {{ samples }} samples">
+                  <i class="bi bi-person-check-fill me-1"></i>{{ samples }}
+                </span>
+              {% elif samples > 0 %}
+                <span class="badge bg-warning text-dark" title="Add at least 3 samples for reliable matching">
+                  <i class="bi bi-exclamation-triangle-fill me-1"></i>{{ samples }}
+                </span>
+              {% else %}
+                <span class="badge bg-danger" title="Cannot clock in until a face is enrolled">
+                  Not enrolled
+                </span>
+              {% endif %}
+            </td>
             <td>
               {% if (worker.status or 'active') == 'active' %}
                 <span class="badge bg-success">active</span>
@@ -59,15 +119,9 @@
             <td data-order="{{ worker.enrollment_date.strftime('%Y%m%d') if worker.enrollment_date else 0 }}">
               {{ worker.enrollment_date.strftime('%d %b %Y') if worker.enrollment_date else '—' }}
             </td>
-            <td>
-              {% if (worker.status or 'active') == 'active' %}
-                <span class="badge bg-success">Yes</span>
-              {% else %}
-                <span class="badge bg-danger">No</span>
-              {% endif %}
-            </td>
             <td data-order="{{ worker.created_at.strftime('%Y%m%d') }}">{{ worker.created_at.strftime('%d %b %Y') }}</td>
-            <td>
+            <td class="actions-cell">
+              {% if can('worker.manage') %}
               <button class="btn btn-sm btn-outline-info edit-worker-btn"
                       type="button"
                       data-bs-toggle="modal"
@@ -82,6 +136,7 @@
                         "department": worker.department or "",
                         "nrc_number": worker.nrc_number or "",
                         "status": worker.status or "active",
+                        "hourly_rate": worker.hourly_rate or "",
                         "enrollment_date": worker.enrollment_date.strftime("%Y-%m-%d") if worker.enrollment_date else ""
                       } | tojson | forceescape }}'
                       title="Edit worker">
@@ -106,12 +161,22 @@
                   <i class="bi {% if (worker.status or 'active') == 'active' %}bi-pause-circle{% else %}bi-play-circle{% endif %}"></i>
                 </button>
               </form>
+              {% endif %}
 
+              {% if can('biometric.manage') %}
+              <form method="POST" action="{{ url_for('enroll_face', worker_pk=worker.id) }}" class="d-inline">
+                <input type="hidden" name="next" value="{{ url_for('workers_page') }}" />
+                <button class="btn btn-sm btn-outline-success" type="submit"
+                        title="Capture one face sample from the attendance camera now">
+                  <i class="bi bi-camera-fill"></i>
+                </button>
+              </form>
+              {% endif %}
             </td>
           </tr>
           {% else %}
           <tr>
-            <td colspan="12" class="text-center text-muted py-4">No workers onboarded yet.</td>
+            <td colspan="13" class="text-center text-muted py-4">No workers onboarded yet.</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -121,6 +186,8 @@
   </div>
 </div>
 
+{# --- Add worker. The Worker ID is generated server-side as the next
+     4-digit sequence (0001, 0002, ...), so there is no field for it. #}
 <div class="modal fade" id="addWorkerModal" tabindex="-1">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
@@ -173,9 +240,22 @@
               <input type="text" class="form-control" name="address" placeholder="e.g. Plot 22, East Farm" title="Worker address" />
             </div>
             <div class="col-md-6">
+              <label class="form-label">Hourly Rate (ZMW)</label>
+              <input type="number" class="form-control" name="hourly_rate" min="0" step="0.5"
+                     placeholder="Leave blank to use the default rate" title="Hourly rate in ZMW" />
+              <div class="form-text">Used to calculate this worker's pay from their recorded hours.</div>
+            </div>
+            <div class="col-md-6">
               <label class="form-label">PIN <span class="text-danger">*</span></label>
               <input type="password" class="form-control" name="pin" minlength="4" placeholder="Enter unique PIN" title="Worker PIN" required />
               <div class="form-text">Must be unique across all workers.</div>
+            </div>
+            <div class="col-12">
+              <div class="alert alert-info mb-0 small">
+                <i class="bi bi-info-circle me-1"></i>
+                A PIN alone will not record attendance. After saving, enrol this worker's face on the
+                Biometric page - the system refuses any punch it cannot match to an enrolled face.
+              </div>
             </div>
           </div>
         </div>
@@ -188,6 +268,8 @@
   </div>
 </div>
 
+{# --- Edit worker. Inputs are filled by static/js/edit-modals.js from the
+     clicked row's data-record JSON; the form action is set the same way. #}
 <div class="modal fade" id="editWorkerModal" tabindex="-1">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
@@ -231,6 +313,11 @@
                 <option value="suspended">suspended</option>
               </select>
             </div>
+            <div class="col-md-6">
+              <label class="form-label">Hourly Rate (ZMW)</label>
+              <input type="number" class="form-control" name="hourly_rate" id="editHourlyRate" min="0" step="0.5"
+                     placeholder="Leave blank to use the default rate" title="Hourly rate in ZMW" />
+            </div>
             <div class="col-12">
               <label class="form-label">Address</label>
               <input type="text" class="form-control" name="address" id="editAddress" placeholder="e.g. Plot 22, East Farm" title="Worker address" />
@@ -246,6 +333,8 @@
   </div>
 </div>
 
+{# --- Reset PIN. A PIN is stored hashed and can never be read back, so
+     this sets a new one rather than showing the old. #}
 <div class="modal fade" id="resetPinModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">

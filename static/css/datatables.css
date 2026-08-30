@@ -1,3 +1,14 @@
+/* ===========================================================================
+   datatables.css - makes DataTables' own controls match Bootstrap.
+
+   DataTables 2.x ships unstyled search and page-length inputs that look
+   noticeably different from every other field in the app. These two rules give
+   them the same border, radius and size as a Bootstrap .form-control.
+
+   Loaded on every page with a searchable table: Workers, Attendance, Users,
+   Payroll, CCTV, Biometric, Cloud Sync, Audit Log and the Data Hub.
+   =========================================================================== */
+
 div.dt-container .dt-search input,
 div.dt-container .dt-length select {
   border: 1px solid #dee2e6;

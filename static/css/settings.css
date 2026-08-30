@@ -1,3 +1,12 @@
+/* ===========================================================================
+   settings.css - the Settings page.
+
+   Settings is a long single-column form (general, face verification, geofence,
+   payroll rates, recording, API access). Capping the width keeps label and
+   field on a comfortable line instead of stretching a text input across a
+   1400px monitor.
+   =========================================================================== */
+
 .settings-shell {
   max-width: 900px;
 }

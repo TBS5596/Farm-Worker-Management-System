@@ -1,5 +1,29 @@
 {% extends 'base_admin.html' %}
 
+{# ===========================================================================
+   payroll.html - weekly pay, calculated rather than typed.
+
+   Two ways in:
+     Generate From Attendance  the normal route. Reads the recorded clock-in and
+                               clock-out times for the seven days ending on the
+                               chosen date and computes hours, overtime, gross,
+                               NAPSA, NHIMA and net for every active worker.
+                               Weeks already marked paid are never overwritten,
+                               so re-running is safe.
+     Add a Single Record       for a correction, or a worker whose hours came in
+                               on paper. Even here only hours and a rate are
+                               entered - the amounts are still calculated.
+
+   The Source column says which of the two a row came from ("attendance" or
+   "manual"), so an audit can tell them apart.
+
+   All amounts are ZMW. The rates actually used are stored on each row, so a
+   payslip stays reproducible after the rates change in Settings.
+
+   Context: workers, worker_lookup, payroll_rows, rates, default_week_ending
+   (the most recent Sunday).
+   =========================================================================== #}
+
 {% block title %}{{ org_name }} - Payroll{% endblock %}
 
 {% block extra_css %}
@@ -8,16 +32,77 @@
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
   <h5 class="mb-0"><i class="bi bi-cash-stack me-2 text-success"></i>Payroll</h5>
-  <span class="text-muted small">Payroll records and worker payouts</span>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('export_csv', export_key='payroll') }}"
+       title="Download payroll as CSV">
+      <i class="bi bi-download me-1"></i>Export CSV
+    </a>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('tables_hub_table_page', table_key='payroll') }}">
+      Full Table
+    </a>
+  </div>
 </div>
 
 <div class="row g-3 mb-4">
+  {# --- Generate from attendance: the normal weekly route -------------- #}
+  <div class="col-xl-7">
+    <div class="card shadow-sm h-100 border-success">
+      <div class="card-header fw-semibold bg-white">
+        <i class="bi bi-magic me-2 text-success"></i>Generate From Attendance
+      </div>
+      <div class="card-body">
+        <p class="text-muted small">
+          Reads the recorded clock-in and clock-out times for the seven days ending on the date you
+          choose, then calculates hours, overtime, gross pay and statutory deductions for every
+          active worker. Weeks already marked paid are never overwritten.
+        </p>
+        <form method="POST" action="{{ url_for('generate_payroll_page') }}" class="row g-2 align-items-end">
+          <div class="col-sm-6">
+            <label class="form-label">Week Ending</label>
+            <input type="date" class="form-control" name="week_ending" value="{{ default_week_ending }}"
+                   title="Last day of the pay week" required />
+          </div>
+          <div class="col-sm-6">
+            {% if can('payroll.manage') %}
+            <button class="btn btn-success w-100" type="submit">
+              <i class="bi bi-calculator me-1"></i>Generate Payroll
+            </button>
+            {% else %}
+            <button class="btn btn-success w-100" type="button" disabled>Your role cannot run payroll</button>
+            {% endif %}
+          </div>
+        </form>
+
+        <hr />
+        <div class="row g-2 small text-muted">
+          <div class="col-6 col-md-3">Standard day<br /><strong class="text-dark">{{ rates.standard_day_hours }} h</strong></div>
+          <div class="col-6 col-md-3">Overtime<br /><strong class="text-dark">&times; {{ rates.overtime_multiplier }}</strong></div>
+          <div class="col-6 col-md-3">NAPSA<br /><strong class="text-dark">{{ '%.1f'|format(rates.napsa_rate * 100) }}%</strong></div>
+          <div class="col-6 col-md-3">NHIMA<br /><strong class="text-dark">{{ '%.1f'|format(rates.nhima_rate * 100) }}%</strong></div>
+        </div>
+        <div class="form-text mt-2">
+          Change any of these on the <a href="{{ url_for('settings') }}">Settings</a> page.
+          A worker with no rate of their own uses the default of
+          ZMW {{ '%.2f'|format(rates.default_hourly_rate) }} per hour.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# --- Manual single record: corrections and paper timesheets. Hours and
+       rate only - the amounts are still calculated server-side. #}
   <div class="col-xl-5">
     <div class="card shadow-sm h-100">
-      <div class="card-header fw-semibold">Add Payroll Record</div>
+      <div class="card-header fw-semibold bg-white">
+        <i class="bi bi-pencil-square me-2 text-secondary"></i>Add a Single Record
+      </div>
       <div class="card-body">
+        <p class="text-muted small">
+          For a correction or a worker whose hours were logged on paper. Enter hours only -
+          gross pay, deductions and net pay are always calculated, never typed.
+        </p>
         <form method="POST" action="{{ url_for('add_payroll_record') }}" class="row g-2">
           <div class="col-12">
             <select class="form-select" name="worker_id" title="Select worker" required>
@@ -28,50 +113,54 @@
             </select>
           </div>
           <div class="col-6">
+            <label class="form-label small mb-1">Week ending</label>
             <input type="date" class="form-control" name="week_ending" title="Week ending date" required />
           </div>
           <div class="col-6">
-            <input type="number" step="0.01" class="form-control" name="total_hours" placeholder="Hours" />
+            <label class="form-label small mb-1">Total hours</label>
+            <input type="number" step="0.01" min="0" class="form-control" name="total_hours" placeholder="e.g. 42" required />
           </div>
           <div class="col-6">
-            <input type="number" step="0.01" class="form-control" name="hourly_rate" placeholder="Hourly rate" />
+            <label class="form-label small mb-1">Of which overtime</label>
+            <input type="number" step="0.01" min="0" class="form-control" name="overtime_hours" placeholder="e.g. 2" />
           </div>
           <div class="col-6">
-            <input type="number" step="0.01" class="form-control" name="gross_pay" placeholder="Gross pay" />
+            <label class="form-label small mb-1">Hourly rate</label>
+            <input type="number" step="0.01" min="0" class="form-control" name="hourly_rate" placeholder="Worker default" />
           </div>
           <div class="col-12">
-            <button class="btn btn-success" type="submit">Save Payroll</button>
+            {% if can('payroll.manage') %}
+            <button class="btn btn-outline-success w-100" type="submit">Save Record</button>
+            {% else %}
+            <button class="btn btn-outline-success w-100" type="button" disabled>Your role cannot edit payroll</button>
+            {% endif %}
           </div>
         </form>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-xl-7">
-    <div class="card shadow-sm h-100">
-      <div class="card-header fw-semibold">Table Access</div>
-      <div class="card-body d-flex align-items-center">
-        <a class="btn btn-outline-secondary" href="{{ url_for('tables_hub_table_page', table_key='payroll') }}">Open Full Payroll Table</a>
       </div>
     </div>
   </div>
 </div>
 
 <div class="card shadow-sm">
-  <div class="card-header fw-semibold">Recent Payroll Records</div>
+  <div class="card-header fw-semibold bg-white">Payroll Records <span class="text-muted small">(all amounts in ZMW)</span></div>
   <div class="card-body">
     <div class="table-responsive">
       <table id="payrollTable" class="table table-sm table-hover align-middle w-100">
         <thead class="table-light">
           <tr>
             <th>ID</th>
-            <th>Worker ID</th>
+            <th>Worker</th>
             <th>Week Ending</th>
-            <th>Total Hours</th>
-            <th>Hourly Rate</th>
+            <th>Hours</th>
+            <th>OT</th>
+            <th>Rate</th>
             <th>Gross</th>
+            <th>NAPSA</th>
+            <th>NHIMA</th>
+            <th>Net Pay</th>
+            <th>Source</th>
             <th>Status</th>
-            <th>Payment Date</th>
+            <th>Paid On</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -82,18 +171,38 @@
             <td>
               {% set wk = worker_lookup.get(p.worker_id) %}
               {% if wk %}
-                {{ wk.worker_id }} - {{ wk.name }}
+                <span class="badge bg-secondary me-1">{{ wk.worker_id }}</span>{{ wk.name }}
               {% else %}
                 {{ p.worker_id }}
               {% endif %}
             </td>
-            <td>{{ p.week_ending.strftime('%Y-%m-%d') if p.week_ending else '—' }}</td>
-            <td>{{ p.total_hours if p.total_hours is not none else '—' }}</td>
-            <td>{{ p.hourly_rate if p.hourly_rate is not none else '—' }}</td>
-            <td>{{ p.gross_pay if p.gross_pay is not none else '—' }}</td>
-            <td>{{ p.paid_status }}</td>
-            <td>{{ p.payment_date.strftime('%Y-%m-%d') if p.payment_date else '—' }}</td>
+            <td class="text-nowrap">{{ p.week_ending.strftime('%d %b %Y') if p.week_ending else '-' }}</td>
+            <td>{{ '%.2f'|format(p.total_hours) if p.total_hours is not none else '-' }}</td>
+            <td>{{ '%.2f'|format(p.overtime_hours) if p.overtime_hours else '-' }}</td>
+            <td>{{ '%.2f'|format(p.hourly_rate) if p.hourly_rate is not none else '-' }}</td>
+            <td class="fw-semibold">{{ '%.2f'|format(p.gross_pay) if p.gross_pay is not none else '-' }}</td>
+            <td class="text-muted">{{ '%.2f'|format(p.napsa_deduction) if p.napsa_deduction is not none else '-' }}</td>
+            <td class="text-muted">{{ '%.2f'|format(p.nhima_deduction) if p.nhima_deduction is not none else '-' }}</td>
+            <td class="fw-bold text-success">{{ '%.2f'|format(p.net_pay) if p.net_pay is not none else '-' }}</td>
             <td>
+              {% if p.computed_from_attendance %}
+                <span class="badge bg-success" title="Calculated from recorded attendance">attendance</span>
+              {% else %}
+                <span class="badge bg-secondary" title="Entered by hand">manual</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if p.paid_status == 'paid' %}
+                <span class="badge bg-success">paid</span>
+              {% elif p.paid_status == 'inactive' %}
+                <span class="badge bg-light text-dark border">inactive</span>
+              {% else %}
+                <span class="badge bg-warning text-dark">{{ p.paid_status }}</span>
+              {% endif %}
+            </td>
+            <td class="text-nowrap">{{ p.payment_date.strftime('%d %b %Y') if p.payment_date else '-' }}</td>
+            <td class="actions-cell">
+              {% if can('payroll.manage') %}
               <button
                 type="button"
                 class="btn btn-sm btn-outline-info edit-payroll-btn"
@@ -104,11 +213,8 @@
                   "worker_id": p.worker_id,
                   "week_ending": p.week_ending.strftime("%Y-%m-%d") if p.week_ending else "",
                   "total_hours": p.total_hours if p.total_hours is not none else "",
+                  "overtime_hours": p.overtime_hours if p.overtime_hours is not none else "",
                   "hourly_rate": p.hourly_rate if p.hourly_rate is not none else "",
-                  "gross_pay": p.gross_pay if p.gross_pay is not none else "",
-                  "napsa_deduction": p.napsa_deduction if p.napsa_deduction is not none else "",
-                  "nhima_deduction": p.nhima_deduction if p.nhima_deduction is not none else "",
-                  "net_pay": p.net_pay if p.net_pay is not none else "",
                   "paid_status": p.paid_status or "pending",
                   "payment_date": p.payment_date.strftime("%Y-%m-%d") if p.payment_date else ""
                 } | tojson | forceescape }}'
@@ -121,10 +227,13 @@
                   <i class="bi bi-pause-circle"></i>
                 </button>
               </form>
+              {% endif %}
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="9" class="text-center text-muted py-4">No payroll records yet.</td></tr>
+          <tr><td colspan="14" class="text-center text-muted py-4">
+            No payroll records yet. Choose a week ending date above and generate from attendance.
+          </td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -132,8 +241,10 @@
   </div>
 </div>
 
+{# --- Edit a row. Deliberately no inputs for gross, NAPSA, NHIMA or net:
+     they are recalculated from the hours and rate on submit. #}
 <div class="modal fade" id="editPayrollModal" tabindex="-1">
-  <div class="modal-dialog modal-xl">
+  <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <form method="POST" id="editPayrollForm" action="#">
         <div class="modal-header">
@@ -141,55 +252,47 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" title="Close"></button>
         </div>
         <div class="modal-body">
+          <div class="alert alert-info small">
+            <i class="bi bi-info-circle me-1"></i>
+            Gross pay, NAPSA, NHIMA and net pay are recalculated from the hours and rate below,
+            so they cannot be edited directly.
+          </div>
           <div class="row g-3">
-            <div class="col-md-4">
+            <div class="col-md-6">
               <label class="form-label">Worker</label>
-              <select class="form-select" name="worker_id" id="editPayrollWorker" title="Select worker" required>
-                <option value="">Select worker</option>
+              <select class="form-select" name="worker_id" id="editPayrollWorker" title="Worker" required>
                 {% for w in workers %}
                 <option value="{{ w.id }}">{{ w.worker_id }} - {{ w.name }}</option>
                 {% endfor %}
               </select>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-6">
               <label class="form-label">Week Ending</label>
               <input type="date" class="form-control" name="week_ending" id="editPayrollWeekEnding" title="Week ending" required />
             </div>
             <div class="col-md-4">
-              <label class="form-label">Payment Date</label>
-              <input type="date" class="form-control" name="payment_date" id="editPayrollPaymentDate" title="Payment date" />
-            </div>
-            <div class="col-md-3">
               <label class="form-label">Total Hours</label>
-              <input type="number" step="0.01" class="form-control" name="total_hours" id="editPayrollHours" title="Total hours" />
+              <input type="number" step="0.01" min="0" class="form-control" name="total_hours" id="editPayrollHours" title="Total hours" />
             </div>
-            <div class="col-md-3">
-              <label class="form-label">Hourly Rate</label>
-              <input type="number" step="0.01" class="form-control" name="hourly_rate" id="editPayrollRate" title="Hourly rate" />
+            <div class="col-md-4">
+              <label class="form-label">Of Which Overtime</label>
+              <input type="number" step="0.01" min="0" class="form-control" name="overtime_hours" id="editPayrollOvertime" title="Overtime hours" />
             </div>
-            <div class="col-md-3">
-              <label class="form-label">Gross Pay</label>
-              <input type="number" step="0.01" class="form-control" name="gross_pay" id="editPayrollGross" title="Gross pay" />
+            <div class="col-md-4">
+              <label class="form-label">Hourly Rate (ZMW)</label>
+              <input type="number" step="0.01" min="0" class="form-control" name="hourly_rate" id="editPayrollRate" title="Hourly rate" />
             </div>
-            <div class="col-md-3">
+            <div class="col-md-6">
               <label class="form-label">Status</label>
-              <select class="form-select" name="paid_status" id="editPayrollStatus" title="Payroll status">
+              <select class="form-select" name="paid_status" id="editPayrollStatus" title="Payment status">
                 <option value="pending">pending</option>
                 <option value="paid">paid</option>
                 <option value="inactive">inactive</option>
               </select>
             </div>
-            <div class="col-md-4">
-              <label class="form-label">NAPSA Deduction</label>
-              <input type="number" step="0.01" class="form-control" name="napsa_deduction" id="editPayrollNapsa" title="NAPSA deduction" />
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">NHIMA Deduction</label>
-              <input type="number" step="0.01" class="form-control" name="nhima_deduction" id="editPayrollNhima" title="NHIMA deduction" />
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Net Pay</label>
-              <input type="number" step="0.01" class="form-control" name="net_pay" id="editPayrollNet" title="Net pay" />
+            <div class="col-md-6">
+              <label class="form-label">Payment Date</label>
+              <input type="date" class="form-control" name="payment_date" id="editPayrollPaymentDate" title="Payment date" />
             </div>
           </div>
         </div>

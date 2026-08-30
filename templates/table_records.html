@@ -1,5 +1,19 @@
 {% extends 'base_admin.html' %}
 
+{# ===========================================================================
+   table_records.html - one generic renderer for every table in the Data Hub.
+
+   The route passes `columns` and `rows` for whichever table was requested, so
+   nothing here names a column. Column 0 is always the primary key, which is
+   why static/js/table-records-page.js sorts on it descending for newest-first.
+
+   Binary columns arrive already summarised as "<40000 bytes>" rather than raw
+   data: face_templates holds a 200x200 pixel crop per row, and printing it
+   would flood the page.
+
+   Context: table_title, table_key, columns, rows.
+   =========================================================================== #}
+
 {% block title %}{{ org_name }} - {{ table_title }}{% endblock %}
 
 {% block extra_css %}

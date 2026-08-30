@@ -1,5 +1,23 @@
 {% extends 'base_admin.html' %}
 
+{# ===========================================================================
+   users.html - dashboard accounts. Administrators only.
+
+   Roles are enforced in the routes, not just hidden here:
+     admin       everything, including users and settings
+     supervisor  workers, attendance, enrolment, payroll, CCTV, cloud sync
+     viewer      read only
+
+   The Account column shows "disabled", or "temp password" for a user who must
+   set a new one before the dashboard opens. New accounts and resets both
+   produce a temporary password, shown once in a flash message.
+
+   The last active administrator cannot be demoted or deactivated, so nobody
+   can lock the whole team out.
+
+   Context: users, workers (for the optional linked-worker field).
+   =========================================================================== #}
+
 {% block title %}{{ org_name }} - Users{% endblock %}
 
 {% block extra_css %}
@@ -8,6 +26,16 @@
 {% endblock %}
 
 {% block content %}
+<div class="alert alert-secondary d-flex align-items-start gap-2">
+  <i class="bi bi-shield-lock-fill mt-1"></i>
+  <div class="small">
+    <strong>Roles are enforced.</strong>
+    An <strong>administrator</strong> can do everything including users and settings.
+    A <strong>supervisor</strong> runs daily operations - workers, attendance, enrolment, payroll,
+    CCTV and sync - but cannot manage users or change system settings.
+    A <strong>viewer</strong> can only read.
+  </div>
+</div>
 <div class="users-page">
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h5 class="mb-0"><i class="bi bi-person-badge-fill me-2 text-success"></i>System Users</h5>
@@ -32,6 +60,7 @@
             <th>Username</th>
             <th>Name</th>
             <th>Role</th>
+            <th>Account</th>
             <th>Linked Worker</th>
             <th>Email</th>
             <th>Phone</th>
@@ -44,12 +73,31 @@
           <tr>
             <td><span class="badge bg-secondary font-monospace">{{ user.username }}</span></td>
             <td>{{ user.name or '—' }}</td>
-            <td><span class="badge bg-info text-dark">{{ user.role or 'supervisor' }}</span></td>
+            <td>
+              {% if user.role == 'admin' %}
+                <span class="badge bg-success" title="{{ role_labels['admin'] }}">admin</span>
+              {% elif user.role == 'supervisor' %}
+                <span class="badge bg-primary" title="{{ role_labels['supervisor'] }}">supervisor</span>
+              {% else %}
+                <span class="badge bg-secondary" title="{{ role_labels.get(user.role, 'Read only') }}">{{ user.role }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if not user.is_active %}
+                <span class="badge bg-danger">disabled</span>
+              {% elif user.must_change_password %}
+                <span class="badge bg-warning text-dark" title="Must set a new password at next login">
+                  temp password
+                </span>
+              {% else %}
+                <span class="badge bg-light text-dark border">active</span>
+              {% endif %}
+            </td>
             <td>{{ user.linked_worker_id or '—' }}</td>
             <td>{{ user.email or '—' }}</td>
             <td>{{ user.phone or '—' }}</td>
             <td data-order="{{ user.created_at.strftime('%Y%m%d') }}">{{ user.created_at.strftime('%d %b %Y') }}</td>
-            <td>
+            <td class="actions-cell">
               <button class="btn btn-sm btn-outline-info edit-user-btn"
                       type="button"
                       data-bs-toggle="modal"
@@ -76,11 +124,19 @@
                       title="Reset password">
                 <i class="bi bi-key-fill"></i>
               </button>
+
+              <form method="POST" action="{{ url_for('toggle_user', user_pk=user.id) }}" class="d-inline">
+                <button class="btn btn-sm {% if user.is_active %}btn-outline-warning{% else %}btn-outline-success{% endif %}"
+                        type="submit"
+                        title="{% if user.is_active %}Deactivate this account{% else %}Reactivate this account{% endif %}">
+                  <i class="bi {% if user.is_active %}bi-person-dash{% else %}bi-person-check{% endif %}"></i>
+                </button>
+              </form>
             </td>
           </tr>
           {% else %}
           <tr>
-            <td colspan="8" class="text-center text-muted py-4">No users found.</td>
+            <td colspan="9" class="text-center text-muted py-4">No users found.</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -125,10 +181,9 @@
             <div class="col-md-6">
               <label class="form-label">Role</label>
               <select class="form-select" name="role" title="User role">
-                <option value="admin">admin</option>
-                <option value="manager">manager</option>
-                <option value="supervisor" selected>supervisor</option>
-                <option value="viewer">viewer</option>
+                <option value="admin">admin - full access</option>
+                <option value="supervisor" selected>supervisor - operations only</option>
+                <option value="viewer">viewer - read only</option>
               </select>
             </div>
             <div class="col-md-6">
@@ -178,10 +233,9 @@
             <div class="col-md-6">
               <label class="form-label">Role</label>
               <select class="form-select" name="role" id="editUserRole" title="User role">
-                <option value="admin">admin</option>
-                <option value="manager">manager</option>
-                <option value="supervisor">supervisor</option>
-                <option value="viewer">viewer</option>
+                <option value="admin">admin - full access</option>
+                <option value="supervisor">supervisor - operations only</option>
+                <option value="viewer">viewer - read only</option>
               </select>
             </div>
             <div class="col-md-6">
@@ -205,6 +259,8 @@
 </div>
 
 <!-- Reset Password Modal -->
+{# --- Reset password. The new password is generated server-side and shown
+     once in a flash message; it is never sent to the browser beforehand. #}
 <div class="modal fade" id="resetPasswordModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">

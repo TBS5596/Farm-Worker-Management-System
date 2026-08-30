@@ -26,3 +26,12 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+
+# Note: the Docker files are deliberately NOT ignored. Deployment
+# configuration belongs in version control.
+
+# Added with face verification and hardened config
+.secret_key
+.env
+
+docs/

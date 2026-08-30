@@ -1,3 +1,28 @@
+{# ===========================================================================
+   base_admin.html - the frame every signed-in page extends.
+
+   Provides:
+     - the two-column shell (sidebar + main column) that static/css/admin.css
+       lays out
+     - the sticky top bar with the profile menu and the signed-in role
+     - the flash-message area
+     - the change-password modal, available from any page
+     - Bootstrap CSS and JS from the CDN
+
+   Blocks a child template can fill:
+     title      the browser tab title      (default: the organisation name)
+     extra_css  page-specific stylesheets, loaded after admin.css so they win
+     content    the page itself
+     extra_js   page-specific scripts, loaded before admin-layout.js
+
+   Example of a page using it - templates/audit_log.html:
+     {% extends 'base_admin.html' %}
+     {% block title %}{{ org_name }} - Audit Log{% endblock %}
+     {% block content %} ...the table... {% endblock %}
+
+   Every route passes `org_name` and `active_page`; `session` and `can()` are
+   available everywhere (can() is registered as a Jinja global in app.py).
+   =========================================================================== #}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -22,6 +47,7 @@
       <div class="dropdown">
         <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Profile menu">
           <i class="bi bi-person-circle me-1"></i>{{ session.get('admin_username', 'Admin') }}
+          <span class="badge bg-light text-dark border ms-1">{{ session.get('admin_role', 'viewer') }}</span>
         </button>
         <ul class="dropdown-menu dropdown-menu-end">
           <li>
@@ -60,11 +86,11 @@
             </div>
             <div class="mb-3">
               <label class="form-label">New Password <span class="text-danger">*</span></label>
-              <input type="password" class="form-control" name="new_password" minlength="6" placeholder="At least 6 characters" title="New password" required />
+              <input type="password" class="form-control" name="new_password" minlength="8" placeholder="At least 8 characters" title="New password" required />
             </div>
             <div class="mb-3">
               <label class="form-label">Confirm New Password <span class="text-danger">*</span></label>
-              <input type="password" class="form-control" name="confirm_password" minlength="6" placeholder="Repeat new password" title="Confirm new password" required />
+              <input type="password" class="form-control" name="confirm_password" minlength="8" placeholder="Repeat new password" title="Confirm new password" required />
             </div>
           </div>
           <div class="modal-footer">

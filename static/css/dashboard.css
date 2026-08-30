@@ -1,18 +1,46 @@
+/* ===========================================================================
+   dashboard.css - the Dashboard, plus the live-feed cards reused by the CCTV
+   page (cctv.html loads this file for .camera-feed-frame).
+
+   Nothing here changes layout: admin.css owns the page shell. This file is
+   only the visual treatment of the dashboard's own components.
+   =========================================================================== */
+
+/* --- Statistic cards ------------------------------------------------------
+   A coloured left edge codes what the number is about, so the row reads at a
+   glance rather than needing the labels. Example, left to right on the
+   dashboard: green = people, teal = enrolment, orange = today's activity,
+   blue = verification rate. */
+
 .stat-card {
   border-left: 4px solid;
 }
 
 .stat-card.green {
-  border-left-color: #2e7d52;
+  border-left-color: #2e7d52; /* workers */
 }
 
 .stat-card.blue {
-  border-left-color: #0d6efd;
+  border-left-color: #0d6efd; /* verification */
 }
 
 .stat-card.orange {
-  border-left-color: #fd7e14;
+  border-left-color: #fd7e14; /* today */
 }
+
+/* Face-enrolment readiness, added with identity verification. */
+.stat-card.teal {
+  border-left-color: #0f766e;
+}
+
+.text-teal {
+  color: #0f766e;
+}
+
+/* --- Live camera feeds ----------------------------------------------------
+   The <img> src is an endless MJPEG stream, so the element never "finishes
+   loading". A dark background and a minimum height stop the card collapsing
+   while the first frame is in flight, or staying blank if no camera answers. */
 
 .camera-feed-frame {
   min-height: 220px;
@@ -21,11 +49,15 @@
   border-radius: 0.5rem;
 }
 
+/* --- Control Center ------------------------------------------------------- */
+
 .control-center {
   border: 1px solid #e5e7eb;
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
 }
 
+/* Keeps the introductory sentence to a comfortable reading width instead of
+   stretching it across a 1400px screen. */
 .control-lead {
   max-width: 32ch;
 }
@@ -34,6 +66,11 @@
   font-weight: 500;
   padding: 0.5rem 0.65rem;
 }
+
+/* --- Quick action buttons -------------------------------------------------
+   One tile per destination. Each tile borrows the border colour of the section
+   it leads to, which is why there is one modifier class per page rather than a
+   single shared style. */
 
 .quick-action-btn {
   border: 1px solid #d1d5db;
@@ -50,32 +87,42 @@
   box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12);
 }
 
-.quick-action-workers {
-  border-color: rgba(46, 125, 82, 0.35);
+.quick-action-workers    { border-color: rgba(46, 125, 82, 0.35); }
+.quick-action-attendance { border-color: rgba(13, 110, 253, 0.35); }
+.quick-action-cctv       { border-color: rgba(220, 38, 38, 0.35); }
+.quick-action-users      { border-color: rgba(8, 145, 178, 0.35); }
+.quick-action-settings   { border-color: rgba(107, 114, 128, 0.45); }
+.quick-action-manual     { border-color: rgba(217, 119, 6, 0.45); }
+.quick-action-biometric  { border-color: rgba(15, 118, 110, 0.4); }
+.quick-action-payroll    { border-color: rgba(46, 125, 82, 0.35); }
+
+/* --- System Readiness list ------------------------------------------------ */
+
+.readiness-list .list-group-item {
+  padding: 0.6rem 1rem;
+  font-size: 0.9rem;
 }
 
-.quick-action-attendance {
-  border-color: rgba(13, 110, 253, 0.35);
-}
+/* --- Attendance trend chart -----------------------------------------------
+   Chart.js runs with maintainAspectRatio: false so it fills its container.
+   That container must therefore state a height, or the canvas grows to fill
+   whatever space the page offers. Example: without this rule the chart
+   rendered about 1400px tall on the dashboard, pushing the camera feeds far
+   below the fold. */
 
-.quick-action-cctv {
-  border-color: rgba(220, 38, 38, 0.35);
-}
-
-.quick-action-users {
-  border-color: rgba(8, 145, 178, 0.35);
-}
-
-.quick-action-settings {
-  border-color: rgba(107, 114, 128, 0.45);
-}
-
-.quick-action-manual {
-  border-color: rgba(217, 119, 6, 0.45);
+.chart-shell {
+  position: relative;
+  height: 300px;
 }
 
 @media (max-width: 991.98px) {
   .control-lead {
-    max-width: none;
+    max-width: none; /* the narrow measure only helps beside the button grid */
+  }
+}
+
+@media (max-width: 575.98px) {
+  .chart-shell {
+    height: 240px;
   }
 }

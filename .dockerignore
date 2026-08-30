@@ -1,0 +1,15 @@
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.db
+.secret_key
+captures/
+docs/
+tests/
+.vscode
+.idea
+.DS_Store
