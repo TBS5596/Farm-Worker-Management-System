@@ -24,6 +24,15 @@ flowchart LR
     D --> E["payroll<br/>money per worker per week"]
 ```
 
+**Reading this diagram:** raw clock-in and clock-out times go in on the left and
+money comes out on the right, through two stages. The first turns times into
+**hours per person per day**. The second turns those daily hours into **money per
+person per week**.
+
+> **Analogy: a shop's takings.** You do not add up every till receipt for the
+> year in one go. You total each day, then add the days into a week. If one
+> receipt turns out to be wrong, you re-total that one day — not the whole year.
+
 Attendance rows are never read directly by payroll generation. Everything goes
 through the summary table, which is what keeps weekly generation fast for two
 hundred workers.
@@ -151,6 +160,12 @@ flowchart TD
     I --> B
 ```
 
+**Reading this diagram:** for each active worker, add up their daily summaries
+for the week, work out the pay, then decide what to do with the result. The
+three-way branch at the bottom is the important part — a brand new row is
+inserted, an unpaid row is updated, and **a row already marked paid is left
+completely alone**.
+
 **A paid week is never rewritten.** Once `paid_status` is `paid`, regenerating
 skips that row. Payroll is a financial record; silently changing a figure
 somebody has already been paid against would destroy the audit trail.
@@ -168,6 +183,14 @@ setting. So a farm can set one rate for everyone and override per person.
 Daily counts for the dashboard chart. Returns labels and series ready for
 Chart.js — the shaping is here rather than in the template so the API can serve
 the same data.
+
+## What it produces
+
+Each row here is one worker for one week. Note that the hours, the rate, the
+gross, both deductions and the net are all stored — not just the final figure —
+so a worker who queries a payment can be shown how it was reached:
+
+![Generated payroll showing hours, overtime, gross, NAPSA, NHIMA and net pay](../images/payroll.png)
 
 ## Gotchas
 

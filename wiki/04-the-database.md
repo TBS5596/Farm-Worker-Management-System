@@ -97,6 +97,25 @@ erDiagram
     }
 ```
 
+**Reading this diagram:** each box is a table, and the rows inside it are its
+columns. The lines show which tables point at which. The symbols on the ends say
+**how many**: `||` means *exactly one*, `o{` means *zero or more*. So the line
+`WORKERS ||--o{ ATTENDANCE` reads **"one worker has zero or more attendance
+records"**.
+
+`PK` marks the **primary key** — the column that uniquely identifies a row, like
+a page number. `FK` marks a **foreign key** — a column holding another table's
+primary key, which is how two tables are joined together.
+
+> **Analogy: a filing cabinet.** `workers` is the drawer of staff folders, one
+> folder per person. `attendance` is a drawer of timesheets, and each timesheet
+> has the staff number written at the top so you know whose it is. That staff
+> number is the foreign key. One folder, many timesheets.
+
+The shape to notice: **`workers` sits in the middle and almost everything hangs
+off it.** If you ever get lost in the schema, start at a worker and follow the
+lines outwards.
+
 ## The tables, grouped by what they are for
 
 ### The core five
@@ -213,6 +232,16 @@ flowchart TD
     LOOP -- done --> SEED["_seed_defaults - default admin, settings, camera"]
 ```
 
+**Reading this diagram:** it is a loop. For every table the code knows about, ask
+the live database what columns it currently has, compare that to what the code
+expects, and add anything missing. Then move to the next table.
+
+> **Analogy: adding a column to a paper form.** You have a filing cabinet full of
+> completed forms and you want to start recording shirt size. You do **not**
+> reprint every form and re-enter everything. You add a new box to the blank
+> forms, and the old ones simply have that box empty. That is exactly what this
+> does — which is also why a newly added column must be allowed to be empty.
+
 The critical property is that it is **additive only**. It adds columns. It never
 drops one, never renames one, never rewrites a row. Consequences:
 
@@ -239,6 +268,18 @@ enforced, a database written by that release would have had nobody who could
 reach Settings or Users — locked out of its own configuration. So the seeding
 routine checks for an active admin, and if there is none, promotes the account
 named `admin`, or else the oldest account.
+
+## Seeing the raw tables in the app
+
+You do not need a SQL client to look at any of this. The **Data Hub** page lists
+every table and lets you browse the raw rows — here it is showing
+`biometric_transactions`, the table that records every verification attempt:
+
+![The Data Hub showing the raw biometric_transactions table](images/data-hub-biometric-transactions.png)
+
+This is a genuinely useful debugging tool. Every column discussed above appears
+exactly as it is stored: the match score, the threshold that was in force at the
+time, and the refusal reason for the attempts that failed.
 
 ## Working with the database by hand
 

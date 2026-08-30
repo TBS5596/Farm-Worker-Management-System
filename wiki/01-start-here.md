@@ -67,9 +67,30 @@ flowchart TB
     end
 ```
 
-You will find this distinction implemented in
+> **Analogy: the bouncer and the guest list.**
+>
+> Imagine a doorman at a private party. There are two ways he could do his job.
+>
+> The **wrong** way: you walk up, he looks at your face, decides "yes, I
+> recognise you from somewhere", and lets you in. He has confirmed you are *a*
+> person he knows — not that you are the person whose name you gave.
+>
+> The **right** way: you say "I'm Mwiza Tembo". He finds *Mwiza Tembo* on the
+> list, looks at the photo next to that one name, and compares it to your face.
+> If it isn't you, you don't get in — even if he recognises you perfectly well as
+> somebody else who is also on the list.
+>
+> Our system is the second doorman. That is the whole trick.
+
+**Reading the diagram above:** the top half shows the wrong doorman — face goes
+in, "best guess" comes out, and the wrong person gets recorded. The bottom half
+shows ours: the typed ID and the face are checked *against each other*, and a
+mismatch is refused with a reason that names exactly what went wrong.
+
+You will find this implemented in
 [`face_engine.verify_worker()`](modules/face_engine.md#verify_worker), and it is
-the reason that function takes a `worker_pk` argument at all.
+the reason that function takes a `worker_pk` argument — the ID being claimed —
+at all.
 
 ## The shape of the thing
 
@@ -94,6 +115,18 @@ flowchart LR
     F <--> IP["RTSP IP cameras"]
     F -. "optional, when there is internet" .-> CL["Firebase storage"]
 ```
+
+**Reading this diagram:** everything with a solid arrow is required and lives in
+the farm office. Two kinds of people use a browser — a worker at the clock-in
+terminal and a supervisor at a desk — and both talk to **one** Python program.
+That program talks to a database (which is just a file on the same machine) and
+to the cameras. The **dotted** arrow is the only thing that needs the internet,
+and it is optional: cut that line and everything else still works.
+
+> **Analogy: a shop till, not a banking system.** A supermarket till does not
+> phone head office to record a sale — it records it locally and syncs later if
+> it can. Same idea here. The farm office machine is self-sufficient, and the
+> cloud is a nice-to-have.
 
 ## What you need to know already
 
@@ -125,6 +158,14 @@ python app.py
 Open <http://localhost:8010>, sign in as `admin` / `admin`, and set a password
 when it asks. Click through Dashboard, Workers, Attendance, Payroll, CCTV and
 Settings. Ten minutes of that will make the next page far easier to follow.
+
+This is what a successful clock-in looks like — the message names the worker, the
+time, **and how confident the face match was**:
+
+![An accepted clock-in, showing the worker name and a 72% face match](images/clockin-accepted.png)
+
+*Every name, code and figure in the screenshots throughout this wiki is invented
+demonstration data. The face thumbnails are deliberately obscured.*
 
 > **If the Biometric page says `Recognizer: correlation-fallback`**, your OpenCV
 > install is wrong and face matching is running on a much weaker fallback. Fix

@@ -67,6 +67,11 @@ flowchart TD
     CHK -- no --> REFUSE["Refused: outside_geofence"]
 ```
 
+**Reading this diagram:** notice the distance is written to the record *before*
+the question about enforcement is even asked. That is the whole design in one
+picture — measuring and refusing are two separate things, and only the first
+happens by default.
+
 **Distance is always recorded. Refusing on it is a setting, and it is off.**
 
 Two reasons, and both are worth understanding because the principle generalises.

@@ -50,6 +50,19 @@ flowchart TB
     FE --> CAM
 ```
 
+**Reading this diagram:** four stacked boxes, each containing the files that
+belong to it. The arrows only ever point **downwards** — a layer may ask the
+layer below for something, never the other way round. So a template can ask a
+route for data, a route can ask a service to do work, and a service can ask the
+database. Nothing skips a level, and nothing reaches back up.
+
+> **Analogy: a restaurant.** The **presentation layer** is the dining room — menus
+> and plates, no cooking. The **application layer** is the waiter: takes your
+> order, checks you're allowed to order it, passes it to the kitchen. The
+> **service layer** is the kitchen, where the actual work happens. The **data
+> layer** is the store cupboard. Diners never walk into the cupboard, and the
+> cupboard never brings you a plate.
+
 Two properties of that arrangement matter, and both were chosen deliberately.
 
 **Only two modules touch the camera.** `cctv_engine` opens it; `face_engine`
@@ -77,8 +90,14 @@ push it down into a function shaped like that if you possibly can.
 
 ## Who calls whom
 
-This is the dependency graph. Notice that it flows one way — there are no cycles
-between service modules, which is what keeps them independently testable.
+This is the dependency graph — an arrow from A to B means "A uses B". Notice it
+flows one way: there are no loops where two modules each need the other. That is
+what lets you test any one of them on its own.
+
+> **Analogy: a recipe's ingredient list.** A cake recipe calls for icing; the
+> icing recipe does not call for cake. Because the dependencies point one way,
+> you can make and taste the icing by itself. If each recipe needed the other,
+> you could never start.
 
 ```mermaid
 flowchart TD
@@ -154,6 +173,19 @@ sequenceDiagram
     J-->>B: HTML
 ```
 
+**Reading this diagram:** time runs downwards and each vertical line is one part
+of the system. Follow the arrows in order: the browser asks for the payroll page;
+before anything else runs, a *hook* checks whether this user is stuck on a
+temporary password; then the *decorators* check they are signed in and allowed;
+only then does the actual page code run; it fetches its data and hands it to a
+template, which produces the HTML that goes back to the browser.
+
+> **Analogy: getting into an office building.** The hook is the turnstile
+> everybody passes through. The decorators are the badge reader on that
+> particular floor. The view function is the person doing the work once you are
+> finally at the right desk. Anyone who fails at the turnstile never reaches the
+> badge reader.
+
 **1. The application factory.** `create_app()` in `app.py` builds the Flask
 object: reads config from environment variables, connects the database, runs
 migrations, seeds defaults, registers the API blueprint, then registers the 49
@@ -195,11 +227,37 @@ flowchart LR
     PATHS --> CLIPS
 ```
 
+**Reading this diagram:** the left side is files sitting on the hard disk; the
+right side is what is inside the database. The dotted arrows mean "is stored
+inside", the solid arrows mean "points at". So a database row does not *contain*
+a photograph — it contains the **name of the file** where the photograph is.
+
+> **Analogy: a library catalogue.** The catalogue card holds the title, author
+> and a shelf number. The book itself is on the shelf. Storing every book inside
+> the catalogue would make it unusable — but a card with no shelf number is
+> useless too, which is why the system always writes the photo before it writes
+> the row that points at it.
+
 The rule: **the database holds records and templates; the filesystem holds
 images and video; rows point at files by relative path.** Relative, not
 absolute, so moving the project or running it in a container does not break
 every stored reference. `paths.py` is the single place those locations are
 defined.
+
+## What the whole thing looks like
+
+The dashboard is the page a farm manager opens first, and it is a fair summary of
+everything above: counts from the database, a chart built from the summary table,
+the state of the camera and recognizer, and the live feeds.
+
+![The dashboard, showing workforce counts, the attendance trend and system readiness](images/dashboard.png)
+
+Two things on it are worth noticing now, because they come up repeatedly later.
+**"Identity Checks Accepted — 88.5%"** is the number that tells a manager whether
+the system's central control is actually working; if it falls, people are being
+recorded manually and the old problems are back. And **"Geofence — Recording
+only"** is the deliberate design decision explained in
+[07 — Design Decisions](07-design-decisions.md#3-record-the-location-but-do-not-enforce-it-by-default).
 
 ## What you can safely ignore at first
 

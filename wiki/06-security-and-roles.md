@@ -111,6 +111,17 @@ flowchart TD
     VIEW --> TPL["template renders;<br/>can() hides controls<br/>this role cannot use"]
 ```
 
+**Reading this diagram:** a request falls through a series of gates, top to
+bottom. Not signed in? Back to the login page. Signed in but on a temporary
+password? Off to change it. Signed in, but this role lacks the permission?
+Refused. Only a request that passes all three reaches the actual page — and even
+then, the page hides the buttons this person cannot use.
+
+> **Analogy: a hotel key card.** The card gets you through the front door (signed
+> in). It works on your own floor but not the executive floor (permissions). And
+> the lift panel greys out the floors you cannot reach (hidden buttons) — but the
+> greyed-out button is a courtesy, not the security. **The lock is the security.**
+
 Enforcement is applied in **two** places, for two different purposes, and the
 distinction matters:
 
@@ -137,6 +148,18 @@ call it. It exists so a supervisor is not shown a button that would refuse them.
 stops them, and that is what the tests assert.
 
 If you add a route, add the decorator. Hiding the link is not enough.
+
+### Seeing the boundary in the app
+
+The Settings page is one of the two pages a supervisor cannot reach at all. It
+holds the values that govern how the system behaves — the match threshold, the
+geofence, the statutory rates:
+
+![The System Settings page, reachable only by an administrator](images/settings.png)
+
+This is why it is administrator-only: **a supervisor who could edit this page
+could set the match threshold to 0 and switch face verification off entirely**,
+which would quietly turn the whole system back into a paper register.
 
 ## Failing closed
 
@@ -202,6 +225,13 @@ admin  settings.update      face_match_threshold 35 -> 45
 
 Nothing in the application updates or deletes an audit row. The log is
 append-only through the interface.
+
+![The audit log showing logins, recorded attendance and refused attempts with reasons](images/audit-log.png)
+
+Notice the refusals in that list — `attendance.rejected … already_clocked_in`,
+`… no_face_detected`, `… worker_not_enrolled`. **The log records what did not
+happen as well as what did**, which is usually what an investigation actually
+needs.
 
 ## Configuration hardening
 

@@ -74,6 +74,10 @@ flowchart LR
     end
 ```
 
+**Reading this diagram:** three groups. One endpoint needs no key at all, because
+the container's own health check calls it. Thirteen only read data. Three change
+something, and two of those go through exactly the same code as the web pages.
+
 | Method | Path | Returns | Parameters |
 | --- | --- | --- | --- |
 | GET | `/health` | Service, engine and enrolment state | — *(open)* |

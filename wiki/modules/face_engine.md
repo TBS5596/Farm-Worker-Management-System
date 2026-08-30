@@ -149,6 +149,11 @@ flowchart TD
     CACHE --> REUSE
 ```
 
+**Reading this diagram:** every face check starts by asking whether the stored
+faces have changed since last time. Usually they have not, so the expensive
+training step is skipped entirely and the saved result is reused. Only enrolling
+or deleting a face forces the work to be redone.
+
 `invalidate()` clears it by hand. Call it after any change to templates made
 outside `enroll_frame` / `clear_templates` — the test suite calls it between
 tests for exactly this reason.
@@ -233,6 +238,13 @@ attendance path** — see [07 — Design Decisions](../07-design-decisions.md#1-
 
 Reads `biometric_transactions` and returns attempts, accepted, rejected,
 acceptance rate and average score for the dashboard.
+
+## Where you see this module in the app
+
+The Biometric page is this module's user interface — enrolment on the right, and
+the outcome of every call to `verify_worker()` in the table below:
+
+![The enrolment centre, showing sample counts per worker and recent verification attempts](../images/enrolment-centre.png)
 
 ## Gotchas
 

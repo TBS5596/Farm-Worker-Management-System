@@ -41,6 +41,15 @@ flowchart TD
     FORCE["force_password_change.html"]
 ```
 
+**Reading this diagram:** one parent template at the top holds the page furniture
+— the header, the sidebar, the script tags. Every admin page inherits from it and
+fills in only the middle. The two dotted boxes are fragments pasted into the
+parent rather than pages of their own.
+
+> **Analogy: headed notepaper.** The letterhead, address and footer are printed
+> once. Each letter only supplies the words in the middle. Change the letterhead
+> and every letter changes with it.
+
 `login.html`, `manual.html` and `force_password_change.html` stand outside the
 admin shell — they are seen by people who are not signed in, or not yet allowed
 past the password change.

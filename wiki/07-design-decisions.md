@@ -28,6 +28,15 @@ flowchart TD
     C --> D7["One process,<br/>no worker pool"]
 ```
 
+**Reading this diagram:** one box at the top — the situation the farm is actually
+in — and everything below it is a consequence. Read each arrow as "…which is why
+we chose…". None of these were preferences; they all fall out of that one box.
+
+> **Analogy: building for a remote cabin, not a city flat.** In a city you plumb
+> into the mains without thinking. At a cabin you fit a water tank, because the
+> mains is not there. Someone arriving later might call the tank primitive — until
+> they notice there is no mains. Every decision below is a water tank.
+
 ---
 
 ## 1. Verification, not identification

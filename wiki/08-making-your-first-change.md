@@ -35,6 +35,10 @@ flowchart LR
     E --> F["6. tests<br/>assert it round-trips"]
 ```
 
+**Reading this diagram:** six steps, left to right, in the order you do them. The
+only surprising one is step 2 — you do not write any database code. Restarting
+the app *is* the migration.
+
 **Step 1 — `models.py`.** Add one line to the `Worker` class:
 
 ```python
