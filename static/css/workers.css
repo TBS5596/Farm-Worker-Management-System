@@ -1,3 +1,11 @@
+/* ===========================================================================
+   workers.css - Workers roster table.
+
+   The rows mix single-line text with badges and button groups of differing
+   heights (status, face-enrolment count, four action buttons), so without
+   vertical centring the shorter cells sit at the top and the row looks ragged.
+   =========================================================================== */
+
 .workers-page .table td,
 .workers-page .table th {
   vertical-align: middle;

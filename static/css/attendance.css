@@ -1,8 +1,22 @@
+/* ===========================================================================
+   attendance.css - the Attendance table's snapshot thumbnails.
+
+   Each attendance row can carry a clock-in photo and a clock-out photo. They
+   are shown as small squares and open full size in #photoModal when clicked
+   (wired up in static/js/attendance.js).
+   =========================================================================== */
+
 .capture-thumb {
   width: 56px;
   height: 56px;
+  /* Faces are captured at whatever aspect ratio the camera provides, so crop
+     to fill the square rather than letterboxing it. */
   object-fit: cover;
   border-radius: 0.4rem;
-  cursor: pointer;
+  cursor: pointer; /* signals that clicking enlarges it */
   border: 2px solid #dee2e6;
+}
+
+.capture-thumb:hover {
+  border-color: #2e7d52;
 }

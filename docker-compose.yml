@@ -1,0 +1,25 @@
+services:
+  fms:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fms-app
+    ports:
+      - "8010:8010"
+    environment:
+      # Set this to a long random string in production so sessions survive a
+      # restart. Generate one with: python -c "import secrets;print(secrets.token_hex(32))"
+      FMS_SECRET_KEY: ${FMS_SECRET_KEY:-}
+      FMS_DEBUG: "off"
+      # The database lives in the mounted data directory, not in the image.
+      FMS_DATABASE_URI: "sqlite:////app/data/fms.db"
+    volumes:
+      # Directories, not a file: a bind mount of a file that does not exist yet
+      # makes Docker create a directory in its place, which breaks SQLite.
+      - ./data:/app/data
+      - ./captures:/app/captures
+    # Uncomment to pass a USB webcam through to the container for clock-in
+    # verification. Find the right index with: ls /dev/video*
+    # devices:
+    #   - "/dev/video0:/dev/video0"
+    restart: unless-stopped

@@ -1,3 +1,19 @@
+{# ===========================================================================
+   login.html - the public page at "/". The only page that does not extend
+   base_admin.html, because it has no sidebar and no signed-in user.
+
+   Two tabs:
+     Worker Clock-In (default)  used at the gate terminal all day. Worker ID +
+                                PIN, a live camera preview, and Clock In or
+                                Clock Out. The PIN alone records nothing - the
+                                server matches the face against the samples
+                                enrolled for that Worker ID.
+     Admin Login                username and password for the dashboard.
+
+   Hidden fields `latitude` and `longitude` are filled by static/js/login.js
+   from the browser's geolocation, so the server can record how far the worker
+   was from the farm. Empty values are fine: the punch still records.
+   =========================================================================== #}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -58,7 +74,9 @@
             </div>
             <img src="{{ url_for('worker_camera_stream') }}" alt="Worker preview feed" />
             <div class="small text-muted mt-2">
-              Ensure your face is clearly visible before you submit.
+              <i class="bi bi-person-check me-1 text-success"></i>
+              Your face is matched against your enrolled record, so stand square to the camera in
+              good light. Someone else's face will not clock you in.
             </div>
           </div>
 
@@ -71,7 +89,7 @@
               <div class="input-group">
                 <span class="input-group-text"><i class="bi bi-person-fill"></i></span>
                 <input type="text" class="form-control form-control-lg" name="worker_id"
-                       placeholder="e.g. FW001" required autofocus />
+                       placeholder="e.g. 0001" required autofocus />
               </div>
             </div>
             <div class="mb-3">
@@ -102,7 +120,7 @@
               </div>
             </div>
             <button class="btn btn-primary btn-lg w-100" type="submit">
-              <i class="bi bi-camera-fill me-2"></i>Submit &amp; Capture Photo
+              <i class="bi bi-camera-fill me-2"></i>Verify Face &amp; Record
             </button>
           </form>
         </div>

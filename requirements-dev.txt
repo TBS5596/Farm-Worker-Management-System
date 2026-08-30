@@ -1,0 +1,18 @@
+# Farm Worker Management System - development and test dependencies
+#
+#   pip install -r requirements-dev.txt
+#
+# Includes everything in requirements.txt, so this is the only file you need
+# when setting up a machine that will run the test suite.
+
+-r requirements.txt
+
+# Test runner. Run the suite with: pytest
+pytest>=8.0.0
+
+# Optional, and only used by tests/test_real_face.py, which enrols a real
+# photograph through the HTTP endpoint and checks that it is accepted for its
+# own worker code and refused when it claims another worker's. Those four
+# tests skip automatically when this package is missing, so the suite still
+# passes without it - it just proves less.
+scikit-image>=0.22.0

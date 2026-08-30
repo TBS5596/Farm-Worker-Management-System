@@ -1,11 +1,20 @@
+/* ===========================================================================
+   manual.css - the in-app manual at /manual.
+
+   The manual is long-form reading rather than a dashboard, so it gets a
+   narrower measure, clear section markers and terminal-style flowchart blocks.
+   =========================================================================== */
+
 body {
-  background-color: #f8f9fa;
+  background-color: #f8f9fa; /* slightly lighter than the dashboard, to read as a document */
 }
 
+/* About 90 characters at the default size - comfortable for prose. */
 .manual-shell {
   max-width: 980px;
 }
 
+/* A green rule to the left of each numbered section, echoing the sidebar. */
 .section-title {
   border-left: 4px solid #2e7d52;
   padding-left: 0.75rem;
@@ -13,6 +22,8 @@ body {
   margin-bottom: 0.75rem;
 }
 
+/* Worked examples ("Example: add a new worker named Moses Banda") sit in a
+   tinted box so they are visibly separate from the surrounding explanation. */
 .example-box {
   background: #f8fbf9;
   border: 1px solid #dbe9df;
@@ -27,6 +38,9 @@ body {
   font-weight: 700;
 }
 
+/* ASCII flowcharts must keep their exact spacing, so whitespace is preserved
+   and the block scrolls sideways on a narrow screen rather than wrapping and
+   turning the diagram into nonsense. */
 .flowchart-block {
   background: #0f172a;
   color: #e2e8f0;

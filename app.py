@@ -1,73 +1,137 @@
-import os
-import sys
-import cv2
+"""Farm Worker Management System - Flask application.
+
+Route layer only. The work lives in focused modules:
+
+    face_engine.py        enrolment and identity verification
+    attendance_service.py the clock-in / clock-out pipeline
+    cctv_engine.py        camera sources, streaming, clips, health
+    payroll_engine.py     daily summaries and computed payroll
+    geofence.py           location checks
+    sync_engine.py        cloud upload with an offline queue
+    security.py           role-based access control
+    exports.py            CSV exports
+    api.py                JSON API (/api/v1)
+"""
+
 import json
-import time
-import numpy as np
-import hashlib
+import os
 import secrets
 import string
-from datetime import datetime, date
-from functools import wraps
-from geopy.point import Point
+import hashlib
+from datetime import date, datetime, timedelta
 
 from flask import (
-    Flask, render_template, request, redirect,
-    url_for, session, flash, send_from_directory, Response, abort
+    Flask, Response, abort, flash, redirect, render_template, request,
+    send_from_directory, session, url_for,
 )
 
+import cctv_engine
+import exports
+import face_engine
+import geofence
+import payroll_engine
+import sync_engine
+from api import api as api_blueprint
+from attendance_service import match_threshold, record_punch
 from database import db
+from migrations import apply_migrations
 from models import (
+    Attendance,
+    AuditLog,
+    BiometricDevice,
+    BiometricTransaction,
+    CCTVFeed,
+    CCTVRecording,
+    CloudSyncMetadata,
+    DailyAttendanceSummary,
+    EventSnapshot,
+    FaceTemplate,
+    HardwareHealthLog,
+    OfflineSyncQueue,
+    Payroll,
     Setting,
     User,
     Worker,
-    Attendance,
-    AuditLog,
-    CCTVFeed,
-    Payroll,
-    BiometricDevice,
-    FaceTemplate,
-    BiometricTransaction,
-    CCTVRecording,
-    EventSnapshot,
-    OfflineSyncQueue,
-    CloudSyncMetadata,
-    DailyAttendanceSummary,
-    HardwareHealthLog,
 )
+from paths import BASE_DIR, CAPTURES_DIR, CLIPS_DIR, FACES_DIR, ensure_dirs
+from security import (
+    ATTENDANCE_MANAGE,
+    BIOMETRIC_MANAGE,
+    CCTV_MANAGE,
+    PAYROLL_MANAGE,
+    ROLE_LABELS,
+    SETTINGS_MANAGE,
+    SYNC_MANAGE,
+    USER_MANAGE,
+    WORKER_MANAGE,
+    admin_required,
+    can,
+    normalize_role,
+    permission_required,
+)
+
+# Upper bound per worker. More samples make matching more robust, but each one
+# is a 40 KB row and a longer training pass, and the gain flattens off after
+# about five. Three is treated as the practical minimum throughout the UI.
+MAX_ENROLL_SAMPLES = 8
+
 
 # ---------------------------------------------------------------------------
 # App factory
 # ---------------------------------------------------------------------------
 
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-CAPTURES_DIR = os.path.join(BASE_DIR, "captures")
+def _resolve_secret_key() -> str:
+    """A stable secret key, so a restart does not log everybody out.
 
-FACE_CASCADE = cv2.CascadeClassifier(
-    os.path.join(cv2.data.haarcascades, "haarcascade_frontalface_default.xml")
-)
-EYE_CASCADE = cv2.CascadeClassifier(
-    os.path.join(cv2.data.haarcascades, "haarcascade_eye.xml")
-)
+    Order: FMS_SECRET_KEY env var, then a generated key cached beside the app.
+    """
+    from_env = os.environ.get("FMS_SECRET_KEY", "").strip()
+    if from_env:
+        return from_env
+
+    key_path = os.path.join(BASE_DIR, ".secret_key")
+    try:
+        if os.path.exists(key_path):
+            cached = open(key_path, "r", encoding="utf-8").read().strip()
+            if cached:
+                return cached
+        generated = secrets.token_hex(32)
+        with open(key_path, "w", encoding="utf-8") as handle:
+            handle.write(generated)
+        os.chmod(key_path, 0o600)
+        return generated
+    except OSError:
+        return secrets.token_hex(32)
 
 
 def create_app() -> Flask:
     app = Flask(__name__)
-    app.config["SECRET_KEY"] = os.urandom(32)
-    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{os.path.join(BASE_DIR, 'fms.db')}"
+    app.config["SECRET_KEY"] = _resolve_secret_key()
+    app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
+        "FMS_DATABASE_URI", f"sqlite:///{os.path.join(BASE_DIR, 'fms.db')}"
+    )
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # enrolment photo uploads
 
     db.init_app(app)
 
     with app.app_context():
         db.create_all()
+        changes = apply_migrations()
+        if changes:
+            app.logger.info("Schema migrations applied: %s", ", ".join(changes))
         _seed_defaults()
 
-    os.makedirs(CAPTURES_DIR, exist_ok=True)
+    ensure_dirs()
 
-    # Register routes
+    app.jinja_env.globals.update(
+        can=can,
+        role_labels=ROLE_LABELS,
+        face_engine_info=face_engine.engine_info,
+    )
+
+    app.register_blueprint(api_blueprint)
     _register_routes(app)
-
     return app
 
 
@@ -75,39 +139,91 @@ def create_app() -> Flask:
 # Seeding
 # ---------------------------------------------------------------------------
 
+DEFAULT_SETTINGS = {
+    "org_name": "FMS Farm",
+    # Camera
+    "camera_index": "0",
+    "camera_sources": "",
+    # Face verification
+    "face_match_threshold": "35",
+    "face_verification_required": "on",
+    "face_require_eyes": "on",
+    # Location
+    "farm_latitude": "",
+    "farm_longitude": "",
+    "geofence_radius_m": "500",
+    "geofence_enforce": "off",
+    # Payroll
+    "standard_day_hours": "8",
+    "overtime_multiplier": "1.5",
+    "napsa_rate": "0.05",
+    "nhima_rate": "0.01",
+    "default_hourly_rate": "15",
+    "shift_start_time": "07:00",
+    "shift_end_time": "17:00",
+    # Recording
+    "clip_recording_enabled": "on",
+    "clip_seconds": "6",
+    # Cloud
+    "firebase_bucket": "",
+    "firebase_project_id": "",
+    "firebase_credentials_json": "",
+}
+
+
 def _seed_defaults() -> None:
-    """Create default admin user and settings rows if they don't exist."""
+    """Create the default admin, settings rows and baseline camera feed."""
     if not User.query.filter_by(username="admin").first():
-        admin = User(username="admin", name="System Administrator", email="admin@example.com", phone="0000000000")
+        admin = User(
+            username="admin",
+            name="System Administrator",
+            email="admin@example.com",
+            phone="0000000000",
+            role="admin",
+            is_active=True,
+            must_change_password=True,  # forced change on first login
+        )
         admin.set_password("admin")
         db.session.add(admin)
 
-    default_settings = {
-        "org_name": "FMS Farm",
-        "camera_index": "0",
-        "camera_sources": "",
-        "firebase_api_key": "",
-        "firebase_bucket": "",
-        "firebase_project_id": "",
-    }
-    for key, value in default_settings.items():
+    for key, value in DEFAULT_SETTINGS.items():
         if not Setting.query.filter_by(key=key).first():
             db.session.add(Setting(key=key, value=value))
 
+    if not Setting.query.filter_by(key="api_key").first():
+        db.session.add(Setting(key="api_key", value=secrets.token_urlsafe(24)))
+
     db.session.commit()
+
+    # Nobody may be locked out by the new permission checks.
+    for user in User.query.all():
+        if (user.role or "").strip().lower() not in ROLE_LABELS:
+            user.role = "admin"
+    db.session.commit()
+
+    # A database created before roles were enforced can easily have no
+    # administrator at all - the first release defaulted every account to
+    # 'supervisor'. Promote one so Users and Settings stay reachable.
+    if not User.query.filter_by(role="admin", is_active=True).first():
+        candidate = (User.query.filter_by(username="admin").first()
+                     or User.query.order_by(User.id.asc()).first())
+        if candidate:
+            candidate.role = "admin"
+            candidate.is_active = True
+            db.session.commit()
+
     _ensure_default_cctv_entries()
 
 
 def _ensure_default_cctv_entries() -> None:
-    """Ensure built-in camera has baseline feed and recording rows."""
+    """Ensure the local camera is registered as a watchable feed."""
     camera_index = _get_setting("camera_index", "0").strip() or "0"
     builtin_url = f"builtin://{camera_index}"
-    builtin_name = f"Built-in Camera {camera_index}"
 
     feed = CCTVFeed.query.filter_by(rtsp_url=builtin_url).first()
     if not feed:
         feed = CCTVFeed(
-            camera_name=builtin_name,
+            camera_name=f"Built-in Camera {camera_index}",
             camera_location="Local Device",
             rtsp_url=builtin_url,
             status="online",
@@ -116,22 +232,8 @@ def _ensure_default_cctv_entries() -> None:
         db.session.add(feed)
         db.session.flush()
 
-    marker_path = f"default://builtin-camera-{camera_index}"
-    existing_marker = CCTVRecording.query.filter_by(
-        camera_id=feed.feed_id,
-        recording_path=marker_path,
-    ).first()
-    if not existing_marker:
-        now = datetime.utcnow()
-        db.session.add(CCTVRecording(
-            camera_id=feed.feed_id,
-            recording_path=marker_path,
-            start_time=now,
-            end_time=now,
-            file_size_bytes=0,
-            storage_location="local",
-            uploaded_to_cloud=False,
-        ))
+    if not CCTVFeed.query.filter_by(is_primary=True).first():
+        feed.is_primary = True
 
     db.session.commit()
 
@@ -141,66 +243,104 @@ def _ensure_default_cctv_entries() -> None:
 # ---------------------------------------------------------------------------
 
 def _get_setting(key: str, default: str = "") -> str:
+    """Read one settings row.
+
+    An empty string counts as unset and falls back to `default`, which is why a
+    cleared field in the Settings form behaves the same as a missing row.
+
+        _get_setting("org_name", "FMS Farm")   -> "Chisamba Green Farms"
+        _get_setting("farm_latitude")          -> "" when never configured
+    """
     row = Setting.query.filter_by(key=key).first()
     return row.value if row and row.value else default
 
 
+def _save_settings(values: dict) -> None:
+    """Upsert several settings in one transaction.
+
+        _save_settings({"geofence_enforce": "on", "geofence_radius_m": "300"})
+    """
+    for key, value in values.items():
+        row = Setting.query.filter_by(key=key).first()
+        if row:
+            row.value = value
+        else:
+            db.session.add(Setting(key=key, value=value))
+    db.session.commit()
+
+
 def _generate_password(length: int = 8) -> str:
-    """Generate a random alphanumeric password."""
+    """A temporary password for a new or reset account, e.g. "T7hQ2mVx91".
+
+    Shown once in a flash message and never stored in plain text. The account
+    is flagged must_change_password, so it cannot be used indefinitely.
+    """
     alphabet = string.ascii_letters + string.digits
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
 def _log_audit(action: str, details: str = "") -> None:
-    """Write an audit log entry. Safe to call inside any request context."""
+    """Append to the audit trail.
+
+        _log_audit("worker.add", "Added worker 0009 - Moses Banda")
+
+    Safe to call anywhere: outside a request there is no session or IP, so it
+    records the actor as "system". A failure here must never break the action
+    being audited, hence the broad rollback.
+    """
     try:
         username = session.get("admin_username", "system")
-        ip = request.remote_addr or "—"
+        ip = request.remote_addr or "-"
     except RuntimeError:
-        username, ip = "system", "—"
+        username, ip = "system", "-"
     try:
-        db.session.add(AuditLog(
-            username=username, action=action, details=details, ip_address=ip
-        ))
+        db.session.add(AuditLog(username=username, action=action, details=details, ip_address=ip))
         db.session.commit()
     except Exception:
         db.session.rollback()
 
 
-def _normalize_coordinates(lat_raw, lon_raw) -> tuple[float | None, float | None]:
-    """Validate and normalize frontend latitude/longitude using geopy."""
-    if lat_raw in (None, "") or lon_raw in (None, ""):
-        return None, None
-    try:
-        point = Point(float(lat_raw), float(lon_raw))
-        return float(point.latitude), float(point.longitude)
-    except Exception:
-        return None, None
-
-
 def _pin_fingerprint(pin: str) -> str:
+    """SHA-256 of a PIN, used only to enforce PIN uniqueness across workers.
+
+    Not a biometric: the biometric template lives in `face_templates`.
+    """
     return hashlib.sha256(pin.encode("utf-8")).hexdigest()
 
 
 def _is_pin_unique(pin: str, exclude_worker_id: str | None = None) -> bool:
-    fp = _pin_fingerprint(pin)
-    query = Worker.query.filter_by(pin_fingerprint=fp)
+    """True when no other worker already uses this PIN.
+
+    Shared PINs would make the ID+PIN half of a clock-in ambiguous, so they are
+    refused. `exclude_worker_id` lets a worker keep their own PIN while being
+    edited:
+
+        _is_pin_unique("4321")                            -> False if taken
+        _is_pin_unique("4321", exclude_worker_id="0003")  -> True for 0003
+    """
+    query = Worker.query.filter_by(pin_fingerprint=_pin_fingerprint(pin))
     if exclude_worker_id:
         query = query.filter(Worker.worker_id != exclude_worker_id)
     return query.first() is None
 
 
 def _generate_worker_id() -> str:
+    """The next free 4-digit worker code: "0001", "0002", ...
+
+    Takes the highest numeric code in use and counts up, then confirms the
+    candidate is actually free - so an imported record already holding "0002"
+    is skipped rather than colliding. Non-numeric legacy codes are ignored when
+    finding the maximum.
+    """
     max_seq = 0
     for row in Worker.query.with_entities(Worker.worker_id).all():
-        existing_id = (row.worker_id or "").strip()
-        if existing_id.isdigit():
-            max_seq = max(max_seq, int(existing_id))
+        existing = (row.worker_id or "").strip()
+        if existing.isdigit():
+            max_seq = max(max_seq, int(existing))
 
     next_seq = max_seq + 1
     if next_seq > 9999:
         raise ValueError("Worker ID sequence exceeded 4 digits")
-
     while True:
         candidate = f"{next_seq:04d}"
         if not Worker.query.filter_by(worker_id=candidate).first():
@@ -208,407 +348,109 @@ def _generate_worker_id() -> str:
         next_seq += 1
 
 
-def _coerce_camera_source(source_value):
-    if isinstance(source_value, int):
-        return source_value
-    source_text = str(source_value).strip()
-    if source_text.isdigit():
-        return int(source_text)
-    return source_text
+def _parse_date(raw: str, fallback: date | None = None) -> date | None:
+    """Parse an HTML date input ("2026-08-23"), or return the fallback.
 
-
-def _get_camera_sources() -> list[dict]:
-    """Return configured camera sources or fallback to the built-in camera."""
-    configured = _get_setting("camera_sources", "").strip()
-    sources: list[dict] = []
-
-    if configured:
-        try:
-            parsed = json.loads(configured)
-            if isinstance(parsed, list):
-                for idx, item in enumerate(parsed):
-                    if not isinstance(item, dict):
-                        continue
-                    source = item.get("source")
-                    if source is None or str(source).strip() == "":
-                        continue
-                    source_type = str(item.get("type", "usb")).strip().lower() or "usb"
-                    name = str(item.get("name", f"Camera {idx + 1}")).strip() or f"Camera {idx + 1}"
-                    sources.append({
-                        "name": name,
-                        "type": source_type,
-                        "source": _coerce_camera_source(source),
-                    })
-        except json.JSONDecodeError:
-            sources = []
-
-    if not sources:
-        sources.append({
-            "name": "Built-in Camera",
-            "type": "builtin",
-            "source": _coerce_camera_source(_get_setting("camera_index", "0")),
-        })
-
-    return sources
-
-
-def _verify_face_on_camera(timeout_seconds: float = 3.0, required_hits: int = 2) -> bool:
-    """Validate worker presence by requiring repeated face+eye detections."""
-    try:
-        primary_source = _get_camera_sources()[0]["source"]
-        cap = _open_camera(primary_source)
-        if not cap.isOpened():
-            cap.release()
-            fallback_source = _coerce_camera_source(_get_setting("camera_index", "0"))
-            cap = _open_camera(fallback_source)
-        if not cap.isOpened():
-            cap.release()
-            return False
-
-        start = time.time()
-        hits = 0
-        while time.time() - start < timeout_seconds:
-            ok, frame = cap.read()
-            if not ok:
-                continue
-            detections = _detect_faces_and_eyes(frame)
-            valid = any(len(item.get("eyes", [])) > 0 for item in detections)
-            if valid:
-                hits += 1
-                if hits >= required_hits:
-                    cap.release()
-                    return True
-        cap.release()
-        return False
-    except Exception:
-        return False
-
-
-def _capture_photo(worker_id: str, require_face: bool = False) -> tuple[str | None, str]:
-    """Capture a single frame from a camera source and save it locally.
-
-    Returns (relative_path, status) where status is one of:
-      - "ok"
-      - "no_face"
-      - "camera_error"
+    Returning None rather than raising lets each route decide whether a bad
+    date is an error to report or a field to ignore.
     """
     try:
-        primary_source = _get_camera_sources()[0]["source"]
-        cap = _open_camera(primary_source)
-        if not cap.isOpened():
-            cap.release()
-            fallback_source = _coerce_camera_source(_get_setting("camera_index", "0"))
-            cap = _open_camera(fallback_source)
-        if not cap.isOpened():
-            cap.release()
-            return None, "camera_error"
-
-        # Capture a clean, raw frame from camera buffer without drawing overlays.
-        ret, frame = cap.read()
-        for _ in range(2):
-            ok, newer = cap.read()
-            if ok:
-                ret, frame = ok, newer
-        cap.release()
-
-        if not ret:
-            return None, "camera_error"
-
-        timestamp_str = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        filename = f"{worker_id}_{timestamp_str}.jpg"
-        filepath = os.path.join(CAPTURES_DIR, filename)
-        cv2.imwrite(filepath, frame)
-        return os.path.join("captures", filename), "ok"
-    except Exception:
-        return None, "camera_error"
+        return datetime.strptime((raw or "").strip(), "%Y-%m-%d").date()
+    except ValueError:
+        return fallback
 
 
-def _upload_to_firebase(local_path: str) -> str | None:
-    """Upload a file to Firebase Storage and return the public URL.
-    Returns None if Firebase is not configured or upload fails.
+def _float_or_none(raw):
+    """Parse a number from a form field, or None.
+
+    None is meaningful here: a blank hourly rate means "use the default rate
+    from Settings", which is different from a rate of zero.
     """
-    api_key = _get_setting("firebase_api_key")
-    bucket = _get_setting("firebase_bucket")
-    if not api_key or not bucket:
-        return None
-
     try:
-        import firebase_admin
-        from firebase_admin import credentials, storage
-
-        if not firebase_admin._apps:
-            cred = credentials.Certificate({
-                "type": "service_account",
-                "project_id": _get_setting("firebase_project_id"),
-                "private_key_id": "placeholder",
-                "private_key": api_key,
-                "client_email": f"firebase-adminsdk@{_get_setting('firebase_project_id')}.iam.gserviceaccount.com",
-                "token_uri": "https://oauth2.googleapis.com/token",
-            })
-            firebase_admin.initialize_app(cred, {"storageBucket": bucket})
-
-        bucket_obj = storage.bucket()
-        blob_name = os.path.basename(local_path)
-        blob = bucket_obj.blob(f"captures/{blob_name}")
-        blob.upload_from_filename(local_path)
-        blob.make_public()
-        return blob.public_url
-    except Exception:
+        value = float(raw)
+        return value
+    except (TypeError, ValueError):
         return None
 
 
 def _build_attendance_sessions(rows: list[Attendance]) -> list:
     """Build display sessions from Attendance rows, newest first."""
+    # Three bulk queries instead of per-row lookups. The first release did a
+    # query per row for the worker and another for its snapshots, so a 400-row
+    # page issued about 800 queries; this issues three.
+    worker_lookup = {w.id: w for w in Worker.query.all()}
+
+    attendance_ids = [row.attendance_id for row in rows]
+    snapshots_by_attendance: dict[int, list] = {}
+    if attendance_ids:
+        snapshot_rows = (EventSnapshot.query
+                         .filter(EventSnapshot.attendance_id.in_(attendance_ids))
+                         .order_by(EventSnapshot.captured_at.asc()).all())
+        for snapshot in snapshot_rows:
+            snapshots_by_attendance.setdefault(snapshot.attendance_id, []).append(snapshot)
+
+    clips_by_attendance: dict[int, str] = {}
+    if attendance_ids:
+        clip_rows = (CCTVRecording.query
+                     .filter(CCTVRecording.attendance_id.in_(attendance_ids))
+                     .order_by(CCTVRecording.recording_id.asc()).all())
+        for clip in clip_rows:
+            clips_by_attendance[clip.attendance_id] = clip.recording_path
+
     sessions = []
     for row in rows:
-        worker = Worker.query.get(row.worker_id)
+        worker = worker_lookup.get(row.worker_id)
         worker_code = worker.worker_id if worker else f"W{row.worker_id}"
-        worker_name = worker.name if worker else worker_code
+        snapshots = snapshots_by_attendance.get(row.attendance_id, [])
 
-        snapshots = EventSnapshot.query.filter_by(attendance_id=row.attendance_id).order_by(EventSnapshot.captured_at.asc()).all()
         in_image = next((s.file_path for s in snapshots if "check_in" in (s.snapshot_type or "")), None)
         out_image = next((s.file_path for s in snapshots if "check_out" in (s.snapshot_type or "")), None)
-
-        # Backward-compatible fallback: if typed snapshots are not present,
-        # use first as check-in and last as check-out when available.
+        # Backward compatibility: snapshots recorded before the type was stored
+        # have a plain "photo" type, so fall back to first-as-in, last-as-out.
         if not in_image and snapshots:
             in_image = snapshots[0].file_path
         if not out_image and len(snapshots) > 1:
             out_image = snapshots[-1].file_path
 
-        sort_key = row.check_out_time or row.check_in_time
+        hours = None
+        if row.check_in_time and row.check_out_time:
+            hours = round((row.check_out_time - row.check_in_time).total_seconds() / 3600.0, 2)
+
         sessions.append({
+            "attendance_id": row.attendance_id,
             "worker_id": worker_code,
-            "worker_name": worker_name,
-            "date": row.check_in_time.strftime("%d %b %Y") if row.check_in_time else "—",
+            "worker_name": worker.name if worker else worker_code,
+            "date": row.check_in_time.strftime("%d %b %Y") if row.check_in_time else "-",
             "clock_in_time": row.check_in_time.strftime("%H:%M:%S") if row.check_in_time else None,
             "clock_in_image": in_image,
             "clock_out_time": row.check_out_time.strftime("%H:%M:%S") if row.check_out_time else None,
             "clock_out_image": out_image,
-            "_sort_key": sort_key,
+            "hours": hours,
+            "verified_by_face": bool(row.verified_by_face),
+            "match_score": row.check_in_match_score,
+            "within_geofence": row.within_geofence,
+            "distance_m": row.distance_from_farm_m,
+            "clip_path": clips_by_attendance.get(row.attendance_id),
+            "_sort_key": row.check_out_time or row.check_in_time,
         })
 
-    sessions.sort(key=lambda s: s["_sort_key"], reverse=True)
+    sessions.sort(key=lambda item: item["_sort_key"], reverse=True)
     return sessions
 
 
-def _open_camera(source):
-    """Open a VideoCapture using the best backend for the current platform."""
-    if sys.platform.startswith("linux") and isinstance(source, int):
-        # On Linux, avoid FFMPEG fallback for integer device indexes because
-        # hosts without /dev/video* emit noisy "index out of range" errors.
-        device_path = f"/dev/video{source}"
-        if not os.path.exists(device_path):
-            return cv2.VideoCapture()
-
-        cap = cv2.VideoCapture(source, cv2.CAP_V4L2)
-        if not cap.isOpened():
-            cap.release()
-            return cv2.VideoCapture()
-        return cap
-
-    if sys.platform == "darwin":
-        backend = cv2.CAP_AVFOUNDATION
-    elif sys.platform == "win32":
-        backend = cv2.CAP_DSHOW
-    else:
-        backend = cv2.CAP_V4L2
-    cap = cv2.VideoCapture(source, backend)
-    if not cap.isOpened():
-        # Try without a backend hint as last resort
-        cap.release()
-        cap = cv2.VideoCapture(source)
-    return cap
-
-
-def _detect_faces_and_eyes(frame) -> list[dict]:
-    """Return face and eye bounding boxes for the provided frame."""
-    if FACE_CASCADE.empty() or EYE_CASCADE.empty():
-        return []
-
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    faces = FACE_CASCADE.detectMultiScale(
-        gray,
-        scaleFactor=1.2,
-        minNeighbors=5,
-        minSize=(45, 45),
+def _stream_response(source, overlay: bool = True) -> Response:
+    fallback = cctv_engine.fallback_source()
+    return Response(
+        cctv_engine.frame_generator(source, fallback, overlay_faces=overlay, overlay_motion=overlay),
+        mimetype="multipart/x-mixed-replace; boundary=frame",
     )
 
-    detections = []
-    for (x, y, w, h) in faces:
-        roi_gray = gray[y:y + h, x:x + w]
-        eyes = EYE_CASCADE.detectMultiScale(
-            roi_gray,
-            scaleFactor=1.15,
-            minNeighbors=6,
-            minSize=(15, 15),
-        )
-        detections.append({
-            "face": (x, y, w, h),
-            "eyes": eyes,
-        })
-    return detections
 
-
-def _draw_detections(frame, detections: list[dict]) -> None:
-    """Overlay face and eye boxes directly on a frame."""
-    for item in detections:
-        x, y, w, h = item["face"]
-        cv2.rectangle(frame, (x, y), (x + w, y + h), (40, 220, 40), 2)
-        cv2.putText(
-            frame,
-            "Face",
-            (x, max(20, y - 8)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.55,
-            (40, 220, 40),
-            2,
-            cv2.LINE_AA,
-        )
-        for (ex, ey, ew, eh) in item["eyes"]:
-            cv2.rectangle(frame, (x + ex, y + ey), (x + ex + ew, y + ey + eh), (255, 160, 20), 2)
-
-
-def _detect_motion_regions(prev_gray, frame) -> tuple:
-    """Detect movement regions between frames and return (boxes, current_gray)."""
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    gray = cv2.GaussianBlur(gray, (21, 21), 0)
-
-    if prev_gray is None:
-        return [], gray
-
-    frame_delta = cv2.absdiff(prev_gray, gray)
-    thresh = cv2.threshold(frame_delta, 25, 255, cv2.THRESH_BINARY)[1]
-    thresh = cv2.dilate(thresh, None, iterations=2)
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    boxes = []
-    for contour in contours:
-        if cv2.contourArea(contour) < 1800:
-            continue
-        x, y, w, h = cv2.boundingRect(contour)
-        boxes.append((x, y, w, h))
-
-    return boxes, gray
-
-
-def _draw_motion_regions(frame, boxes: list[tuple]) -> None:
-    """Draw movement boxes on frame for live camera feedback."""
-    for (x, y, w, h) in boxes:
-        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 185, 255), 2)
-        cv2.putText(
-            frame,
-            "Motion",
-            (x, max(20, y - 6)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (0, 185, 255),
-            2,
-            cv2.LINE_AA,
-        )
-
-
-def _build_camera_unavailable_frame(message: str):
-    """Create a readable fallback frame when a camera cannot be opened."""
-    frame = np.zeros((420, 760, 3), dtype=np.uint8)
-    frame[:, :] = (22, 28, 36)
-
-    cv2.putText(
-        frame,
-        "Camera Stream Unavailable",
-        (36, 120),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.95,
-        (245, 245, 245),
-        2,
-        cv2.LINE_AA,
-    )
-    cv2.putText(
-        frame,
-        message,
-        (36, 170),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.62,
-        (180, 210, 255),
-        2,
-        cv2.LINE_AA,
-    )
-    cv2.putText(
-        frame,
-        "Tip: attach a webcam or set a valid RTSP/USB camera source in CCTV settings.",
-        (36, 220),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.5,
-        (180, 180, 180),
-        1,
-        cv2.LINE_AA,
-    )
-    return frame
-
-
-def _camera_frame_generator(source, fallback_source, overlay_faces: bool = False, overlay_motion: bool = False):
-    """Yield clean MJPEG frames from a camera source with built-in fallback."""
-    cap = _open_camera(source)
-    if not cap.isOpened():
-        cap.release()
-        cap = _open_camera(fallback_source)
-        if not cap.isOpened():
-            cap.release()
-            while True:
-                frame = _build_camera_unavailable_frame("No camera device detected on this host")
-                ok, buffer = cv2.imencode(".jpg", frame)
-                if ok:
-                    frame_bytes = buffer.tobytes()
-                    yield (
-                        b"--frame\r\n"
-                        b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
-                    )
-                time.sleep(1.0)
-
-    # Warm up: discard the first few frames so the sensor stabilises
-    for _ in range(3):
-        cap.read()
-
-    prev_gray = None
-    try:
-        while True:
-            ok, frame = cap.read()
-            if not ok:
-                break
-
-            if overlay_motion:
-                boxes, prev_gray = _detect_motion_regions(prev_gray, frame)
-                _draw_motion_regions(frame, boxes)
-
-            if overlay_faces:
-                detections = _detect_faces_and_eyes(frame)
-                _draw_detections(frame, detections)
-
-            ok, buffer = cv2.imencode(".jpg", frame)
-            if not ok:
-                continue
-            frame_bytes = buffer.tobytes()
-            yield (
-                b"--frame\r\n"
-                b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
-            )
-            time.sleep(0.04)
-    finally:
-        cap.release()
-
-
-# ---------------------------------------------------------------------------
-# Auth decorator
-# ---------------------------------------------------------------------------
-
-def admin_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if not session.get("admin_logged_in"):
-            flash("Please log in to access the dashboard.", "warning")
-            return redirect(url_for("login"))
-        return f(*args, **kwargs)
-    return decorated
+def _real_recordings(limit: int = 150):
+    """Exclude the legacy `default://` marker rows from the UI."""
+    return (CCTVRecording.query
+            .filter(~CCTVRecording.recording_path.like("default://%"))
+            .order_by(CCTVRecording.recording_id.desc()).limit(limit).all())
 
 
 # ---------------------------------------------------------------------------
@@ -617,8 +459,28 @@ def admin_required(f):
 
 def _register_routes(app: Flask) -> None:
 
-    # ---- Serve captured images ------------------------------------------ #
+    @app.before_request
+    def _enforce_password_change():
+        """Lock the dashboard for anyone still on a temporary password.
 
+        Without this, the shipped admin/admin could be left in place forever.
+        The allow-list is the minimum needed to actually change it, plus logout
+        and the public manual.
+        """
+        """A signed-in user with a temporary password can only change it."""
+        if not session.get("admin_logged_in") or not session.get("must_change_password"):
+            return None
+        allowed = {"force_password_change", "change_password", "logout", "manual", "static"}
+        if (request.endpoint or "") in allowed:
+            return None
+        return redirect(url_for("force_password_change"))
+
+    # ---- Files ----------------------------------------------------------- #
+
+    # Serves attendance snapshots, enrolment reference crops and event clips
+    # from captures/. Sign-in required: these are photographs of workers.
+    # The <path:> converter allows the subdirectories, e.g.
+    # /captures/clips/clip_20260828_071205_attendance_in.mp4
     @app.route("/captures/<path:filename>")
     @admin_required
     def captured_image(filename):
@@ -626,118 +488,75 @@ def _register_routes(app: Flask) -> None:
 
     @app.route("/worker-camera-stream")
     def worker_camera_stream():
-        """Public preview feed for worker clock-in page."""
-        sources = _get_camera_sources()
-        source = sources[0]["source"]
-        fallback_source = _coerce_camera_source(_get_setting("camera_index", "0"))
-        return Response(
-            _camera_frame_generator(source, fallback_source, overlay_faces=True, overlay_motion=True),
-            mimetype="multipart/x-mixed-replace; boundary=frame",
-        )
+        """Public preview feed for the worker clock-in page."""
+        return _stream_response(cctv_engine.primary_source()["source"])
+
+    @app.route("/camera-stream/<int:camera_idx>")
+    @admin_required
+    def camera_stream(camera_idx: int):
+        sources = cctv_engine.get_camera_sources()
+        if camera_idx < 0 or camera_idx >= len(sources):
+            abort(404)
+        return _stream_response(sources[camera_idx]["source"])
 
     # ---- Login / Logout -------------------------------------------------- #
 
     @app.route("/", methods=["GET", "POST"])
     def login():
         if request.method == "POST":
-            mode = request.form.get("mode")  # "admin" or "worker"
+            mode = request.form.get("mode")
 
             if mode == "admin":
                 username = request.form.get("username", "").strip()
                 password = request.form.get("password", "")
                 user = User.query.filter_by(username=username).first()
                 if user and user.check_password(password):
+                    if not user.is_active:
+                        flash("That account has been deactivated. Contact an administrator.", "danger")
+                        return render_template("login.html", org_name=_get_setting("org_name", "FMS Farm"))
                     session["admin_logged_in"] = True
                     session["admin_username"] = username
-                    _log_audit("login", f"Admin '{username}' logged in")
+                    session["admin_user_id"] = user.id
+                    session["admin_role"] = normalize_role(user.role)
+                    session["must_change_password"] = bool(user.must_change_password)
+                    user.last_login_at = datetime.utcnow()
+                    db.session.commit()
+                    _log_audit("login", f"Admin '{username}' logged in as {session['admin_role']}")
+                    if user.must_change_password:
+                        return redirect(url_for("force_password_change"))
                     return redirect(url_for("dashboard"))
                 flash("Invalid admin credentials.", "danger")
 
+            # --- Worker clock in / clock out -------------------------------
+            # No session is created: a worker never signs in to the dashboard.
+            # Credentials are checked here, then record_punch does the identity
+            # match, the geofence check and the recording.
             elif mode == "worker":
-                worker_id = request.form.get("worker_id", "").strip().upper()
+                worker_code = request.form.get("worker_id", "").strip().upper()
                 pin = request.form.get("pin", "").strip()
-                log_type = request.form.get("log_type", "IN")  # "IN" or "OUT"
-                lat, lon = _normalize_coordinates(
-                    request.form.get("latitude"),
-                    request.form.get("longitude"),
+                log_type = request.form.get("log_type", "IN")
+                lat, lon = geofence.normalize_coordinates(
+                    request.form.get("latitude"), request.form.get("longitude")
                 )
 
-                worker = Worker.query.filter_by(worker_id=worker_id).filter(Worker.status == "active").first()
+                worker = (Worker.query.filter_by(worker_id=worker_code)
+                          .filter(Worker.status == "active").first())
                 if not worker or not worker.check_pin(pin):
                     flash("Worker ID or PIN is incorrect.", "danger")
                     return render_template("login.html", org_name=_get_setting("org_name", "FMS Farm"))
 
-                face_verified = False
-                if log_type == "IN":
-                    face_verified = _verify_face_on_camera()
-                    if not face_verified:
-                        _log_audit("attendance.verification_failed", f"Face verification failed for {worker_id}")
-                        flash("Face verification failed. Please position your face clearly and try again.", "danger")
-                        return render_template("login.html", org_name=_get_setting("org_name", "FMS Farm"))
-
-                # Capture clean snapshot (no live feed overlays).
-                local_path, capture_status = _capture_photo(worker_id, require_face=False)
-                if capture_status != "ok" or not local_path:
-                    _log_audit(
-                        "attendance.capture_failed",
-                        f"Capture failed for {worker_id} during {log_type}",
-                    )
-                    flash(
-                        "Camera capture failed. Attendance was not recorded. Please try again.",
-                        "danger",
-                    )
-                    return render_template("login.html", org_name=_get_setting("org_name", "FMS Farm"))
-
-                image_path = local_path  # default to local
-
-                if local_path:
-                    firebase_url = _upload_to_firebase(os.path.join(BASE_DIR, local_path))
-                    if firebase_url:
-                        image_path = firebase_url
-
-                if log_type == "OUT":
-                    attendance_row = (
-                        Attendance.query
-                        .filter_by(worker_id=worker.id)
-                        .filter(Attendance.check_out_time.is_(None))
-                        .order_by(Attendance.check_in_time.desc())
-                        .first()
-                    )
-                    if not attendance_row:
-                        flash("No open check-in found. Please clock in first.", "danger")
-                        return render_template("login.html", org_name=_get_setting("org_name", "FMS Farm"))
-                    attendance_row.check_out_time = datetime.utcnow()
-                    if lat is not None:
-                        attendance_row.latitude = lat
-                    if lon is not None:
-                        attendance_row.longitude = lon
+                outcome = record_punch(app, worker, log_type, lat, lon)
+                flash(outcome["message"], outcome["category"])
+                if outcome["ok"]:
+                    _log_audit("attendance.recorded",
+                               f"{outcome['log_type']} for {worker_code} "
+                               f"(attendance_id={outcome['attendance_id']}, "
+                               f"match={outcome['score']})")
                 else:
-                    attendance_row = Attendance(
-                        worker_id=worker.id,
-                        check_in_time=datetime.utcnow(),
-                        latitude=lat,
-                        longitude=lon,
-                        verified_by_cctv=face_verified,
-                    )
-                    db.session.add(attendance_row)
-                    db.session.flush()
+                    _log_audit("attendance.rejected",
+                               f"{outcome['log_type']} refused for {worker_code}: {outcome['code']}")
 
-                db.session.add(EventSnapshot(
-                    attendance_id=attendance_row.attendance_id,
-                    snapshot_type="photo_check_in" if log_type == "IN" else "photo_check_out",
-                    file_path=image_path,
-                ))
-                db.session.commit()
-                _log_audit("attendance.recorded", f"Recorded {log_type} for {worker_id} (attendance_id={attendance_row.attendance_id})")
-
-                flash(
-                    f"Welcome, {worker.name}! Clock-{log_type} recorded at "
-                    f"{datetime.utcnow().strftime('%H:%M:%S')}",
-                    "success",
-                )
-
-        org_name = _get_setting("org_name", "FMS Farm")
-        return render_template("login.html", org_name=org_name)
+        return render_template("login.html", org_name=_get_setting("org_name", "FMS Farm"))
 
     @app.route("/logout")
     def logout():
@@ -745,108 +564,132 @@ def _register_routes(app: Flask) -> None:
         session.clear()
         return redirect(url_for("login"))
 
-    # ---- Dashboard ------------------------------------------------------- #
+    @app.route("/profile/password-change", methods=["GET"])
+    @admin_required
+    def force_password_change():
+        return render_template(
+            "force_password_change.html",
+            active_page="dashboard",
+            org_name=_get_setting("org_name", "FMS Farm"),
+        )
+
+    @app.route("/profile/change-password", methods=["POST"])
+    @admin_required
+    def change_password():
+        current_password = request.form.get("current_password", "")
+        new_password = request.form.get("new_password", "")
+        confirm_password = request.form.get("confirm_password", "")
+        username = session.get("admin_username")
+        user = User.query.filter_by(username=username).first()
+
+        target = url_for("force_password_change") if session.get("must_change_password") \
+            else (request.referrer or url_for("dashboard"))
+
+        if not user or not user.check_password(current_password):
+            flash("Current password is incorrect.", "danger")
+            return redirect(target)
+        if len(new_password) < 8:
+            flash("New password must be at least 8 characters.", "danger")
+            return redirect(target)
+        if new_password != confirm_password:
+            flash("New passwords do not match.", "danger")
+            return redirect(target)
+        if new_password == current_password:
+            flash("New password must be different from the current one.", "danger")
+            return redirect(target)
+
+        user.set_password(new_password)
+        user.must_change_password = False
+        db.session.commit()
+        session["must_change_password"] = False
+        _log_audit("user.change_password", f"'{username}' changed own password")
+        flash("Password changed successfully.", "success")
+        return redirect(url_for("dashboard"))
+
+    # ---- Dashboard -------------------------------------------------------- #
 
     @app.route("/dashboard")
     @admin_required
     def dashboard():
         workers = Worker.query.order_by(Worker.created_at.desc()).all()
         active_workers_count = sum(1 for w in workers if (w.status or "").lower() == "active")
-        attendance_rows = Attendance.query.order_by(Attendance.check_in_time.asc()).limit(400).all()
+        attendance_rows = Attendance.query.order_by(Attendance.check_in_time.desc()).limit(400).all()
         sessions = _build_attendance_sessions(attendance_rows)
-        today_count = sum(1 for s in sessions if s["_sort_key"].date() == date.today())
-        camera_sources = _get_camera_sources()
-        org_name = _get_setting("org_name", "FMS Farm")
+        today_count = sum(1 for s in sessions if s["_sort_key"] and s["_sort_key"].date() == date.today())
+
+        # sample_counts() is one grouped query returning {worker.id: samples},
+        # e.g. {1: 3, 2: 3, 7: 0} - so the "faces enrolled" figure and the
+        # per-row badges cost a single query rather than one per worker.
+        enrolled = face_engine.sample_counts()
+        farm_lat, farm_lon = geofence.farm_centre()
+
         return render_template(
             "dashboard.html",
             workers=workers,
             active_workers_count=active_workers_count,
             sessions=sessions,
             today_count=today_count,
-            camera_sources=camera_sources,
+            camera_sources=cctv_engine.get_camera_sources(),
+            enrolled_count=sum(1 for w in workers if enrolled.get(w.id, 0) > 0),
+            verification=face_engine.accuracy_snapshot(),
+            engine=face_engine.engine_info(),
+            sync_stats=sync_engine.queue_stats(),
+            open_sessions=sum(1 for s in sessions if s["clock_in_time"] and not s["clock_out_time"]),
+            geofence_ready=farm_lat is not None and farm_lon is not None,
+            geofence_enforced=geofence.is_enforced(),
+            trend=payroll_engine.attendance_trend(14),
             active_page="dashboard",
-            org_name=org_name,
+            org_name=_get_setting("org_name", "FMS Farm"),
         )
+
+    # ---- Workers ---------------------------------------------------------- #
 
     @app.route("/workers", methods=["GET", "POST"])
     @admin_required
     def workers_page():
         if request.method == "POST":
-            # Compatibility path for stale cached forms posting back to /workers.
             flash("Form target was outdated. Please retry the action.", "warning")
             return redirect(url_for("workers_page"))
 
         workers = Worker.query.order_by(Worker.created_at.desc()).all()
-        org_name = _get_setting("org_name", "FMS Farm")
         return render_template(
             "workers.html",
             workers=workers,
+            face_samples=face_engine.sample_counts(),
+            default_rate=payroll_engine.rates()["default_hourly_rate"],
             active_page="workers",
-            org_name=org_name,
+            org_name=_get_setting("org_name", "FMS Farm"),
         )
-
-    @app.route("/attendance")
-    @admin_required
-    def attendance_page():
-        attendance_rows = Attendance.query.order_by(Attendance.check_in_time.asc()).limit(400).all()
-        sessions = _build_attendance_sessions(attendance_rows)
-        complete_count = sum(1 for s in sessions if s["clock_in_time"] and s["clock_out_time"])
-        in_progress_count = sum(1 for s in sessions if s["clock_in_time"] and not s["clock_out_time"])
-        out_only_count = sum(1 for s in sessions if (not s["clock_in_time"]) and s["clock_out_time"])
-        today_count = sum(1 for s in sessions if s["_sort_key"] and s["_sort_key"].date() == date.today())
-        org_name = _get_setting("org_name", "FMS Farm")
-        return render_template(
-            "attendance.html",
-            sessions=sessions,
-            attendance_stats={
-                "total": len(sessions),
-                "complete": complete_count,
-                "in_progress": in_progress_count,
-                "out_only": out_only_count,
-                "today": today_count,
-            },
-            active_page="attendance",
-            org_name=org_name,
-        )
-
-    # ---- Worker management ---------------------------------------------- #
 
     @app.route("/workers/add", methods=["POST"])
-    @admin_required
+    @permission_required(WORKER_MANAGE)
     def add_worker():
         name = request.form.get("name", "").strip()
         phone_number = request.form.get("phone_number", "").strip()
-        address = request.form.get("address", "").strip()
-        emergency_contact = request.form.get("emergency_contact", "").strip()
         pin = request.form.get("pin", "").strip()
-        department = request.form.get("department", "").strip()
         nrc_number = request.form.get("nrc_number", "").strip()
-        status = request.form.get("status", "active").strip().lower() or "active"
-        enrollment_date_raw = request.form.get("enrollment_date", "").strip()
 
         if not name or not pin or not phone_number:
             flash("Name, Phone Number, and PIN are all required.", "danger")
             return redirect(url_for("workers_page"))
-
         if len(pin) < 4:
             flash("PIN must be at least 4 digits.", "danger")
             return redirect(url_for("workers_page"))
-
         if not _is_pin_unique(pin):
             flash("PIN already exists. Choose a unique PIN for each worker.", "danger")
             return redirect(url_for("workers_page"))
-
         if nrc_number and Worker.query.filter_by(nrc_number=nrc_number).first():
             flash("NRC number already exists for another worker.", "danger")
             return redirect(url_for("workers_page"))
 
         enrollment_date = datetime.utcnow()
-        if enrollment_date_raw:
-            try:
-                enrollment_date = datetime.strptime(enrollment_date_raw, "%Y-%m-%d")
-            except ValueError:
+        raw_date = request.form.get("enrollment_date", "").strip()
+        if raw_date:
+            parsed = _parse_date(raw_date)
+            if not parsed:
                 flash("Enrollment date is invalid.", "danger")
                 return redirect(url_for("workers_page"))
+            enrollment_date = datetime.combine(parsed, datetime.min.time())
 
         worker_id = _generate_worker_id()
         worker = Worker(
@@ -854,22 +697,27 @@ def _register_routes(app: Flask) -> None:
             name=name,
             nrc_number=nrc_number or None,
             phone_number=phone_number,
-            address=address,
-            emergency_contact=emergency_contact,
-            department=department,
+            address=request.form.get("address", "").strip(),
+            emergency_contact=request.form.get("emergency_contact", "").strip(),
+            department=request.form.get("department", "").strip(),
+            hourly_rate=_float_or_none(request.form.get("hourly_rate")),
             enrollment_date=enrollment_date,
-            status=status,
+            status=request.form.get("status", "active").strip().lower() or "active",
             pin_fingerprint=_pin_fingerprint(pin),
         )
         worker.set_pin(pin)
         db.session.add(worker)
         db.session.commit()
-        _log_audit("worker.add", f"Added worker {worker_id} — {name}")
-        flash(f"Worker '{name}' added successfully. Generated ID: {worker_id}", "success")
+        _log_audit("worker.add", f"Added worker {worker_id} - {name}")
+        flash(
+            f"Worker '{name}' added with ID {worker_id}. "
+            "Next step: enrol their face on the Biometric page so they can clock in.",
+            "success",
+        )
         return redirect(url_for("workers_page"))
 
     @app.route("/workers/<int:worker_pk>/update", methods=["POST"])
-    @admin_required
+    @permission_required(WORKER_MANAGE)
     def update_worker(worker_pk):
         worker = Worker.query.get_or_404(worker_pk)
         worker.name = request.form.get("name", "").strip()
@@ -879,7 +727,7 @@ def _register_routes(app: Flask) -> None:
         worker.department = request.form.get("department", "").strip()
         worker.nrc_number = request.form.get("nrc_number", "").strip() or None
         worker.status = request.form.get("status", "active").strip().lower() or "active"
-        enrollment_date_raw = request.form.get("enrollment_date", "").strip()
+        worker.hourly_rate = _float_or_none(request.form.get("hourly_rate"))
 
         if not worker.name or not worker.phone_number:
             flash("Worker name and phone number are required.", "danger")
@@ -891,12 +739,13 @@ def _register_routes(app: Flask) -> None:
                 flash("NRC number already exists for another worker.", "danger")
                 return redirect(url_for("workers_page"))
 
-        if enrollment_date_raw:
-            try:
-                worker.enrollment_date = datetime.strptime(enrollment_date_raw, "%Y-%m-%d")
-            except ValueError:
+        raw_date = request.form.get("enrollment_date", "").strip()
+        if raw_date:
+            parsed = _parse_date(raw_date)
+            if not parsed:
                 flash("Enrollment date is invalid.", "danger")
                 return redirect(url_for("workers_page"))
+            worker.enrollment_date = datetime.combine(parsed, datetime.min.time())
 
         db.session.commit()
         _log_audit("worker.update", f"Updated worker {worker.worker_id}")
@@ -904,15 +753,13 @@ def _register_routes(app: Flask) -> None:
         return redirect(url_for("workers_page"))
 
     @app.route("/workers/<int:worker_pk>/reset-pin", methods=["POST"])
-    @admin_required
+    @permission_required(WORKER_MANAGE)
     def reset_worker_pin(worker_pk):
         worker = Worker.query.get_or_404(worker_pk)
         new_pin = request.form.get("new_pin", "").strip()
-
         if len(new_pin) < 4:
             flash("New PIN must be at least 4 digits.", "danger")
             return redirect(url_for("workers_page"))
-
         if not _is_pin_unique(new_pin, exclude_worker_id=worker.worker_id):
             flash("PIN already exists. Choose a unique PIN for each worker.", "danger")
             return redirect(url_for("workers_page"))
@@ -925,228 +772,306 @@ def _register_routes(app: Flask) -> None:
         return redirect(url_for("workers_page"))
 
     @app.route("/workers/<int:worker_pk>/toggle", methods=["POST"])
-    @admin_required
+    @permission_required(WORKER_MANAGE)
     def toggle_worker(worker_pk):
         worker = Worker.query.get_or_404(worker_pk)
         worker.status = "inactive" if (worker.status or "active").lower() == "active" else "active"
         db.session.commit()
-        status = "activated" if worker.status == "active" else "deactivated"
-        _log_audit("worker.toggle", f"Worker {worker.worker_id} {status}")
-        flash(f"Worker '{worker.name}' has been {status}.", "info")
+        state = "activated" if worker.status == "active" else "deactivated"
+        _log_audit("worker.toggle", f"Worker {worker.worker_id} {state}")
+        flash(f"Worker '{worker.name}' has been {state}.", "info")
         return redirect(url_for("workers_page"))
 
-    # ---- Settings -------------------------------------------------------- #
+    # ---- Face enrolment ---------------------------------------------------- #
+
+    @app.route("/workers/<int:worker_pk>/face/enroll", methods=["POST"])
+    @permission_required(BIOMETRIC_MANAGE)
+    def enroll_face(worker_pk: int):
+        worker = Worker.query.get_or_404(worker_pk)
+        target = request.form.get("next") or url_for("biometric_page")
+        existing = face_engine.sample_count_for(worker.id)
+        if existing >= MAX_ENROLL_SAMPLES:
+            flash(f"{worker.name} already has the maximum of {MAX_ENROLL_SAMPLES} samples. "
+                  "Clear the enrolment to start again.", "warning")
+            return redirect(target)
+
+        # Two ways in. Photo uploads win when present (the supervisor chose
+        # the upload modal); otherwise capture live from the attendance camera.
+        uploads = [f for f in request.files.getlist("photos") if f and f.filename]
+        stored, failures = 0, []
+
+        if uploads:
+            import cv2
+            import numpy as np
+            for upload in uploads[:MAX_ENROLL_SAMPLES - existing]:
+                buffer = np.frombuffer(upload.read(), dtype=np.uint8)
+                frame = cv2.imdecode(buffer, cv2.IMREAD_COLOR)
+                if frame is None:
+                    failures.append(f"{upload.filename}: not a readable image")
+                    continue
+                outcome = face_engine.enroll_frame(worker, frame, FACES_DIR)
+                if outcome["ok"]:
+                    stored += 1
+                else:
+                    failures.append(f"{upload.filename}: {outcome['reason']}")
+        else:
+            # Grab several frames and keep the first that yields a usable
+            # face: a single frame catches too many blinks and head turns.
+            frames, status = cctv_engine.grab_frames(count=6)
+            if status != "ok" or not frames:
+                cctv_engine.log_health("camera", 0, "offline", device_label="Enrolment camera",
+                                       error_code="grab_failed",
+                                       error_message="No frames available during enrolment")
+                flash("The camera could not be opened. Attach a webcam or upload a photo instead.", "danger")
+                return redirect(target)
+            for frame in frames:
+                outcome = face_engine.enroll_frame(worker, frame, FACES_DIR)
+                if outcome["ok"]:
+                    stored += 1
+                    break
+                failures.append(outcome["reason"])
+
+        if stored:
+            total = face_engine.sample_count_for(worker.id)
+            _log_audit("biometric.enroll",
+                       f"Stored {stored} face sample(s) for {worker.worker_id} (total {total})")
+            advice = "" if total >= 3 else " Add at least 3 samples for reliable matching."
+            flash(f"Enrolled {stored} face sample(s) for {worker.name}. Total: {total}.{advice}", "success")
+        else:
+            reason = failures[0] if failures else "no_face_detected"
+            flash(f"No usable face was captured for {worker.name} ({reason}). "
+                  "Face the camera in good light and try again.", "danger")
+        return redirect(target)
+
+    @app.route("/workers/<int:worker_pk>/face/clear", methods=["POST"])
+    @permission_required(BIOMETRIC_MANAGE)
+    def clear_face(worker_pk: int):
+        worker = Worker.query.get_or_404(worker_pk)
+        removed = face_engine.clear_templates(worker)
+        _log_audit("biometric.clear", f"Cleared {removed} face sample(s) for {worker.worker_id}")
+        flash(f"Cleared {removed} face sample(s) for {worker.name}. "
+              "They cannot clock in until re-enrolled.", "info")
+        return redirect(request.form.get("next") or url_for("biometric_page"))
+
+    # ---- Attendance -------------------------------------------------------- #
+
+    @app.route("/attendance")
+    @admin_required
+    def attendance_page():
+        attendance_rows = Attendance.query.order_by(Attendance.check_in_time.desc()).limit(400).all()
+        sessions = _build_attendance_sessions(attendance_rows)
+        verified = sum(1 for s in sessions if s["verified_by_face"])
+        return render_template(
+            "attendance.html",
+            sessions=sessions,
+            attendance_stats={
+                "total": len(sessions),
+                "complete": sum(1 for s in sessions if s["clock_in_time"] and s["clock_out_time"]),
+                "in_progress": sum(1 for s in sessions if s["clock_in_time"] and not s["clock_out_time"]),
+                "out_only": sum(1 for s in sessions if not s["clock_in_time"] and s["clock_out_time"]),
+                "today": sum(1 for s in sessions if s["_sort_key"] and s["_sort_key"].date() == date.today()),
+                "verified": verified,
+                "verified_rate": round((verified / len(sessions)) * 100, 1) if sessions else 0.0,
+            },
+            active_page="attendance",
+            org_name=_get_setting("org_name", "FMS Farm"),
+        )
+
+    @app.route("/attendance/refresh-summaries", methods=["POST"])
+    @permission_required(ATTENDANCE_MANAGE)
+    def refresh_summaries():
+        day_to = _parse_date(request.form.get("to", ""), date.today())
+        day_from = _parse_date(request.form.get("from", ""), day_to - timedelta(days=30))
+        touched = payroll_engine.refresh_range(day_from, day_to)
+        _log_audit("attendance.summaries_refreshed",
+                   f"Rebuilt {touched} daily summaries from {day_from} to {day_to}")
+        flash(f"Rebuilt {touched} daily summary row(s) from {day_from} to {day_to}.", "success")
+        return redirect(request.referrer or url_for("attendance_page"))
+
+    # ---- Settings ---------------------------------------------------------- #
 
     @app.route("/settings", methods=["GET", "POST"])
     @admin_required
     def settings():
         if request.method == "POST":
-            keys = ["org_name"]
-            for key in keys:
-                value = request.form.get(key, "").strip()
-                row = Setting.query.filter_by(key=key).first()
-                if row:
-                    row.value = value
-                else:
-                    db.session.add(Setting(key=key, value=value))
+            if not can(SETTINGS_MANAGE):
+                flash("Only an administrator can change system settings.", "danger")
+                return redirect(url_for("settings"))
 
-            db.session.commit()
-            _log_audit("settings.save", "Settings updated")
+            threshold = request.form.get("face_match_threshold", "35").strip()
+            try:
+                threshold_value = float(threshold)
+                if not 0 <= threshold_value <= 100:
+                    raise ValueError
+            except ValueError:
+                flash("Face match threshold must be a number between 0 and 100.", "danger")
+                return redirect(url_for("settings"))
+
+            lat, lon = geofence.normalize_coordinates(
+                request.form.get("farm_latitude"), request.form.get("farm_longitude")
+            )
+            if (request.form.get("farm_latitude") or request.form.get("farm_longitude")) and lat is None:
+                flash("Farm coordinates are not valid. Use decimal degrees, e.g. -15.4067 and 28.2871.", "danger")
+                return redirect(url_for("settings"))
+
+            _save_settings({
+                "org_name": request.form.get("org_name", "").strip(),
+                "face_match_threshold": str(threshold_value),
+                "face_verification_required": "on" if request.form.get("face_verification_required") else "off",
+                "face_require_eyes": "on" if request.form.get("face_require_eyes") else "off",
+                "farm_latitude": "" if lat is None else str(lat),
+                "farm_longitude": "" if lon is None else str(lon),
+                "geofence_radius_m": request.form.get("geofence_radius_m", "500").strip() or "500",
+                "geofence_enforce": "on" if request.form.get("geofence_enforce") else "off",
+                "standard_day_hours": request.form.get("standard_day_hours", "8").strip() or "8",
+                "overtime_multiplier": request.form.get("overtime_multiplier", "1.5").strip() or "1.5",
+                "napsa_rate": request.form.get("napsa_rate", "0.05").strip() or "0.05",
+                "nhima_rate": request.form.get("nhima_rate", "0.01").strip() or "0.01",
+                "default_hourly_rate": request.form.get("default_hourly_rate", "15").strip() or "15",
+                "shift_start_time": request.form.get("shift_start_time", "07:00").strip() or "07:00",
+                "shift_end_time": request.form.get("shift_end_time", "17:00").strip() or "17:00",
+                "clip_recording_enabled": "on" if request.form.get("clip_recording_enabled") else "off",
+                "clip_seconds": request.form.get("clip_seconds", "6").strip() or "6",
+            })
+            _log_audit("settings.save", "System settings updated")
             flash("Settings saved.", "success")
             return redirect(url_for("settings"))
 
-        all_settings = {s.key: s.value for s in Setting.query.all()}
         return render_template(
             "settings.html",
-            settings=all_settings,
+            settings={s.key: s.value for s in Setting.query.all()},
+            engine=face_engine.engine_info(),
             active_page="settings",
-            org_name=_get_setting("org_name"),
+            org_name=_get_setting("org_name", "FMS Farm"),
         )
 
-    # ---- User management ------------------------------------------------- #
+    @app.route("/settings/api-key/regenerate", methods=["POST"])
+    @permission_required(SETTINGS_MANAGE)
+    def regenerate_api_key():
+        _save_settings({"api_key": secrets.token_urlsafe(24)})
+        _log_audit("settings.api_key", "API key regenerated")
+        flash("API key regenerated. Update any client that used the old key.", "warning")
+        return redirect(url_for("settings"))
+
+    # ---- Users -------------------------------------------------------------- #
 
     @app.route("/users")
-    @admin_required
+    @permission_required(USER_MANAGE)
     def users_page():
-        users = User.query.order_by(User.created_at.desc()).all()
-        workers = Worker.query.order_by(Worker.worker_id.asc()).all()
-        org_name = _get_setting("org_name", "FMS Farm")
-        return render_template("users.html", users=users, workers=workers, active_page="users", org_name=org_name)
+        return render_template(
+            "users.html",
+            users=User.query.order_by(User.created_at.desc()).all(),
+            workers=Worker.query.order_by(Worker.worker_id.asc()).all(),
+            active_page="users",
+            org_name=_get_setting("org_name", "FMS Farm"),
+        )
 
     @app.route("/users/add", methods=["POST"])
-    @admin_required
+    @permission_required(USER_MANAGE)
     def add_user():
         username = request.form.get("username", "").strip().lower()
         name = request.form.get("name", "").strip()
-        email = request.form.get("email", "").strip()
-        phone = request.form.get("phone", "").strip()
-        role = request.form.get("role", "supervisor").strip().lower() or "supervisor"
-        linked_worker_id = request.form.get("linked_worker_id", type=int)
         if not username or not name:
             flash("Username and Name are required.", "danger")
             return redirect(url_for("users_page"))
         if User.query.filter_by(username=username).first():
             flash(f"Username '{username}' already exists.", "danger")
             return redirect(url_for("users_page"))
-        password = _generate_password()
+
+        password = _generate_password(10)
         user = User(
             username=username,
             name=name,
-            email=email,
-            phone=phone,
-            role=role,
-            linked_worker_id=linked_worker_id,
+            email=request.form.get("email", "").strip(),
+            phone=request.form.get("phone", "").strip(),
+            role=normalize_role(request.form.get("role", "supervisor")),
+            linked_worker_id=request.form.get("linked_worker_id", type=int),
+            must_change_password=True,
         )
         user.set_password(password)
         db.session.add(user)
         db.session.commit()
-        _log_audit("user.add", f"Added user '{username}'")
-        flash(f"User '{username}' created. Default password: {password}", "success")
+        _log_audit("user.add", f"Added user '{username}' with role {user.role}")
+        flash(f"User '{username}' created as {user.role}. Temporary password: {password} "
+              "(they must change it at first login).", "success")
         return redirect(url_for("users_page"))
 
     @app.route("/users/<int:user_pk>/update", methods=["POST"])
-    @admin_required
+    @permission_required(USER_MANAGE)
     def update_user(user_pk: int):
         user = User.query.get_or_404(user_pk)
+        new_role = normalize_role(request.form.get("role", "supervisor"))
+
+        admin_count = User.query.filter_by(role="admin", is_active=True).count()
+        if user.role == "admin" and new_role != "admin" and admin_count <= 1:
+            flash("This is the last administrator. Promote another user before changing this role.", "danger")
+            return redirect(url_for("users_page"))
 
         user.name = request.form.get("name", "").strip()
         user.email = request.form.get("email", "").strip()
         user.phone = request.form.get("phone", "").strip()
-        user.role = request.form.get("role", "supervisor").strip().lower() or "supervisor"
+        user.role = new_role
         user.linked_worker_id = request.form.get("linked_worker_id", type=int)
         if not user.name:
             flash("Name is required.", "danger")
             return redirect(url_for("users_page"))
+
         db.session.commit()
-        _log_audit("user.update", f"Updated user '{user.username}'")
+        _log_audit("user.update", f"Updated user '{user.username}' (role {user.role})")
         flash(f"User '{user.username}' updated.", "success")
         return redirect(url_for("users_page"))
 
     @app.route("/users/<int:user_pk>/reset-password", methods=["POST"])
-    @admin_required
+    @permission_required(USER_MANAGE)
     def reset_user_password(user_pk: int):
         user = User.query.get_or_404(user_pk)
-
-        password = _generate_password()
+        password = _generate_password(10)
         user.set_password(password)
+        user.must_change_password = True
         db.session.commit()
         _log_audit("user.reset_password", f"Reset password for '{user.username}'")
-        flash(f"Password for '{user.username}' reset. New password: {password}", "success")
+        flash(f"Password for '{user.username}' reset to: {password} "
+              "(they must change it at next login).", "success")
         return redirect(url_for("users_page"))
 
-    # ---- Change own password --------------------------------------------- #
+    @app.route("/users/<int:user_pk>/toggle", methods=["POST"])
+    @permission_required(USER_MANAGE)
+    def toggle_user(user_pk: int):
+        user = User.query.get_or_404(user_pk)
+        if user.id == session.get("admin_user_id"):
+            flash("You cannot deactivate your own account.", "danger")
+            return redirect(url_for("users_page"))
+        if user.role == "admin" and user.is_active and \
+                User.query.filter_by(role="admin", is_active=True).count() <= 1:
+            flash("This is the last active administrator and cannot be deactivated.", "danger")
+            return redirect(url_for("users_page"))
 
-    @app.route("/profile/change-password", methods=["POST"])
-    @admin_required
-    def change_password():
-        current_password = request.form.get("current_password", "")
-        new_password = request.form.get("new_password", "")
-        confirm_password = request.form.get("confirm_password", "")
-        username = session.get("admin_username")
-        user = User.query.filter_by(username=username).first()
-        if not user or not user.check_password(current_password):
-            flash("Current password is incorrect.", "danger")
-            return redirect(request.referrer or url_for("dashboard"))
-        if len(new_password) < 6:
-            flash("New password must be at least 6 characters.", "danger")
-            return redirect(request.referrer or url_for("dashboard"))
-        if new_password != confirm_password:
-            flash("New passwords do not match.", "danger")
-            return redirect(request.referrer or url_for("dashboard"))
-        user.set_password(new_password)
+        user.is_active = not user.is_active
         db.session.commit()
-        _log_audit("user.change_password", f"'{username}' changed own password")
-        flash("Password changed successfully.", "success")
-        return redirect(request.referrer or url_for("dashboard"))
+        state = "activated" if user.is_active else "deactivated"
+        _log_audit("user.toggle", f"User '{user.username}' {state}")
+        flash(f"User '{user.username}' {state}.", "info")
+        return redirect(url_for("users_page"))
 
-    # ---- Audit log ------------------------------------------------------- #
+    # ---- Audit log and data hub --------------------------------------------- #
 
     @app.route("/audit-log")
     @admin_required
     def audit_log_page():
-        logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).limit(500).all()
-        org_name = _get_setting("org_name", "FMS Farm")
-        return render_template("audit_log.html", logs=logs, active_page="audit_log", org_name=org_name)
+        return render_template(
+            "audit_log.html",
+            logs=AuditLog.query.order_by(AuditLog.timestamp.desc()).limit(500).all(),
+            active_page="audit_log",
+            org_name=_get_setting("org_name", "FMS Farm"),
+        )
 
     @app.route("/tables-hub")
     @admin_required
     def tables_hub_page():
-        org_name = _get_setting("org_name", "FMS Farm")
         return render_template(
             "tables_hub.html",
             active_page="tables_hub",
-            org_name=org_name,
-        )
-
-    @app.route("/cctv")
-    @admin_required
-    def cctv_page():
-        _ensure_default_cctv_entries()
-        feeds = CCTVFeed.query.order_by(CCTVFeed.feed_id.desc()).all()
-        recordings = CCTVRecording.query.order_by(CCTVRecording.recording_id.desc()).limit(150).all()
-        settings = {s.key: s.value for s in Setting.query.all()}
-        return render_template(
-            "cctv.html",
-            active_page="cctv",
             org_name=_get_setting("org_name", "FMS Farm"),
-            feeds=feeds,
-            recordings=recordings,
-            settings=settings,
-        )
-
-    @app.route("/biometric")
-    @admin_required
-    def biometric_page():
-        devices = BiometricDevice.query.order_by(BiometricDevice.created_at.desc()).limit(200).all()
-        return render_template(
-            "biometric.html",
-            active_page="biometric",
-            org_name=_get_setting("org_name", "FMS Farm"),
-            devices=devices,
-        )
-
-    @app.route("/payroll")
-    @admin_required
-    def payroll_page():
-        workers = Worker.query.order_by(Worker.worker_id.asc()).all()
-        worker_lookup = {w.id: w for w in workers}
-        payroll_rows = Payroll.query.order_by(Payroll.payroll_id.desc()).limit(200).all()
-        return render_template(
-            "payroll.html",
-            active_page="payroll",
-            org_name=_get_setting("org_name", "FMS Farm"),
-            workers=workers,
-            worker_lookup=worker_lookup,
-            payroll_rows=payroll_rows,
-        )
-
-    @app.route("/cloud-sync", methods=["GET", "POST"])
-    @admin_required
-    def cloud_sync_page():
-        if request.method == "POST":
-            keys = ["firebase_api_key", "firebase_bucket", "firebase_project_id"]
-            for key in keys:
-                value = request.form.get(key, "").strip()
-                row = Setting.query.filter_by(key=key).first()
-                if row:
-                    row.value = value
-                else:
-                    db.session.add(Setting(key=key, value=value))
-            db.session.commit()
-            _log_audit("cloud_sync.settings.save", "Updated cloud sync settings")
-            flash("Cloud sync settings saved.", "success")
-            return redirect(url_for("cloud_sync_page"))
-
-        metadata_rows = CloudSyncMetadata.query.order_by(CloudSyncMetadata.sync_id.desc()).limit(200).all()
-        queue_rows = OfflineSyncQueue.query.order_by(OfflineSyncQueue.sync_id.desc()).limit(200).all()
-        settings = {s.key: s.value for s in Setting.query.all()}
-        return render_template(
-            "cloud_sync.html",
-            active_page="cloud_sync",
-            org_name=_get_setting("org_name", "FMS Farm"),
-            metadata_rows=metadata_rows,
-            queue_rows=queue_rows,
-            settings=settings,
         )
 
     @app.route("/tables-hub/<string:table_key>")
@@ -1172,7 +1097,18 @@ def _register_routes(app: Flask) -> None:
         columns = [c.name for c in model.__table__.columns]
         first_col = list(model.__table__.columns)[0]
         rows = model.query.order_by(first_col.desc()).limit(300).all()
-        data_rows = [{col: getattr(row, col, None) for col in columns} for row in rows]
+        data_rows = []
+        for row in rows:
+            record = {}
+            for col in columns:
+                value = getattr(row, col, None)
+                # Face templates hold raw pixel bytes (40,000 per row); print
+                # the size instead of flooding the page.
+                if isinstance(value, (bytes, bytearray)):
+                    value = f"<{len(value)} bytes>"
+                record[col] = value
+            data_rows.append(record)
+
         return render_template(
             "table_records.html",
             active_page="tables_hub",
@@ -1183,13 +1119,46 @@ def _register_routes(app: Flask) -> None:
             table_key=table_key,
         )
 
-    @app.route("/config/cctv-feeds", methods=["POST"])
+    # ---- Exports ------------------------------------------------------------ #
+
+    @app.route("/export/<string:export_key>.csv")
     @admin_required
+    def export_csv(export_key: str):
+        if export_key not in exports.EXPORTS:
+            abort(404)
+        filename, builder = exports.EXPORTS[export_key]
+        _log_audit("export.csv", f"Exported {filename}")
+        return Response(
+            builder(),
+            mimetype="text/csv",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+
+    # ---- CCTV ---------------------------------------------------------------- #
+
+    @app.route("/cctv")
+    @admin_required
+    def cctv_page():
+        _ensure_default_cctv_entries()
+        return render_template(
+            "cctv.html",
+            active_page="cctv",
+            org_name=_get_setting("org_name", "FMS Farm"),
+            feeds=CCTVFeed.query.order_by(CCTVFeed.feed_id.desc()).all(),
+            recordings=_real_recordings(),
+            camera_sources=cctv_engine.get_camera_sources(),
+            health_logs=HardwareHealthLog.query.order_by(
+                HardwareHealthLog.log_id.desc()).limit(25).all(),
+            settings={s.key: s.value for s in Setting.query.all()},
+        )
+
+    @app.route("/config/cctv-feeds", methods=["POST"])
+    @permission_required(CCTV_MANAGE)
     def add_cctv_feed():
         camera_name = request.form.get("camera_name", "").strip()
         if not camera_name:
             flash("Camera name is required.", "danger")
-            return redirect(url_for("tables_hub_page"))
+            return redirect(url_for("cctv_page"))
         row = CCTVFeed(
             camera_name=camera_name,
             camera_location=request.form.get("camera_location", "").strip(),
@@ -1199,11 +1168,12 @@ def _register_routes(app: Flask) -> None:
         db.session.add(row)
         db.session.commit()
         _log_audit("config.cctv_feed.add", f"Added CCTV feed '{camera_name}'")
-        flash("CCTV feed saved.", "success")
+        flash("CCTV feed saved. Use Test to confirm it is reachable, then it appears in the live views.",
+              "success")
         return redirect(url_for("cctv_page"))
 
     @app.route("/config/cctv-feeds/<int:feed_id>/update", methods=["POST"])
-    @admin_required
+    @permission_required(CCTV_MANAGE)
     def update_cctv_feed(feed_id: int):
         feed = CCTVFeed.query.get_or_404(feed_id)
         camera_name = request.form.get("camera_name", "").strip()
@@ -1225,17 +1195,70 @@ def _register_routes(app: Flask) -> None:
         return redirect(url_for("cctv_page"))
 
     @app.route("/config/cctv-feeds/<int:feed_id>/deactivate", methods=["POST"])
-    @admin_required
+    @permission_required(CCTV_MANAGE)
     def deactivate_cctv_feed(feed_id: int):
         feed = CCTVFeed.query.get_or_404(feed_id)
         feed.status = "inactive"
+        feed.is_primary = False
         db.session.commit()
-        _log_audit("config.cctv_feed.deactivate", f"Deactivated CCTV feed '{feed.camera_name}' (id={feed.feed_id})")
-        flash("CCTV feed deactivated.", "info")
+        _log_audit("config.cctv_feed.deactivate", f"Deactivated CCTV feed id={feed.feed_id}")
+        flash("CCTV feed deactivated and removed from the live views.", "info")
+        return redirect(url_for("cctv_page"))
+
+    @app.route("/config/cctv-feeds/<int:feed_id>/primary", methods=["POST"])
+    @permission_required(CCTV_MANAGE)
+    def set_primary_feed(feed_id: int):
+        feed = CCTVFeed.query.get_or_404(feed_id)
+        CCTVFeed.query.update({CCTVFeed.is_primary: False})
+        feed.is_primary = True
+        if (feed.status or "").lower() == "inactive":
+            feed.status = "offline"
+        db.session.commit()
+        _log_audit("config.cctv_feed.primary", f"Feed {feed.feed_id} set as attendance camera")
+        flash(f"'{feed.camera_name}' is now the attendance camera used for verification and snapshots.",
+              "success")
+        return redirect(url_for("cctv_page"))
+
+    @app.route("/config/cctv-feeds/<int:feed_id>/test", methods=["POST"])
+    @permission_required(CCTV_MANAGE)
+    def test_cctv_feed(feed_id: int):
+        feed = CCTVFeed.query.get_or_404(feed_id)
+        outcome = cctv_engine.probe_feed(feed)
+        _log_audit("cctv.health_check", f"Feed {feed.feed_id} probed: {outcome['status']}")
+        if outcome["status"] == "online":
+            flash(f"'{feed.camera_name}' responded in {outcome['response_time_ms']} ms.", "success")
+        else:
+            flash(f"'{feed.camera_name}' did not return frames. Check the URL, power and network.",
+                  "danger")
+        return redirect(url_for("cctv_page"))
+
+    @app.route("/cctv/health-check", methods=["POST"])
+    @permission_required(CCTV_MANAGE)
+    def cctv_health_check():
+        feeds = CCTVFeed.query.filter(CCTVFeed.rtsp_url.isnot(None)).all()
+        results = [cctv_engine.probe_feed(feed) for feed in feeds]
+        online = sum(1 for r in results if r["status"] == "online")
+        _log_audit("cctv.health_check", f"Probed {len(results)} feeds, {online} online")
+        flash(f"Checked {len(results)} camera(s): {online} online, {len(results) - online} offline.",
+              "info" if online else "warning")
+        return redirect(url_for("cctv_page"))
+
+    @app.route("/cctv/record-now", methods=["POST"])
+    @permission_required(CCTV_MANAGE)
+    def record_now():
+        seconds = _float_or_none(request.form.get("seconds")) or 10.0
+        primary = cctv_engine.primary_source()
+        cctv_engine.record_clip(
+            app, primary["source"], CLIPS_DIR, seconds=min(60.0, max(3.0, seconds)),
+            camera_id=primary.get("feed_id"), trigger_type="manual",
+        )
+        _log_audit("cctv.record_now", f"Manual {seconds:.0f}s clip requested on '{primary['name']}'")
+        flash(f"Recording a {seconds:.0f} second clip from '{primary['name']}'. "
+              "It appears in Recordings when finished.", "success")
         return redirect(url_for("cctv_page"))
 
     @app.route("/config/cctv/settings", methods=["POST"])
-    @admin_required
+    @permission_required(CCTV_MANAGE)
     def save_cctv_settings():
         camera_index = request.form.get("camera_index", "0").strip() or "0"
         camera_sources_raw = request.form.get("camera_sources", "").strip()
@@ -1246,45 +1269,66 @@ def _register_routes(app: Flask) -> None:
                 if not isinstance(parsed, list):
                     raise ValueError("Camera sources must be a JSON array")
             except (json.JSONDecodeError, ValueError):
-                flash("Camera sources must be valid JSON array format.", "danger")
+                flash("Camera sources must be a valid JSON array.", "danger")
                 return redirect(url_for("cctv_page"))
 
-        for key, value in {
-            "camera_index": camera_index,
-            "camera_sources": camera_sources_raw,
-        }.items():
-            row = Setting.query.filter_by(key=key).first()
-            if row:
-                row.value = value
-            else:
-                db.session.add(Setting(key=key, value=value))
-
-        db.session.commit()
+        _save_settings({"camera_index": camera_index, "camera_sources": camera_sources_raw})
         _ensure_default_cctv_entries()
         _log_audit("cctv.settings.save", "Updated CCTV settings")
         flash("CCTV settings saved.", "success")
         return redirect(url_for("cctv_page"))
 
-    @app.route("/config/biometric-devices", methods=["POST"])
+    # ---- Biometric (enrolment) ---------------------------------------------- #
+
+    @app.route("/biometric")
     @admin_required
+    def biometric_page():
+        workers = Worker.query.order_by(Worker.worker_id.asc()).all()
+        counts = face_engine.sample_counts()
+        samples = {}
+        for row in FaceTemplate.query.order_by(FaceTemplate.face_id.asc()).all():
+            samples.setdefault(row.worker_id, []).append(row)
+
+        return render_template(
+            "biometric.html",
+            active_page="biometric",
+            org_name=_get_setting("org_name", "FMS Farm"),
+            devices=BiometricDevice.query.order_by(BiometricDevice.created_at.desc()).limit(200).all(),
+            workers=workers,
+            face_samples=counts,
+            sample_rows=samples,
+            enrolled_count=sum(1 for w in workers if counts.get(w.id, 0) > 0),
+            pending_count=sum(1 for w in workers
+                              if counts.get(w.id, 0) == 0 and (w.status or "") == "active"),
+            transactions=BiometricTransaction.query.order_by(
+                BiometricTransaction.timestamp.desc()).limit(50).all(),
+            worker_lookup={w.id: w for w in workers},
+            verification=face_engine.accuracy_snapshot(),
+            engine=face_engine.engine_info(),
+            threshold=match_threshold(),
+            max_samples=MAX_ENROLL_SAMPLES,
+        )
+
+    @app.route("/config/biometric-devices", methods=["POST"])
+    @permission_required(BIOMETRIC_MANAGE)
     def add_biometric_device():
         device_name = request.form.get("device_name", "").strip()
         if not device_name:
             flash("Device name is required.", "danger")
-            return redirect(url_for("tables_hub_page"))
-        row = BiometricDevice(
+            return redirect(url_for("biometric_page"))
+        db.session.add(BiometricDevice(
             device_name=device_name,
             device_serial=request.form.get("device_serial", "").strip() or None,
+            device_type=request.form.get("device_type", "camera").strip().lower() or "camera",
             location=request.form.get("location", "").strip(),
-        )
-        db.session.add(row)
+        ))
         db.session.commit()
         _log_audit("config.biometric_device.add", f"Added biometric device '{device_name}'")
         flash("Biometric device saved.", "success")
         return redirect(url_for("biometric_page"))
 
     @app.route("/config/biometric-devices/<int:device_id>/update", methods=["POST"])
-    @admin_required
+    @permission_required(BIOMETRIC_MANAGE)
     def update_biometric_device(device_id: int):
         device = BiometricDevice.query.get_or_404(device_id)
         device_name = request.form.get("device_name", "").strip()
@@ -1294,7 +1338,7 @@ def _register_routes(app: Flask) -> None:
 
         device.device_name = device_name
         device.device_serial = request.form.get("device_serial", "").strip() or None
-        device.device_type = request.form.get("device_type", "fingerprint").strip().lower() or "fingerprint"
+        device.device_type = request.form.get("device_type", "camera").strip().lower() or "camera"
         device.ip_address = request.form.get("ip_address", "").strip() or None
         device.usb_port = request.form.get("usb_port", "").strip() or None
         device.location = request.form.get("location", "").strip()
@@ -1304,89 +1348,158 @@ def _register_routes(app: Flask) -> None:
             device.last_heartbeat = datetime.utcnow()
 
         db.session.commit()
-        _log_audit("config.biometric_device.update", f"Updated biometric device '{device.device_name}' (id={device.device_id})")
+        _log_audit("config.biometric_device.update", f"Updated device id={device.device_id}")
         flash("Biometric device updated.", "success")
         return redirect(url_for("biometric_page"))
 
     @app.route("/config/biometric-devices/<int:device_id>/deactivate", methods=["POST"])
-    @admin_required
+    @permission_required(BIOMETRIC_MANAGE)
     def deactivate_biometric_device(device_id: int):
         device = BiometricDevice.query.get_or_404(device_id)
         device.status = "inactive"
         db.session.commit()
-        _log_audit("config.biometric_device.deactivate", f"Deactivated biometric device '{device.device_name}' (id={device.device_id})")
+        _log_audit("config.biometric_device.deactivate", f"Deactivated device id={device.device_id}")
         flash("Biometric device deactivated.", "info")
         return redirect(url_for("biometric_page"))
 
-    @app.route("/config/payroll", methods=["POST"])
+    # ---- Payroll ------------------------------------------------------------- #
+
+    @app.route("/payroll")
     @admin_required
+    def payroll_page():
+        workers = Worker.query.order_by(Worker.worker_id.asc()).all()
+        today = date.today()
+        # Default the picker to the most recent Sunday.
+        # Default the picker to the most recent Sunday, which is the usual
+        # pay week ending. Python weekday(): Monday 0 ... Sunday 6, so
+        # (weekday + 1) % 7 is the number of days back to the last Sunday -
+        # on a Sunday that is 0, i.e. today.
+        default_week_ending = today - timedelta(days=(today.weekday() + 1) % 7)
+        return render_template(
+            "payroll.html",
+            active_page="payroll",
+            org_name=_get_setting("org_name", "FMS Farm"),
+            workers=workers,
+            worker_lookup={w.id: w for w in workers},
+            payroll_rows=Payroll.query.order_by(
+                Payroll.week_ending.desc(), Payroll.payroll_id.desc()).limit(200).all(),
+            rates=payroll_engine.rates(),
+            default_week_ending=default_week_ending.isoformat(),
+        )
+
+    @app.route("/payroll/generate", methods=["POST"])
+    @permission_required(PAYROLL_MANAGE)
+    def generate_payroll_page():
+        week_ending = _parse_date(request.form.get("week_ending", ""))
+        if not week_ending:
+            flash("Choose a valid week ending date.", "danger")
+            return redirect(url_for("payroll_page"))
+
+        outcome = payroll_engine.generate_week(week_ending)
+        _log_audit("payroll.generate",
+                   f"Generated payroll for week ending {week_ending}: "
+                   f"{outcome['created']} created, {outcome['updated']} updated")
+        if outcome["created"] or outcome["updated"]:
+            flash(f"Payroll for week ending {week_ending}: {outcome['created']} created, "
+                  f"{outcome['updated']} updated from recorded attendance. "
+                  f"{outcome['skipped_no_hours']} worker(s) had no hours.", "success")
+        else:
+            flash(f"No attendance hours found for the week ending {week_ending}, "
+                  "so nothing was generated.", "warning")
+        return redirect(url_for("payroll_page"))
+
+    @app.route("/config/payroll", methods=["POST"])
+    @permission_required(PAYROLL_MANAGE)
     def add_payroll_record():
         worker_pk = request.form.get("worker_id", type=int)
-        week_ending_raw = request.form.get("week_ending", "").strip()
-        if not worker_pk or not week_ending_raw:
-            flash("Worker and week ending are required.", "danger")
+        week_ending = _parse_date(request.form.get("week_ending", ""))
+        if not worker_pk or not week_ending:
+            flash("Worker and a valid week ending date are required.", "danger")
             return redirect(url_for("payroll_page"))
-        try:
-            week_ending = datetime.strptime(week_ending_raw, "%Y-%m-%d").date()
-        except ValueError:
-            flash("Week ending date format is invalid.", "danger")
+
+        worker = Worker.query.get_or_404(worker_pk)
+        if Payroll.query.filter_by(worker_id=worker_pk, week_ending=week_ending).first():
+            flash(f"A payroll row already exists for {worker.name} for week ending {week_ending}.",
+                  "warning")
             return redirect(url_for("payroll_page"))
-        row = Payroll(
+
+        total_hours = _float_or_none(request.form.get("total_hours")) or 0.0
+        overtime_hours = _float_or_none(request.form.get("overtime_hours")) or 0.0
+        hourly_rate = _float_or_none(request.form.get("hourly_rate")) or payroll_engine.worker_rate(worker)
+        figures = payroll_engine.compute_pay(total_hours, overtime_hours, hourly_rate)
+
+        db.session.add(Payroll(
             worker_id=worker_pk,
             week_ending=week_ending,
-            total_hours=request.form.get("total_hours", type=float),
-            hourly_rate=request.form.get("hourly_rate", type=float),
-            gross_pay=request.form.get("gross_pay", type=float),
+            total_hours=figures["total_hours"],
+            overtime_hours=figures["overtime_hours"],
+            hourly_rate=figures["hourly_rate"],
+            overtime_pay=figures["overtime_pay"],
+            gross_pay=figures["gross_pay"],
+            napsa_rate=figures["napsa_rate"],
+            nhima_rate=figures["nhima_rate"],
+            napsa_deduction=figures["napsa_deduction"],
+            nhima_deduction=figures["nhima_deduction"],
+            net_pay=figures["net_pay"],
+            computed_from_attendance=False,
+            generated_at=datetime.utcnow(),
             paid_status="pending",
-        )
-        db.session.add(row)
+        ))
         db.session.commit()
-        _log_audit("config.payroll.add", f"Added payroll row for worker_id={worker_pk}")
-        flash("Payroll record saved.", "success")
+        _log_audit("config.payroll.add", f"Added manual payroll row for worker_id={worker_pk}")
+        flash(f"Payroll row saved. Gross ZMW {figures['gross_pay']:.2f}, "
+              f"net ZMW {figures['net_pay']:.2f} (deductions calculated automatically).", "success")
         return redirect(url_for("payroll_page"))
 
     @app.route("/config/payroll/<int:payroll_id>/update", methods=["POST"])
-    @admin_required
+    @permission_required(PAYROLL_MANAGE)
     def update_payroll_record(payroll_id: int):
         row = Payroll.query.get_or_404(payroll_id)
         worker_pk = request.form.get("worker_id", type=int)
-        week_ending_raw = request.form.get("week_ending", "").strip()
-        if not worker_pk or not week_ending_raw:
-            flash("Worker and week ending are required.", "danger")
-            return redirect(url_for("payroll_page"))
-        try:
-            week_ending = datetime.strptime(week_ending_raw, "%Y-%m-%d").date()
-        except ValueError:
-            flash("Week ending date format is invalid.", "danger")
+        week_ending = _parse_date(request.form.get("week_ending", ""))
+        if not worker_pk or not week_ending:
+            flash("Worker and a valid week ending date are required.", "danger")
             return redirect(url_for("payroll_page"))
 
-        payment_date_raw = request.form.get("payment_date", "").strip()
         payment_date = None
-        if payment_date_raw:
-            try:
-                payment_date = datetime.strptime(payment_date_raw, "%Y-%m-%d").date()
-            except ValueError:
+        raw_payment = request.form.get("payment_date", "").strip()
+        if raw_payment:
+            payment_date = _parse_date(raw_payment)
+            if not payment_date:
                 flash("Payment date format is invalid.", "danger")
                 return redirect(url_for("payroll_page"))
 
+        worker = Worker.query.get_or_404(worker_pk)
+        hourly_rate = _float_or_none(request.form.get("hourly_rate")) or payroll_engine.worker_rate(worker)
+        figures = payroll_engine.compute_pay(
+            _float_or_none(request.form.get("total_hours")) or 0.0,
+            _float_or_none(request.form.get("overtime_hours")) or 0.0,
+            hourly_rate,
+        )
+
         row.worker_id = worker_pk
         row.week_ending = week_ending
-        row.total_hours = request.form.get("total_hours", type=float)
-        row.hourly_rate = request.form.get("hourly_rate", type=float)
-        row.gross_pay = request.form.get("gross_pay", type=float)
-        row.napsa_deduction = request.form.get("napsa_deduction", type=float)
-        row.nhima_deduction = request.form.get("nhima_deduction", type=float)
-        row.net_pay = request.form.get("net_pay", type=float)
+        row.total_hours = figures["total_hours"]
+        row.overtime_hours = figures["overtime_hours"]
+        row.hourly_rate = figures["hourly_rate"]
+        row.overtime_pay = figures["overtime_pay"]
+        row.gross_pay = figures["gross_pay"]
+        row.napsa_rate = figures["napsa_rate"]
+        row.nhima_rate = figures["nhima_rate"]
+        row.napsa_deduction = figures["napsa_deduction"]
+        row.nhima_deduction = figures["nhima_deduction"]
+        row.net_pay = figures["net_pay"]
+        row.computed_from_attendance = False
         row.paid_status = request.form.get("paid_status", "pending").strip().lower() or "pending"
         row.payment_date = payment_date
 
         db.session.commit()
         _log_audit("config.payroll.update", f"Updated payroll row id={row.payroll_id}")
-        flash("Payroll record updated.", "success")
+        flash(f"Payroll row updated. Net pay recalculated to ZMW {figures['net_pay']:.2f}.", "success")
         return redirect(url_for("payroll_page"))
 
     @app.route("/config/payroll/<int:payroll_id>/deactivate", methods=["POST"])
-    @admin_required
+    @permission_required(PAYROLL_MANAGE)
     def deactivate_payroll_record(payroll_id: int):
         row = Payroll.query.get_or_404(payroll_id)
         row.paid_status = "inactive"
@@ -1395,27 +1508,78 @@ def _register_routes(app: Flask) -> None:
         flash("Payroll record deactivated.", "info")
         return redirect(url_for("payroll_page"))
 
-    # ---- Manual ---------------------------------------------------------- #
+    # ---- Cloud sync ---------------------------------------------------------- #
+
+    @app.route("/cloud-sync", methods=["GET", "POST"])
+    @admin_required
+    def cloud_sync_page():
+        if request.method == "POST":
+            if not can(SYNC_MANAGE):
+                flash("Your role is not permitted to change cloud settings.", "danger")
+                return redirect(url_for("cloud_sync_page"))
+
+            # Validate the service-account JSON before saving. The first
+            # release stored three loose fields and assembled a credential
+            # dictionary with no private_key, so it could never authenticate;
+            # requiring the whole file makes that failure impossible.
+            credentials_raw = request.form.get("firebase_credentials_json", "").strip()
+            if credentials_raw:
+                try:
+                    parsed = json.loads(credentials_raw)
+                    if not isinstance(parsed, dict) or "private_key" not in parsed:
+                        raise ValueError
+                except (json.JSONDecodeError, ValueError):
+                    flash("Paste the full service-account JSON downloaded from Firebase "
+                          "(it must contain a private_key field).", "danger")
+                    return redirect(url_for("cloud_sync_page"))
+
+            _save_settings({
+                "firebase_bucket": request.form.get("firebase_bucket", "").strip(),
+                "firebase_project_id": request.form.get("firebase_project_id", "").strip(),
+                "firebase_credentials_json": credentials_raw,
+            })
+            _log_audit("cloud_sync.settings.save", "Updated cloud sync settings")
+            flash("Cloud sync settings saved.", "success")
+            return redirect(url_for("cloud_sync_page"))
+
+        return render_template(
+            "cloud_sync.html",
+            active_page="cloud_sync",
+            org_name=_get_setting("org_name", "FMS Farm"),
+            metadata_rows=CloudSyncMetadata.query.order_by(
+                CloudSyncMetadata.sync_id.desc()).limit(200).all(),
+            queue_rows=OfflineSyncQueue.query.order_by(
+                OfflineSyncQueue.sync_id.desc()).limit(200).all(),
+            stats=sync_engine.queue_stats(),
+            settings={s.key: s.value for s in Setting.query.all()},
+        )
+
+    @app.route("/cloud-sync/drain", methods=["POST"])
+    @permission_required(SYNC_MANAGE)
+    def cloud_sync_drain():
+        outcome = sync_engine.drain(BASE_DIR)
+        _log_audit("cloud_sync.drain",
+                   f"Attempted {outcome['attempted']}, synced {outcome['synced']}, "
+                   f"failed {outcome['failed']}")
+        if outcome["reason"] == "not_configured":
+            flash("Cloud sync is not configured, so nothing was uploaded. "
+                  f"{outcome['skipped']} item(s) are waiting in the queue.", "warning")
+        elif outcome["synced"]:
+            flash(f"Uploaded {outcome['synced']} queued item(s). "
+                  f"{outcome['failed']} still failing.", "success")
+        else:
+            flash(f"No items were uploaded. Attempted {outcome['attempted']}, "
+                  f"failed {outcome['failed']}.", "warning")
+        return redirect(url_for("cloud_sync_page"))
+
+    # ---- Manual --------------------------------------------------------------- #
 
     @app.route("/manual")
     def manual():
-        org_name = _get_setting("org_name", "FMS Farm")
-        return render_template("manual.html", active_page="manual", org_name=org_name)
-
-    @app.route("/camera-stream/<int:camera_idx>")
-    @admin_required
-    def camera_stream(camera_idx: int):
-        sources = _get_camera_sources()
-        if camera_idx < 0 or camera_idx >= len(sources):
-            abort(404)
-
-        source = sources[camera_idx]["source"]
-        # Resolve fallback here (inside app context) so the generator
-        # never needs to touch the database.
-        fallback_source = _coerce_camera_source(_get_setting("camera_index", "0"))
-        return Response(
-            _camera_frame_generator(source, fallback_source, overlay_faces=True, overlay_motion=True),
-            mimetype="multipart/x-mixed-replace; boundary=frame",
+        return render_template(
+            "manual.html",
+            active_page="manual",
+            org_name=_get_setting("org_name", "FMS Farm"),
         )
 
 
@@ -1426,4 +1590,12 @@ def _register_routes(app: Flask) -> None:
 app = create_app()
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=6000)
+    # Debug is OFF unless explicitly asked for. The Werkzeug debugger allows
+    # arbitrary code execution through the browser, so `debug=True` on a farm
+    # network - or during a public demonstration - is a remote shell.
+    debug_enabled = os.environ.get("FMS_DEBUG", "").strip().lower() in ("1", "true", "on", "yes")
+    app.run(
+        debug=debug_enabled,
+        host=os.environ.get("FMS_HOST", "0.0.0.0"),
+        port=int(os.environ.get("FMS_PORT", "8010")),
+    )

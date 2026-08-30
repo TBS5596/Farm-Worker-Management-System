@@ -1,0 +1,309 @@
+# Farm Worker Management System - Operator Manual
+
+This manual is for the people who use the system day to day: the farm manager, the
+supervisor at the clock-in terminal, and whoever runs payroll on Friday.
+
+---
+
+## 1. What the system does
+
+A worker walks up to the terminal, types their Worker ID and PIN, and looks at the
+camera. The system compares the face at the camera with the face samples enrolled
+for that Worker ID. If they match, the clock-in is recorded together with a photo,
+a short video clip, and the worker's distance from the farm. If they do not match,
+nothing is recorded and the attempt is logged.
+
+That single check is what makes the record trustworthy. A PIN can be shared or
+guessed; a face at the camera cannot be handed to a friend. This is why enrolment
+matters more than any other setup step.
+
+At the end of the week, payroll reads those recorded hours and works out the pay.
+Nobody types hours or amounts into a form.
+
+---
+
+## 2. Starting the system
+
+### On a normal computer
+
+```bash
+source .venv/bin/activate
+python app.py
+```
+
+### With Docker (the usual choice for the farm office machine)
+
+```bash
+docker compose up -d
+```
+
+Either way, open:
+
+```
+http://localhost:8010
+```
+
+If you are opening it from another computer on the farm network, replace
+`localhost` with the office machine's address, for example
+`http://192.168.1.20:8010`.
+
+> The port must not be 6000. Chrome and Firefox refuse to open any address on
+> port 6000, so the page would simply never appear.
+
+---
+
+## 3. First login
+
+Username `admin`, password `admin`. The system immediately asks you to set a real
+password and nothing else opens until you do. The same applies to any user account
+created or reset later.
+
+---
+
+## 4. Setting up, in order
+
+### 4.1 Settings
+
+| Setting | Why it matters |
+| --- | --- |
+| Organisation name | Appears on the sidebar and the clock-in screen |
+| Farm latitude and longitude | Needed before any distance can be measured |
+| Clock-in radius | How far from the farm centre a punch is still "on site" |
+| Refuse clock-ins outside the radius | Leave **off** at first, so you can see real readings before enforcing them |
+| Match threshold | How strict face matching is. Start at 35 |
+| Standard day, overtime multiplier | Where overtime begins and what it pays |
+| Default hourly rate | Used for any worker without their own rate |
+| NAPSA and NHIMA rates | Deduction percentages. Confirm the current statutory rates before a real payroll run |
+| Shift start and end | Used to measure lateness and early departure |
+| Clip recording | Whether a short video is recorded at each punch, and how long |
+
+### 4.2 The clock-in camera (CCTV page)
+
+1. **Add CCTV Feed** with the camera source:
+   - `builtin://0` for this machine's own camera
+   - `1` for a second USB camera
+   - `rtsp://user:password@192.168.1.50:554/stream1` for an IP camera
+2. Press the **broadcast** button to test it. A working camera reports its
+   response time; a failing one tells you so and the reason is recorded under
+   Hardware Health.
+3. Press the **star** button on the camera at the clock-in point. That marks it as
+   the attendance camera - the one used for verification, snapshots and clips.
+   Everything else is surveillance.
+
+### 4.3 Workers
+
+**Workers -> Add Worker.** Name, phone and a PIN are required. The Worker ID is
+generated automatically (0001, 0002, ...). Set the hourly rate here; leave it
+blank to use the default.
+
+### 4.4 Enrolment (the step that makes it work)
+
+**Biometric** page:
+
+1. Ask the worker to stand square to the camera, in even light, no hat or
+   sunglasses.
+2. Press the green camera button on their row. One sample is captured.
+3. Repeat three to five times, with small changes of angle and expression.
+
+The badge on their row turns green at three samples. Below three it stays amber -
+matching will be unreliable.
+
+No camera to hand? Press the upload button instead and choose clear, front-facing
+photographs. Each usable photo becomes one sample.
+
+To start over, press the red bin: all samples for that worker are deleted and they
+cannot clock in until re-enrolled.
+
+**Flow:**
+
+```
+[Add worker]
+     |
+     v
+[Biometric page] --> [Green camera button] --> sample stored
+     |                        |
+     |                   repeat 3-5 times
+     v
+[Badge turns green]  --> worker can now clock in
+```
+
+---
+
+## 5. Daily use: clocking in and out
+
+The worker uses the home page - no login to the dashboard needed.
+
+1. Enter Worker ID and PIN.
+2. Choose **Clock In** or **Clock Out**.
+3. Look at the camera and submit.
+
+What the worker sees:
+
+| Message | Meaning | What to do |
+| --- | --- | --- |
+| Welcome ... recorded at 07:12 (face match 74%) | Success | Nothing |
+| Your face did not match the enrolled record | The face and the Worker ID disagree | Check they typed their own ID; re-enrol if a genuine worker keeps failing |
+| The face at the camera belongs to a different worker | Somebody is punching for somebody else | Each worker must clock in personally |
+| Your face is not enrolled yet | No samples stored | Enrol them on the Biometric page |
+| No face was detected | Too far, too dark, or the camera is blocked | Move closer, improve the light |
+| Your eyes were not clearly visible | Hat, sunglasses, bad angle | Remove and retry |
+| You are already clocked in | An open session exists | Clock out first |
+| No open check-in found | Clock-out with no clock-in | Clock in first |
+| You are ... m from the farm | Outside the radius, with enforcement on | Punch on site |
+
+**Flow:**
+
+```
+[Worker ID + PIN]
+       |
+       v
+[Credentials checked] -- fail --> [Error shown, nothing recorded]
+       |
+       v
+[Face matched against enrolled samples] -- fail --> [Refused and logged]
+       |
+       v
+[Location checked] -- outside, if enforced --> [Refused]
+       |
+       v
+[Snapshot saved] -> [Attendance recorded] -> [Clip recorded] -> [Summary updated]
+```
+
+---
+
+## 6. Checking attendance
+
+**Attendance** page. Each row is one session:
+
+- **Identity** - a green badge with the match score means the face matched. Grey
+  "Unverified" means it was recorded without a match, which only happens if face
+  verification was switched off in Settings.
+- **Location** - "On site", or the distance if the worker was outside the radius.
+- **Clip** - opens the short video recorded at that punch.
+- **Photo** - click a thumbnail to enlarge it.
+
+**Rebuild Daily Summaries** recalculates hours, overtime and lateness for the last
+30 days. Use it if sessions were edited or imported directly.
+
+**Export CSV** gives the whole table for a spreadsheet or a report.
+
+---
+
+## 7. Running payroll
+
+**Payroll** page:
+
+1. Choose the **week ending** date (normally Sunday).
+2. Press **Generate Payroll**.
+
+For every active worker the system totals the recorded hours for those seven days,
+splits regular from overtime hours, applies the worker's rate, and computes gross
+pay, NAPSA, NHIMA and net pay. Workers with no hours are skipped and reported.
+
+Weeks already marked **paid** are never overwritten, so re-running is safe.
+
+To mark a week paid, press edit on the row, set status to *paid* and add the
+payment date.
+
+The rates used are shown on the page, and the source column says whether a row
+came from attendance or was entered by hand. Even a hand-entered row has its pay
+calculated: you enter hours and a rate, never an amount.
+
+**Export CSV** produces the payment list.
+
+---
+
+## 8. Cameras and recordings
+
+The CCTV page shows every active camera live, with green boxes on detected faces
+and orange boxes on movement.
+
+- **Health Check** opens every registered camera and records whether it responded.
+  Results appear under Recent Hardware Health. Run it each morning: a solar-powered
+  gate camera that died overnight shows up here rather than in a missing recording.
+- **Record 10s Clip** records from the attendance camera on demand.
+- **Recordings** lists stored clips with their trigger, length and size. Clips are
+  recorded around each punch rather than continuously, which keeps a small disk
+  from filling up while still giving a supervisor something to review.
+
+---
+
+## 9. Users and roles
+
+**Users** page (administrators only).
+
+| Role | Can do |
+| --- | --- |
+| Administrator | Everything, including users and settings |
+| Supervisor | Workers, attendance, enrolment, payroll, CCTV, cloud sync |
+| Viewer | Read only |
+
+New users get a temporary password shown once on screen; they must change it at
+first login. The last active administrator cannot be demoted or deactivated, so
+you cannot lock everybody out.
+
+Every action - logins, edits, enrolments, payroll runs, refused clock-ins - is
+recorded on the **Audit Log** page with the username, time and IP address.
+
+---
+
+## 10. Cloud sync (optional)
+
+Without cloud sync the system is fully usable: everything is stored on the office
+machine. This is the normal state on a remote farm.
+
+To mirror snapshots to Firebase, go to **Cloud Sync** and paste the service-account
+JSON from the Firebase console (Project settings -> Service accounts -> Generate
+new private key) plus the storage bucket name. A partial key will not work.
+
+Once configured, snapshots upload as they are captured. When the link drops they
+are queued; **Sync Queued Items** retries them. The counters at the top of the page
+show what is waiting, uploaded and failed.
+
+---
+
+## 11. Data Hub
+
+**Data Hub** browses every table directly - useful for checking raw records or
+pulling figures for a report. Notable tables:
+
+| Table | What it holds |
+| --- | --- |
+| `biometric_transactions` | Every verification attempt with its score, threshold and reason. The source for accuracy figures |
+| `face_templates` | Enrolled samples, one row per sample, with a quality score |
+| `daily_attendance_summary` | Hours, overtime, lateness and early departure per worker per day |
+| `hardware_health_logs` | Camera checks and failures |
+| `offline_sync_queue` | Uploads waiting for the link to return |
+
+---
+
+## 12. Troubleshooting
+
+| Symptom | Cause and fix |
+| --- | --- |
+| Page will not open at all | Wrong port, or the app is not running. Use 8010; check `docker compose ps` |
+| Blank camera feed | Wrong source, another app is using the camera, or the USB device is not passed into Docker |
+| Everyone is rejected at clock-in | Camera not working, or no samples enrolled. Check the Biometric page |
+| One genuine worker keeps being rejected | Too few samples or poor light. Add samples in the conditions they actually clock in under |
+| "Recognizer: correlation-fallback" warning | `opencv-contrib-python` is missing, or plain `opencv-python` is installed alongside it and shadowing it. Reinstall from `requirements.txt` |
+| Payroll generates nothing | No recorded hours for that week, or summaries need rebuilding from the Attendance page |
+| Everyone signed out after a restart | `FMS_SECRET_KEY` is not set, so a new key is generated on each boot |
+| Clip button shows nothing | Clip recording is off in Settings, or the camera could not be reopened. Check Hardware Health |
+
+---
+
+## 13. Weekly routine
+
+**Every morning:** CCTV -> Health Check. Confirm the attendance camera is online.
+
+**During the day:** watch the Attendance page. Refused attempts appear on the
+Biometric page with the reason.
+
+**Friday:** Payroll -> choose week ending -> Generate -> export CSV -> mark rows
+paid once paid.
+
+**When a worker joins:** add them on Workers, then enrol at least three face
+samples before their first shift.
+
+**When a worker leaves:** deactivate them on Workers. Their records stay for the
+audit trail, but they can no longer clock in.

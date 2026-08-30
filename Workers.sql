@@ -1,253 +1,275 @@
--- Create database
-CREATE DATABASE IF NOT EXISTS farm_worker_db;
-USE farm_worker_db;
+-- ---------------------------------------------------------------------------
+-- Farm Worker Management System - database schema
+--
+-- GENERATED FILE. Do not edit by hand.
+-- Source of truth: models.py
+-- Regenerate with: python tools/export_schema.py
+-- Generated: 2026-08-28 10:02:43 UTC
+-- Dialect: SQLite (the deployment target; Postgres or MySQL need type tweaks)
+-- ---------------------------------------------------------------------------
 
--- Table: workers
-CREATE TABLE workers (
-    worker_id INT PRIMARY KEY AUTO_INCREMENT,
-    full_name VARCHAR(100) NOT NULL,
-    nrc_number VARCHAR(20) UNIQUE,
-    phone_number VARCHAR(15),
-    address TEXT,
-    fingerprint_template BLOB,
-    enrollment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    status ENUM('active', 'inactive') DEFAULT 'active'
-);
-
--- Table: attendance
-CREATE TABLE attendance (
-    attendance_id INT PRIMARY KEY AUTO_INCREMENT,
-    worker_id INT NOT NULL,
-    check_in_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    check_out_time TIMESTAMP NULL,
-    latitude DECIMAL(10, 8),
-    longitude DECIMAL(11, 8),
-    verified_by_cctv BOOLEAN DEFAULT FALSE,
-    FOREIGN KEY (worker_id) REFERENCES workers(worker_id) ON DELETE CASCADE
+-- Table: biometric_devices
+CREATE TABLE biometric_devices (
+	device_id INTEGER NOT NULL, 
+	device_name VARCHAR(50) NOT NULL, 
+	device_serial VARCHAR(100), 
+	device_type VARCHAR(20) NOT NULL, 
+	ip_address VARCHAR(45), 
+	usb_port VARCHAR(20), 
+	status VARCHAR(20) NOT NULL, 
+	last_heartbeat DATETIME, 
+	location VARCHAR(100), 
+	created_at DATETIME NOT NULL, 
+	PRIMARY KEY (device_id), 
+	UNIQUE (device_serial)
 );
 
 -- Table: cctv_feeds
 CREATE TABLE cctv_feeds (
-    feed_id INT PRIMARY KEY AUTO_INCREMENT,
-    camera_name VARCHAR(50) NOT NULL,
-    camera_location VARCHAR(100),
-    rtsp_url VARCHAR(255),
-    status ENUM('online', 'offline') DEFAULT 'offline',
-    last_heartbeat TIMESTAMP NULL
+	feed_id INTEGER NOT NULL, 
+	camera_name VARCHAR(50) NOT NULL, 
+	camera_location VARCHAR(100), 
+	rtsp_url VARCHAR(255), 
+	status VARCHAR(20) NOT NULL, 
+	is_primary BOOLEAN NOT NULL, 
+	last_heartbeat DATETIME, 
+	PRIMARY KEY (feed_id)
+);
+
+-- Table: cloud_sync_metadata
+CREATE TABLE cloud_sync_metadata (
+	sync_id INTEGER NOT NULL, 
+	table_name VARCHAR(50) NOT NULL, 
+	record_id INTEGER NOT NULL, 
+	cloud_status VARCHAR(20) NOT NULL, 
+	cloud_record_id VARCHAR(100), 
+	last_sync_attempt DATETIME, 
+	synced_at DATETIME, 
+	PRIMARY KEY (sync_id), 
+	CONSTRAINT uq_cloud_sync_table_record UNIQUE (table_name, record_id)
+);
+
+-- Table: hardware_health_logs
+CREATE TABLE hardware_health_logs (
+	log_id INTEGER NOT NULL, 
+	device_type VARCHAR(30) NOT NULL, 
+	device_id INTEGER NOT NULL, 
+	device_label VARCHAR(120), 
+	status VARCHAR(20) NOT NULL, 
+	error_code VARCHAR(50), 
+	error_message TEXT, 
+	response_time_ms INTEGER, 
+	logged_at DATETIME NOT NULL, 
+	PRIMARY KEY (log_id)
+);
+
+-- Table: settings
+CREATE TABLE settings (
+	id INTEGER NOT NULL, 
+	"key" VARCHAR(100) NOT NULL, 
+	value TEXT, 
+	PRIMARY KEY (id), 
+	UNIQUE ("key")
+);
+
+-- Table: workers
+CREATE TABLE workers (
+	id INTEGER NOT NULL, 
+	worker_id VARCHAR(20) NOT NULL, 
+	name VARCHAR(120) NOT NULL, 
+	nrc_number VARCHAR(20), 
+	pin_hash VARCHAR(256) NOT NULL, 
+	pin_fingerprint VARCHAR(64), 
+	fingerprint_template BLOB, 
+	phone_number VARCHAR(30), 
+	address VARCHAR(255), 
+	emergency_contact VARCHAR(120), 
+	department VARCHAR(80), 
+	hourly_rate FLOAT, 
+	face_enrolled_at DATETIME, 
+	enrollment_date DATETIME, 
+	status VARCHAR(20) NOT NULL, 
+	created_at DATETIME, 
+	PRIMARY KEY (id), 
+	UNIQUE (worker_id), 
+	UNIQUE (nrc_number)
+);
+
+-- Table: attendance
+CREATE TABLE attendance (
+	attendance_id INTEGER NOT NULL, 
+	worker_id INTEGER NOT NULL, 
+	check_in_time DATETIME NOT NULL, 
+	check_out_time DATETIME, 
+	latitude FLOAT, 
+	longitude FLOAT, 
+	verified_by_cctv BOOLEAN NOT NULL, 
+	verified_by_face BOOLEAN NOT NULL, 
+	check_in_match_score FLOAT, 
+	check_out_match_score FLOAT, 
+	within_geofence BOOLEAN, 
+	distance_from_farm_m FLOAT, 
+	PRIMARY KEY (attendance_id), 
+	FOREIGN KEY(worker_id) REFERENCES workers (id)
+);
+
+-- Table: biometric_transactions
+CREATE TABLE biometric_transactions (
+	transaction_id INTEGER NOT NULL, 
+	device_id INTEGER, 
+	worker_id INTEGER, 
+	transaction_type VARCHAR(30) NOT NULL, 
+	modality VARCHAR(20) NOT NULL, 
+	success BOOLEAN NOT NULL, 
+	match_score FLOAT, 
+	threshold_used FLOAT, 
+	error_message TEXT, 
+	timestamp DATETIME NOT NULL, 
+	PRIMARY KEY (transaction_id), 
+	FOREIGN KEY(device_id) REFERENCES biometric_devices (device_id), 
+	FOREIGN KEY(worker_id) REFERENCES workers (id)
+);
+
+-- Table: daily_attendance_summary
+CREATE TABLE daily_attendance_summary (
+	summary_id INTEGER NOT NULL, 
+	worker_id INTEGER NOT NULL, 
+	summary_date DATE NOT NULL, 
+	check_in_time TIME, 
+	check_out_time TIME, 
+	total_hours FLOAT, 
+	overtime_hours FLOAT NOT NULL, 
+	sessions_count INTEGER NOT NULL, 
+	late_minutes INTEGER NOT NULL, 
+	early_departure_minutes INTEGER NOT NULL, 
+	verified_by_cctv BOOLEAN NOT NULL, 
+	verified_by_face BOOLEAN NOT NULL, 
+	created_at DATETIME NOT NULL, 
+	updated_at DATETIME NOT NULL, 
+	PRIMARY KEY (summary_id), 
+	CONSTRAINT uq_daily_attendance_worker_day UNIQUE (worker_id, summary_date), 
+	FOREIGN KEY(worker_id) REFERENCES workers (id)
+);
+
+-- Table: face_templates
+CREATE TABLE face_templates (
+	face_id INTEGER NOT NULL, 
+	worker_id INTEGER NOT NULL, 
+	face_embedding BLOB NOT NULL, 
+	algorithm VARCHAR(30) NOT NULL, 
+	sample_index INTEGER NOT NULL, 
+	reference_image_path VARCHAR(255), 
+	quality_score FLOAT, 
+	created_at DATETIME NOT NULL, 
+	updated_at DATETIME, 
+	PRIMARY KEY (face_id), 
+	FOREIGN KEY(worker_id) REFERENCES workers (id)
+);
+
+-- Table: offline_sync_queue
+CREATE TABLE offline_sync_queue (
+	sync_id INTEGER NOT NULL, 
+	device_id INTEGER, 
+	worker_id INTEGER, 
+	operation_type VARCHAR(50) NOT NULL, 
+	payload TEXT NOT NULL, 
+	sync_status VARCHAR(20) NOT NULL, 
+	retry_count INTEGER NOT NULL, 
+	last_error TEXT, 
+	created_at DATETIME NOT NULL, 
+	synced_at DATETIME, 
+	PRIMARY KEY (sync_id), 
+	FOREIGN KEY(device_id) REFERENCES biometric_devices (device_id), 
+	FOREIGN KEY(worker_id) REFERENCES workers (id)
 );
 
 -- Table: payroll
 CREATE TABLE payroll (
-    payroll_id INT PRIMARY KEY AUTO_INCREMENT,
-    worker_id INT NOT NULL,
-    week_ending DATE NOT NULL,
-    total_hours DECIMAL(5,2),
-    hourly_rate DECIMAL(10,2),
-    gross_pay DECIMAL(10,2),
-    napsa_deduction DECIMAL(10,2),
-    nhima_deduction DECIMAL(10,2),
-    net_pay DECIMAL(10,2),
-    paid_status ENUM('pending', 'paid') DEFAULT 'pending',
-    payment_date DATE,
-    FOREIGN KEY (worker_id) REFERENCES workers(worker_id) ON DELETE CASCADE
+	payroll_id INTEGER NOT NULL, 
+	worker_id INTEGER NOT NULL, 
+	week_ending DATE NOT NULL, 
+	total_hours FLOAT, 
+	overtime_hours FLOAT, 
+	hourly_rate FLOAT, 
+	overtime_pay FLOAT, 
+	gross_pay FLOAT, 
+	napsa_rate FLOAT, 
+	nhima_rate FLOAT, 
+	napsa_deduction FLOAT, 
+	nhima_deduction FLOAT, 
+	net_pay FLOAT, 
+	computed_from_attendance BOOLEAN NOT NULL, 
+	generated_at DATETIME, 
+	paid_status VARCHAR(20) NOT NULL, 
+	payment_date DATE, 
+	PRIMARY KEY (payroll_id), 
+	CONSTRAINT uq_payroll_worker_week UNIQUE (worker_id, week_ending), 
+	FOREIGN KEY(worker_id) REFERENCES workers (id)
 );
 
--- Table: users (for role-based access)
+-- Table: users
 CREATE TABLE users (
-    user_id INT PRIMARY KEY AUTO_INCREMENT,
-    username VARCHAR(50) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    role ENUM('admin', 'manager', 'supervisor', 'auditor') DEFAULT 'supervisor',
-    worker_id INT NULL,
-    FOREIGN KEY (worker_id) REFERENCES workers(worker_id) ON DELETE SET NULL
+	id INTEGER NOT NULL, 
+	username VARCHAR(80) NOT NULL, 
+	name VARCHAR(120), 
+	email VARCHAR(120), 
+	phone VARCHAR(30), 
+	role VARCHAR(30) NOT NULL, 
+	linked_worker_id INTEGER, 
+	password_hash VARCHAR(256) NOT NULL, 
+	is_active BOOLEAN NOT NULL, 
+	must_change_password BOOLEAN NOT NULL, 
+	last_login_at DATETIME, 
+	created_at DATETIME, 
+	PRIMARY KEY (id), 
+	UNIQUE (username), 
+	FOREIGN KEY(linked_worker_id) REFERENCES workers (id)
 );
 
 -- Table: audit_logs
 CREATE TABLE audit_logs (
-    log_id INT PRIMARY KEY AUTO_INCREMENT,
-    user_id INT,
-    action VARCHAR(100),
-    details TEXT,
-    ip_address VARCHAR(45),
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL
+	id INTEGER NOT NULL, 
+	user_id INTEGER, 
+	username VARCHAR(80) NOT NULL, 
+	action VARCHAR(100) NOT NULL, 
+	details TEXT, 
+	ip_address VARCHAR(45), 
+	timestamp DATETIME NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id)
 );
 
--- Insert sample data
-INSERT INTO users (username, password_hash, role) VALUES 
-('admin', '', 'admin');
-
-INSERT INTO cctv_feeds (camera_name, camera_location, rtsp_url, status) VALUES
-('Field_Cam_1', 'North Field', '', 'online'),
-('Gate_Cam_1', 'Main Entrance', '', 'online');
-
--- Verify tables
-SHOW TABLES;
-SELECT * FROM users;
-
--- Biometric devices tracking (for hardware integration)
-CREATE TABLE biometric_devices (
-    device_id INT PRIMARY KEY AUTO_INCREMENT,
-    device_name VARCHAR(50) NOT NULL,
-    device_serial VARCHAR(100) UNIQUE,
-    device_type ENUM('fingerprint', 'facial') DEFAULT 'fingerprint',
-    ip_address VARCHAR(45),
-    usb_port VARCHAR(20),
-    status ENUM('active', 'inactive', 'offline') DEFAULT 'offline',
-    last_heartbeat TIMESTAMP NULL,
-    location VARCHAR(100),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Face templates (using facial recognition)
-CREATE TABLE face_templates (
-    face_id INT PRIMARY KEY AUTO_INCREMENT,
-    worker_id INT NOT NULL,
-    face_embedding BLOB NOT NULL,          
-    reference_image_path VARCHAR(255),     -- path to stored reference image
-    quality_score DECIMAL(5,2),            -- image quality score
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NULL,
-    FOREIGN KEY (worker_id) REFERENCES workers(worker_id) ON DELETE CASCADE
-);
-
--- Biometric transaction logs (for debugging hardware and tracking events)
-CREATE TABLE biometric_transactions (
-    transaction_id INT PRIMARY KEY AUTO_INCREMENT,
-    device_id INT,
-    worker_id INT,
-    transaction_type ENUM('enroll', 'verify', 'check_in', 'check_out') NOT NULL,
-    success BOOLEAN DEFAULT FALSE,
-    match_score DECIMAL(5,2),              -- fingerprint/face match confidence
-    error_message TEXT,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (device_id) REFERENCES biometric_devices(device_id),
-    FOREIGN KEY (worker_id) REFERENCES workers(worker_id)
-);
-
--- CCTV recordings metadata (for recorded footage access from dashboard)
+-- Table: cctv_recordings
 CREATE TABLE cctv_recordings (
-    recording_id INT PRIMARY KEY AUTO_INCREMENT,
-    camera_id INT,
-    recording_path VARCHAR(255) NOT NULL,   -- file path or cloud URL
-    start_time TIMESTAMP NOT NULL,
-    end_time TIMESTAMP NULL,
-    file_size_bytes BIGINT,
-    storage_location ENUM('local', 'cloud', 'both') DEFAULT 'local',
-    cloud_url VARCHAR(500),                 -- for cloud storage access
-    uploaded_to_cloud BOOLEAN DEFAULT FALSE,
-    uploaded_at TIMESTAMP NULL,
-    FOREIGN KEY (camera_id) REFERENCES cctv_feeds(feed_id) ON DELETE CASCADE
+	recording_id INTEGER NOT NULL, 
+	camera_id INTEGER, 
+	attendance_id INTEGER, 
+	trigger_type VARCHAR(20) NOT NULL, 
+	recording_path VARCHAR(255) NOT NULL, 
+	start_time DATETIME NOT NULL, 
+	end_time DATETIME, 
+	duration_seconds FLOAT, 
+	file_size_bytes BIGINT, 
+	storage_location VARCHAR(20) NOT NULL, 
+	cloud_url VARCHAR(500), 
+	uploaded_to_cloud BOOLEAN NOT NULL, 
+	uploaded_at DATETIME, 
+	PRIMARY KEY (recording_id), 
+	FOREIGN KEY(camera_id) REFERENCES cctv_feeds (feed_id), 
+	FOREIGN KEY(attendance_id) REFERENCES attendance (attendance_id)
 );
 
--- Event snapshots (photo or video clip captured at clock-in/out)
+-- Table: event_snapshots
 CREATE TABLE event_snapshots (
-    snapshot_id INT PRIMARY KEY AUTO_INCREMENT,
-    attendance_id INT NOT NULL,             -- links to attendance record
-    camera_id INT,
-    snapshot_type ENUM('photo', 'video_clip') DEFAULT 'photo',
-    file_path VARCHAR(255) NOT NULL,
-    cloud_url VARCHAR(500),
-    captured_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (attendance_id) REFERENCES attendance(attendance_id) ON DELETE CASCADE,
-    FOREIGN KEY (camera_id) REFERENCES cctv_feeds(feed_id) ON DELETE SET NULL
+	snapshot_id INTEGER NOT NULL, 
+	attendance_id INTEGER NOT NULL, 
+	camera_id INTEGER, 
+	snapshot_type VARCHAR(20) NOT NULL, 
+	file_path VARCHAR(255) NOT NULL, 
+	cloud_url VARCHAR(500), 
+	captured_at DATETIME NOT NULL, 
+	PRIMARY KEY (snapshot_id), 
+	FOREIGN KEY(attendance_id) REFERENCES attendance (attendance_id), 
+	FOREIGN KEY(camera_id) REFERENCES cctv_feeds (feed_id)
 );
-
--- Offline sync queue (for handheld terminals in remote fields)
-CREATE TABLE offline_sync_queue (
-    sync_id INT PRIMARY KEY AUTO_INCREMENT,
-    device_id INT,
-    worker_id INT,
-    operation_type ENUM('attendance_checkin', 'attendance_checkout', 'worker_enrollment', 'fingerprint_enrollment'),
-    payload JSON NOT NULL,                  -- stores complete record as JSON
-    sync_status ENUM('pending', 'synced', 'failed') DEFAULT 'pending',
-    retry_count INT DEFAULT 0,
-    last_error TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    synced_at TIMESTAMP NULL,
-    FOREIGN KEY (device_id) REFERENCES biometric_devices(device_id)
-);
-
--- Cloud sync metadata (track what has been uploaded to cloud)
-CREATE TABLE cloud_sync_metadata (
-    sync_id INT PRIMARY KEY AUTO_INCREMENT,
-    table_name VARCHAR(50) NOT NULL,        -- e.g., 'attendance', 'workers', 'cctv_recordings'
-    record_id INT NOT NULL,                 -- ID of record in local table
-    cloud_status ENUM('pending', 'synced', 'failed') DEFAULT 'pending',
-    cloud_record_id VARCHAR(100),           -- ID from cloud database
-    last_sync_attempt TIMESTAMP NULL,
-    synced_at TIMESTAMP NULL,
-    UNIQUE KEY unique_record (table_name, record_id)
-);
-
-
-
---  Add indexes for search functionality on existing tables
-ALTER TABLE workers ADD INDEX idx_worker_name (full_name);
-ALTER TABLE workers ADD INDEX idx_status (status);
-ALTER TABLE workers ADD INDEX idx_enrollment_date (enrollment_date);
-
-ALTER TABLE attendance ADD INDEX idx_check_in_time (check_in_time);
-ALTER TABLE attendance ADD INDEX idx_worker_date (worker_id, check_in_time);
-
-ALTER TABLE payroll ADD INDEX idx_week_ending (week_ending);
-ALTER TABLE payroll ADD INDEX idx_paid_status (paid_status);
-
-ALTER TABLE cctv_recordings ADD INDEX idx_recording_time (start_time);
-ALTER TABLE cctv_recordings ADD INDEX idx_camera_time (camera_id, start_time);
-
--- Materialized view for daily attendance summary (for faster reporting)
-CREATE TABLE daily_attendance_summary (
-    summary_id INT PRIMARY KEY AUTO_INCREMENT,
-    worker_id INT NOT NULL,
-    summary_date DATE NOT NULL,
-    check_in_time TIME,
-    check_out_time TIME,
-    total_hours DECIMAL(5,2),
-    late_minutes INT DEFAULT 0,
-    early_departure_minutes INT DEFAULT 0,
-    verified_by_cctv BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (worker_id) REFERENCES workers(worker_id) ON DELETE CASCADE,
-    UNIQUE KEY unique_worker_day (worker_id, summary_date)
-);
-
--- Stored procedure to refresh daily summary (run at end of each day)
-DELIMITER //
-CREATE PROCEDURE refresh_daily_attendance_summary(IN target_date DATE)
-BEGIN
-    -- Clear existing summary for the date
-    DELETE FROM daily_attendance_summary WHERE summary_date = target_date;
-    
-    -- Insert fresh summary
-    INSERT INTO daily_attendance_summary (worker_id, summary_date, check_in_time, check_out_time, total_hours, verified_by_cctv)
-    SELECT 
-        a.worker_id,
-        DATE(a.check_in_time) as summary_date,
-        TIME(MIN(a.check_in_time)) as check_in_time,
-        TIME(MAX(a.check_out_time)) as check_out_time,
-        TIMESTAMPDIFF(HOUR, MIN(a.check_in_time), MAX(a.check_out_time)) as total_hours,
-        MAX(a.verified_by_cctv) as verified_by_cctv
-    FROM attendance a
-    WHERE DATE(a.check_in_time) = target_date
-    GROUP BY a.worker_id, DATE(a.check_in_time);
-END //
-DELIMITER ;
-
-
--- Hardware health logs (monitoring biometric scanners and cameras)
-CREATE TABLE hardware_health_logs (
-    log_id INT PRIMARY KEY AUTO_INCREMENT,
-    device_type ENUM('biometric_scanner', 'cctv_camera') NOT NULL,
-    device_id INT NOT NULL,
-    status ENUM('online', 'offline', 'error', 'maintenance') DEFAULT 'offline',
-    error_code VARCHAR(50),
-    error_message TEXT,
-    response_time_ms INT,                   -- device response time
-    logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-SHOW TABLES;
-
 

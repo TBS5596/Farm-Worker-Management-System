@@ -1,5 +1,40 @@
+/**
+ * edit-modals.js - fills every "edit" modal from the row that was clicked.
+ *
+ * The pattern, used on five pages:
+ *
+ *   1. Each row's edit button carries the whole record as JSON in a
+ *      `data-record` attribute, written by the template. For example, in
+ *      workers.html:
+ *
+ *        <button class="edit-worker-btn"
+ *                data-record='{"id": 3, "name": "Musonda Banda",
+ *                              "status": "active", "hourly_rate": 18.0}'>
+ *
+ *   2. Clicking it copies each JSON field into the matching input in the
+ *      shared modal, and points the modal's form at that record's update URL
+ *      (here: /workers/3/update).
+ *
+ * Why do it this way rather than one modal per row: a table of 200 workers
+ * would otherwise render 200 modals. One modal filled on demand keeps the page
+ * small, and there is a single form to maintain per entity.
+ *
+ * The listener is delegated to `document` because DataTables removes rows from
+ * the DOM when you page through the table - a listener bound directly to a
+ * button on page 1 would be gone by page 2.
+ *
+ * To wire up a new entity, add an entry to `editConfigs`:
+ *   idKey          which JSON field holds the primary key
+ *   formId         the id of the modal's <form>
+ *   actionBuilder  builds the POST URL from that key
+ *   fields         JSON field name -> input element id
+ *   textFields     JSON field name -> element whose textContent to set
+ *                  (used for read-only labels such as "Worker ID: 0003")
+ */
 document.addEventListener('DOMContentLoaded', function () {
-  const editConfigs = {
+  var editConfigs = {
+    // Workers page. Note there is no PIN here: a PIN can only be reset, never
+    // read back, so it has its own modal and route.
     '.edit-worker-btn': {
       idKey: 'id',
       formId: 'editWorkerForm',
@@ -12,12 +47,15 @@ document.addEventListener('DOMContentLoaded', function () {
         department: 'editDepartment',
         nrc_number: 'editNrc',
         status: 'editStatus',
+        hourly_rate: 'editHourlyRate',
         enrollment_date: 'editEnrollmentDate'
       },
       textFields: {
         worker_id: 'editWorkerCode'
       }
     },
+
+    // Users page. The password is absent for the same reason as the PIN.
     '.edit-user-btn': {
       idKey: 'id',
       formId: 'editUserForm',
@@ -33,6 +71,9 @@ document.addEventListener('DOMContentLoaded', function () {
         username: 'editUserUsername'
       }
     },
+
+    // CCTV feeds. `rtsp_url` is the live stream source, e.g.
+    // "rtsp://10.0.0.5:554/stream1" or "builtin://0" for this machine's camera.
     '.edit-feed-btn': {
       idKey: 'feed_id',
       formId: 'editFeedForm',
@@ -44,6 +85,7 @@ document.addEventListener('DOMContentLoaded', function () {
         status: 'editFeedStatus'
       }
     },
+
     '.edit-device-btn': {
       idKey: 'device_id',
       formId: 'editDeviceForm',
@@ -58,6 +100,10 @@ document.addEventListener('DOMContentLoaded', function () {
         location: 'editDeviceLocation'
       }
     },
+
+    // Payroll. Only hours, rate, status and dates are editable: gross pay,
+    // NAPSA, NHIMA and net pay are recalculated server-side from those, so
+    // there are deliberately no inputs for the amounts.
     '.edit-payroll-btn': {
       idKey: 'payroll_id',
       formId: 'editPayrollForm',
@@ -67,16 +113,14 @@ document.addEventListener('DOMContentLoaded', function () {
         week_ending: 'editPayrollWeekEnding',
         payment_date: 'editPayrollPaymentDate',
         total_hours: 'editPayrollHours',
+        overtime_hours: 'editPayrollOvertime',
         hourly_rate: 'editPayrollRate',
-        gross_pay: 'editPayrollGross',
-        paid_status: 'editPayrollStatus',
-        napsa_deduction: 'editPayrollNapsa',
-        nhima_deduction: 'editPayrollNhima',
-        net_pay: 'editPayrollNet'
+        paid_status: 'editPayrollStatus'
       }
     }
   };
 
+  /** null and undefined must become an empty input, not the text "null". */
   function safeValue(value) {
     if (value === null || value === undefined) {
       return '';
@@ -88,6 +132,9 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!element) {
       return;
     }
+    // <select> option values are lower case throughout ("active", "pending",
+    // "supervisor"), so normalise before matching or the option silently fails
+    // to select and the form submits the first option instead.
     if (element.tagName === 'SELECT') {
       element.value = safeValue(value).toLowerCase();
       return;
@@ -103,43 +150,44 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function applyRecordToModal(record, config) {
-    const form = document.getElementById(config.formId);
+    var form = document.getElementById(config.formId);
     if (!form) {
       return;
     }
 
-    const recordId = record[config.idKey];
+    // Point the shared form at this particular record.
+    var recordId = record[config.idKey];
     if (recordId) {
       form.action = config.actionBuilder(recordId);
     }
 
     Object.keys(config.fields || {}).forEach(function (recordKey) {
-      const targetId = config.fields[recordKey];
-      setInputValue(document.getElementById(targetId), record[recordKey]);
+      setInputValue(document.getElementById(config.fields[recordKey]), record[recordKey]);
     });
 
     Object.keys(config.textFields || {}).forEach(function (recordKey) {
-      const targetId = config.textFields[recordKey];
-      setTextValue(document.getElementById(targetId), record[recordKey], '-');
+      setTextValue(document.getElementById(config.textFields[recordKey]), record[recordKey], '-');
     });
   }
 
   document.addEventListener('click', function (e) {
     Object.keys(editConfigs).forEach(function (selector) {
-      const editBtn = e.target.closest(selector);
+      var editBtn = e.target.closest(selector);
       if (!editBtn) {
         return;
       }
 
-      const rawRecord = editBtn.getAttribute('data-record');
+      var rawRecord = editBtn.getAttribute('data-record');
       if (!rawRecord) {
         return;
       }
 
-      let record = {};
+      var record = {};
       try {
         record = JSON.parse(rawRecord);
       } catch (_) {
+        // Malformed JSON should leave the modal blank rather than throwing and
+        // stopping every other listener on the page.
         return;
       }
 

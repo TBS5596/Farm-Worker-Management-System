@@ -1,17 +1,93 @@
 {% extends 'base_admin.html' %}
 
+{# ===========================================================================
+   cctv.html - cameras, clips and camera health.
+
+   Layout:
+     1. Live views       every active feed with a source, attendance camera
+                         first. Green boxes mark detected faces, orange boxes
+                         movement - drawn server-side into the stream.
+     2. Configuration    the built-in camera index, plus extra JSON sources for
+                         cameras not registered as feeds
+     3. Add / edit feed  a source is an RTSP URL
+                         ("rtsp://user:pass@192.168.1.50:554/stream1"), a USB
+                         device index ("1"), or "builtin://0" for this machine
+     4. Feeds table      per row: test (opens the camera and reports the
+                         response time), star (make it the attendance camera
+                         used for verification, snapshots and clips), edit,
+                         deactivate
+     5. Recordings       stored clips with their trigger, length and size
+     6. Hardware health  the last 25 camera probes - how a dead solar-powered
+                         gate camera gets noticed in the morning rather than
+                         when footage is needed
+
+   Clips are recorded around each punch rather than continuously: a Raspberry
+   Pi's SD card would fill in hours, and a few seconds either side of a punch is
+   what actually gets reviewed.
+
+   Context: feeds, recordings, camera_sources, health_logs, settings.
+   =========================================================================== #}
+
 {% block title %}{{ org_name }} - CCTV{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdn.datatables.net/2.3.8/css/dataTables.dataTables.min.css" />
 <link rel="stylesheet" href="{{ url_for('static', filename='css/datatables.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
   <h5 class="mb-0"><i class="bi bi-camera-video-fill me-2 text-success"></i>CCTV</h5>
-  <span class="text-muted small">Camera setup, feeds, and recordings</span>
+  <div class="d-flex gap-2">
+    {% if can('cctv.manage') %}
+    <form method="POST" action="{{ url_for('cctv_health_check') }}" class="d-inline">
+      <button class="btn btn-outline-secondary btn-sm" type="submit"
+              title="Open every registered camera and record whether it responded">
+        <i class="bi bi-activity me-1"></i>Health Check
+      </button>
+    </form>
+    <form method="POST" action="{{ url_for('record_now') }}" class="d-inline">
+      <input type="hidden" name="seconds" value="10" />
+      <button class="btn btn-outline-danger btn-sm" type="submit"
+              title="Record a 10 second clip from the attendance camera">
+        <i class="bi bi-record-circle me-1"></i>Record 10s Clip
+      </button>
+    </form>
+    {% endif %}
+  </div>
 </div>
+
+{# --- Live views. Face and motion boxes are drawn into the stream by
+     cctv_engine, not by CSS, so what you see is what was recorded. #}
+<section class="mb-4">
+  <div class="row g-3">
+    {% for camera in camera_sources %}
+    <div class="col-md-6">
+      <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="fw-semibold">{{ camera.name }}</span>
+          <span>
+            {% if loop.first %}<span class="badge bg-success me-1">Attendance camera</span>{% endif %}
+            <span class="badge bg-dark text-uppercase">{{ camera.type }}</span>
+          </span>
+        </div>
+        <div class="card-body p-2">
+          <img src="{{ url_for('camera_stream', camera_idx=loop.index0) }}"
+               class="img-fluid w-100 camera-feed-frame" alt="{{ camera.name }} live feed" />
+        </div>
+        {% if camera.location %}
+        <div class="card-footer bg-white small text-muted">{{ camera.location }}</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="small text-muted mt-2 mb-0">
+    Every active feed with a source appears here. The first one is used for clock-in verification,
+    snapshots and event clips - change it with the star button in the feeds table.
+  </p>
+</section>
 
 <div class="row g-3 mb-4">
   <div class="col-xl-6">
@@ -26,7 +102,10 @@
           <div class="col-12">
             <label class="form-label">Camera Sources JSON</label>
             <textarea class="form-control font-monospace" name="camera_sources" rows="6" placeholder='[{"name":"Front Gate USB","type":"usb","source":"0"}]'>{{ settings.get('camera_sources', '') }}</textarea>
-            <div class="form-text">If empty, the built-in camera index is used as default.</div>
+            <div class="form-text">
+              Optional extra sources that are not registered as feeds. Registered feeds are already
+              watchable, so most farms can leave this empty.
+            </div>
           </div>
           <div class="col-12">
             <button type="submit" class="btn btn-success">Save CCTV Settings</button>
@@ -48,7 +127,11 @@
             <input type="text" class="form-control" name="camera_location" placeholder="Location" />
           </div>
           <div class="col-12">
-            <input type="text" class="form-control" name="rtsp_url" placeholder="rtsp://... or builtin://0" />
+            <input type="text" class="form-control" name="rtsp_url" placeholder="rtsp://user:pass@192.168.1.50:554/stream1" required />
+            <div class="form-text">
+              An IP camera RTSP URL, a USB device index such as <code>1</code>, or
+              <code>builtin://0</code> for this machine's own camera.
+            </div>
           </div>
           <div class="col-12">
             <button class="btn btn-success" type="submit">Save Feed</button>
@@ -59,6 +142,8 @@
   </div>
 </div>
 
+{# --- Feeds table. The star button chooses the attendance camera: the one
+     used for clock-in verification, snapshots and event clips. #}
 <div class="card shadow-sm mb-4">
   <div class="card-header d-flex justify-content-between align-items-center">
     <span class="fw-semibold">CCTV Feeds</span>
@@ -74,6 +159,7 @@
             <th>Location</th>
             <th>Source</th>
             <th>Status</th>
+            <th>Role</th>
             <th>Heartbeat</th>
             <th>Actions</th>
           </tr>
@@ -85,9 +171,24 @@
             <td>{{ feed.camera_name }}</td>
             <td>{{ feed.camera_location or '—' }}</td>
             <td class="font-monospace">{{ feed.rtsp_url or '—' }}</td>
-            <td>{{ feed.status }}</td>
-            <td>{{ feed.last_heartbeat.strftime('%Y-%m-%d %H:%M:%S') if feed.last_heartbeat else '—' }}</td>
             <td>
+              {% if feed.status == 'online' %}
+                <span class="badge bg-success">online</span>
+              {% elif feed.status == 'inactive' %}
+                <span class="badge bg-light text-dark border">inactive</span>
+              {% else %}
+                <span class="badge bg-secondary">{{ feed.status }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if feed.is_primary %}
+                <span class="badge bg-success"><i class="bi bi-star-fill me-1"></i>Attendance</span>
+              {% else %}
+                <span class="text-muted small">surveillance</span>
+              {% endif %}
+            </td>
+            <td class="text-nowrap">{{ feed.last_heartbeat.strftime('%d %b %H:%M') if feed.last_heartbeat else '—' }}</td>
+            <td class="actions-cell">
               <button
                 type="button"
                 class="btn btn-sm btn-outline-info edit-feed-btn"
@@ -104,6 +205,19 @@
               >
                 <i class="bi bi-pencil-square"></i>
               </button>
+              <form method="POST" action="{{ url_for('test_cctv_feed', feed_id=feed.feed_id) }}" class="d-inline">
+                <button type="submit" class="btn btn-sm btn-outline-primary" title="Test this camera now">
+                  <i class="bi bi-broadcast"></i>
+                </button>
+              </form>
+              {% if not feed.is_primary %}
+              <form method="POST" action="{{ url_for('set_primary_feed', feed_id=feed.feed_id) }}" class="d-inline">
+                <button type="submit" class="btn btn-sm btn-outline-success"
+                        title="Use this camera for clock-in verification and snapshots">
+                  <i class="bi bi-star"></i>
+                </button>
+              </form>
+              {% endif %}
               <form method="POST" action="{{ url_for('deactivate_cctv_feed', feed_id=feed.feed_id) }}" class="d-inline">
                 <button type="submit" class="btn btn-sm btn-outline-warning" title="Deactivate feed">
                   <i class="bi bi-pause-circle"></i>
@@ -112,7 +226,7 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="7" class="text-center text-muted py-4">No CCTV feeds yet.</td></tr>
+          <tr><td colspan="8" class="text-center text-muted py-4">No CCTV feeds yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -173,11 +287,12 @@
           <tr>
             <th>ID</th>
             <th>Camera</th>
-            <th>Recording Path</th>
+            <th>Trigger</th>
             <th>Start</th>
-            <th>End</th>
-            <th>Storage</th>
-            <th>Uploaded</th>
+            <th>Length</th>
+            <th>Size</th>
+            <th>Attendance</th>
+            <th>Watch</th>
           </tr>
         </thead>
         <tbody>
@@ -185,14 +300,66 @@
           <tr>
             <td>{{ rec.recording_id }}</td>
             <td>{{ rec.camera_id or '—' }}</td>
-            <td class="font-monospace">{{ rec.recording_path }}</td>
-            <td>{{ rec.start_time.strftime('%Y-%m-%d %H:%M:%S') if rec.start_time else '—' }}</td>
-            <td>{{ rec.end_time.strftime('%Y-%m-%d %H:%M:%S') if rec.end_time else '—' }}</td>
-            <td>{{ rec.storage_location }}</td>
-            <td>{{ 'Yes' if rec.uploaded_to_cloud else 'No' }}</td>
+            <td><span class="badge bg-light text-dark border">{{ (rec.trigger_type or 'manual')|replace('_', ' ') }}</span></td>
+            <td class="text-nowrap">{{ rec.start_time.strftime('%d %b %Y %H:%M:%S') if rec.start_time else '—' }}</td>
+            <td>{{ '%.1f s'|format(rec.duration_seconds) if rec.duration_seconds else '—' }}</td>
+            <td>{{ '%.0f KB'|format(rec.file_size_bytes / 1024) if rec.file_size_bytes else '—' }}</td>
+            <td>{{ rec.attendance_id or '—' }}</td>
+            <td>
+              <a class="btn btn-sm btn-outline-danger"
+                 href="{{ url_for('captured_image', filename=rec.recording_path.replace('captures/', '')) }}"
+                 target="_blank" rel="noopener" title="Open clip">
+                <i class="bi bi-play-btn"></i>
+              </a>
+            </td>
           </tr>
           {% else %}
-          <tr><td colspan="7" class="text-center text-muted py-4">No recordings yet.</td></tr>
+          <tr><td colspan="8" class="text-center text-muted py-4">
+            No clips yet. Clips are recorded automatically on each clock-in and clock-out, or use
+            "Record 10s Clip" above.
+          </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div class="card shadow-sm mt-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span class="fw-semibold"><i class="bi bi-heart-pulse me-2 text-danger"></i>Recent Hardware Health</span>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('tables_hub_table_page', table_key='hardware-health-logs') }}">Open Full Table</a>
+  </div>
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle w-100 mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>When</th>
+            <th>Device</th>
+            <th>Status</th>
+            <th>Response</th>
+            <th>Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for log in health_logs %}
+          <tr>
+            <td class="text-nowrap">{{ log.logged_at.strftime('%d %b %H:%M:%S') if log.logged_at else '—' }}</td>
+            <td>{{ log.device_label or (log.device_type ~ ' ' ~ log.device_id) }}</td>
+            <td>
+              {% if log.status == 'online' %}
+                <span class="badge bg-success">online</span>
+              {% else %}
+                <span class="badge bg-danger">{{ log.status }}</span>
+              {% endif %}
+            </td>
+            <td>{{ log.response_time_ms ~ ' ms' if log.response_time_ms is not none else '—' }}</td>
+            <td class="text-muted small">{{ log.error_message or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="text-center text-muted py-4">
+            No health records yet. Run a health check to probe every camera.
+          </td></tr>
           {% endfor %}
         </tbody>
       </table>

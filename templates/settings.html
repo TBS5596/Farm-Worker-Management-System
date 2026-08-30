@@ -1,5 +1,27 @@
 {% extends 'base_admin.html' %}
 
+{# ===========================================================================
+   settings.html - all system configuration, grouped by what it affects.
+
+     General            organisation name
+     Face Verification  match threshold, whether a match is required at all,
+                        whether eyes must be visible
+     Farm Location      coordinates, clock-in radius, and whether to refuse
+                        punches from outside it
+     Payroll Rules      standard day, overtime multiplier, default rate,
+                        NAPSA and NHIMA rates, shift times
+     Event Recording    whether to record a clip at each punch, and how long
+     API Access         the key for /api/v1, with a regenerate button
+
+   Deduction rates are settings rather than constants because statutory rates
+   change; a hard-coded 5% would quietly become wrong.
+
+   Only an administrator can save: for any other role the whole fieldset is
+   disabled and the save button is hidden, and the route refuses the POST too.
+
+   Context: settings (every key/value row), engine (which recognizer is active).
+   =========================================================================== #}
+
 {% block title %}{{ org_name }} - Settings{% endblock %}
 
 {% block extra_css %}
@@ -8,31 +30,223 @@
 
 {% block content %}
 <div class="settings-shell">
-  <div class="card shadow-sm">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <h5 class="mb-0"><i class="bi bi-gear-fill me-2 text-success"></i>System Settings</h5>
+    {% if not can('settings.manage') %}
+      <span class="badge bg-warning text-dark">
+        <i class="bi bi-lock-fill me-1"></i>Read only for your role
+      </span>
+    {% endif %}
+  </div>
+
+  <form method="POST">
+    <fieldset {% if not can('settings.manage') %}disabled{% endif %}>
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body p-4">
+          <h6 class="text-muted text-uppercase fw-bold mb-3">General</h6>
+          <div class="mb-3">
+            <label class="form-label">Organisation Name</label>
+            <input type="text" class="form-control" name="org_name" value="{{ settings.get('org_name', '') }}" placeholder="Farm name" title="Organisation name" />
+            <div class="form-text">Shown on the sidebar, the clock-in screen and every page title.</div>
+          </div>
+          <div class="alert alert-secondary mb-0">
+            Worker IDs are auto-generated as a 4-digit series (0001, 0002, 0003...).
+          </div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body p-4">
+          <h6 class="text-muted text-uppercase fw-bold mb-3">Face Verification</h6>
+          <div class="alert {% if engine.contrib_available %}alert-success{% else %}alert-warning{% endif %} d-flex align-items-start gap-2">
+            <i class="bi {% if engine.contrib_available %}bi-check-circle-fill{% else %}bi-exclamation-triangle-fill{% endif %} mt-1"></i>
+            <div>
+              Recognizer in use: <strong>{{ engine.algorithm }}</strong>.
+              {% if not engine.contrib_available %}
+                Install <code>opencv-contrib-python</code> for the LBPH recognizer; the fallback
+                matcher is noticeably less accurate.
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Match Threshold (%)</label>
+              <input type="number" class="form-control" name="face_match_threshold" min="0" max="100" step="1"
+                     value="{{ settings.get('face_match_threshold', '35') }}" title="Minimum match confidence" />
+              <div class="form-text">
+                Higher is stricter. 35 is a sensible start; raise it if the wrong worker is ever
+                accepted, lower it if genuine workers are turned away.
+              </div>
+            </div>
+            <div class="col-md-8">
+              <div class="form-check form-switch mb-2">
+                <input class="form-check-input" type="checkbox" role="switch" id="faceRequired" name="face_verification_required"
+                       {% if settings.get('face_verification_required', 'on') == 'on' %}checked{% endif %} />
+                <label class="form-check-label" for="faceRequired">
+                  Require a face match before recording attendance
+                </label>
+                <div class="form-text">
+                  Turn this off only for a demonstration without a camera. With it off, a PIN alone
+                  records attendance and buddy-punching becomes possible again.
+                </div>
+              </div>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="faceEyes" name="face_require_eyes"
+                       {% if settings.get('face_require_eyes', 'on') == 'on' %}checked{% endif %} />
+                <label class="form-check-label" for="faceEyes">
+                  Require visible eyes (rejects photos of photos and poor angles)
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body p-4">
+          <h6 class="text-muted text-uppercase fw-bold mb-3">Farm Location and Geofence</h6>
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Farm Latitude</label>
+              <input type="text" class="form-control" name="farm_latitude" placeholder="e.g. -15.4067"
+                     value="{{ settings.get('farm_latitude', '') }}" title="Farm latitude in decimal degrees" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Farm Longitude</label>
+              <input type="text" class="form-control" name="farm_longitude" placeholder="e.g. 28.2871"
+                     value="{{ settings.get('farm_longitude', '') }}" title="Farm longitude in decimal degrees" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Clock-in Radius (metres)</label>
+              <input type="number" class="form-control" name="geofence_radius_m" min="10" step="10"
+                     value="{{ settings.get('geofence_radius_m', '500') }}" title="Allowed distance from the farm centre" />
+            </div>
+            <div class="col-12">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="geofenceEnforce" name="geofence_enforce"
+                       {% if settings.get('geofence_enforce', 'off') == 'on' %}checked{% endif %} />
+                <label class="form-check-label" for="geofenceEnforce">
+                  Refuse clock-ins from outside the radius
+                </label>
+                <div class="form-text">
+                  Leave off first: distances are still recorded on every punch, so you can review
+                  real readings before enforcing them.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body p-4">
+          <h6 class="text-muted text-uppercase fw-bold mb-3">Payroll Rules (ZMW)</h6>
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label">Standard Day (hours)</label>
+              <input type="number" class="form-control" name="standard_day_hours" min="1" max="16" step="0.5"
+                     value="{{ settings.get('standard_day_hours', '8') }}" title="Hours before overtime starts" />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Overtime Multiplier</label>
+              <input type="number" class="form-control" name="overtime_multiplier" min="1" max="3" step="0.1"
+                     value="{{ settings.get('overtime_multiplier', '1.5') }}" title="Overtime rate multiplier" />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Default Hourly Rate</label>
+              <input type="number" class="form-control" name="default_hourly_rate" min="0" step="0.5"
+                     value="{{ settings.get('default_hourly_rate', '15') }}" title="Used when a worker has no rate set" />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">NAPSA Rate</label>
+              <input type="number" class="form-control" name="napsa_rate" min="0" max="1" step="0.001"
+                     value="{{ settings.get('napsa_rate', '0.05') }}" title="NAPSA employee contribution rate" />
+              <div class="form-text">0.05 = 5%</div>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">NHIMA Rate</label>
+              <input type="number" class="form-control" name="nhima_rate" min="0" max="1" step="0.001"
+                     value="{{ settings.get('nhima_rate', '0.01') }}" title="NHIMA employee contribution rate" />
+              <div class="form-text">0.01 = 1%</div>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Shift Start</label>
+              <input type="time" class="form-control" name="shift_start_time"
+                     value="{{ settings.get('shift_start_time', '07:00') }}" title="Used to measure lateness" />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Shift End</label>
+              <input type="time" class="form-control" name="shift_end_time"
+                     value="{{ settings.get('shift_end_time', '17:00') }}" title="Used to measure early departure" />
+            </div>
+          </div>
+          <div class="form-text mt-2">
+            Deduction rates are settings rather than fixed numbers because statutory rates change.
+            Confirm the current NAPSA and NHIMA rates before running a real payroll.
+          </div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body p-4">
+          <h6 class="text-muted text-uppercase fw-bold mb-3">Event Recording</h6>
+          <div class="row g-3 align-items-end">
+            <div class="col-md-6">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="clipEnabled" name="clip_recording_enabled"
+                       {% if settings.get('clip_recording_enabled', 'on') == 'on' %}checked{% endif %} />
+                <label class="form-check-label" for="clipEnabled">
+                  Record a short clip on every clock-in and clock-out
+                </label>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Clip Length (seconds)</label>
+              <input type="number" class="form-control" name="clip_seconds" min="3" max="30" step="1"
+                     value="{{ settings.get('clip_seconds', '6') }}" title="Clip duration in seconds" />
+            </div>
+          </div>
+          <div class="form-text mt-2">
+            Event clips are kept instead of continuous recording: a few seconds either side of a
+            punch is what a supervisor actually reviews, and it will not fill the disk.
+          </div>
+        </div>
+      </div>
+
+      {% if can('settings.manage') %}
+      <button type="submit" class="btn btn-success w-100 mb-4"><i class="bi bi-save me-2"></i>Save Settings</button>
+      {% endif %}
+    </fieldset>
+  </form>
+
+  <div class="card shadow-sm mb-4">
     <div class="card-body p-4">
-      <h5 class="mb-3"><i class="bi bi-gear-fill me-2 text-success"></i>System Settings</h5>
-      <form method="POST">
-        <h6 class="text-muted text-uppercase fw-bold mb-3">General</h6>
-        <div class="mb-3">
-          <label class="form-label">Organisation Name</label>
-          <input type="text" class="form-control" name="org_name" value="{{ settings.get('org_name', '') }}" placeholder="Farm name" title="Organisation name" />
-        </div>
-
-        <hr />
-        <h6 class="text-muted text-uppercase fw-bold mb-3">Worker ID Generator</h6>
-        <div class="alert alert-secondary mb-4">
-          Worker IDs are auto-generated as a 4-digit series (0001, 0002, 0003...).
-        </div>
-
-        <hr />
-        <div class="alert alert-info mb-4">
-          <i class="bi bi-info-circle me-2"></i>
-          Camera source/index configuration has moved to the CCTV page. Firebase configuration has moved to Cloud Sync.
-        </div>
-
-        <button type="submit" class="btn btn-success w-100"><i class="bi bi-save me-2"></i>Save Settings</button>
+      <h6 class="text-muted text-uppercase fw-bold mb-3">API Access</h6>
+      <p class="text-muted small">
+        Send this key as the <code>X-API-Key</code> header to use <code>/api/v1</code> from Postman
+        or a mobile client. Anyone holding it can read worker and attendance data.
+      </p>
+      <div class="input-group mb-3">
+        <span class="input-group-text"><i class="bi bi-key-fill"></i></span>
+        <input type="text" class="form-control font-monospace" value="{{ settings.get('api_key', '') }}" readonly title="Current API key" />
+      </div>
+      {% if can('settings.manage') %}
+      <form method="POST" action="{{ url_for('regenerate_api_key') }}">
+        <button class="btn btn-outline-danger btn-sm" type="submit">
+          <i class="bi bi-arrow-repeat me-1"></i>Regenerate Key
+        </button>
       </form>
+      {% endif %}
     </div>
+  </div>
+
+  <div class="alert alert-info">
+    <i class="bi bi-info-circle me-2"></i>
+    Camera sources live on the <a href="{{ url_for('cctv_page') }}">CCTV page</a>, face enrolment on
+    the <a href="{{ url_for('biometric_page') }}">Biometric page</a>, and cloud credentials on
+    <a href="{{ url_for('cloud_sync_page') }}">Cloud Sync</a>.
   </div>
 </div>
 {% endblock %}

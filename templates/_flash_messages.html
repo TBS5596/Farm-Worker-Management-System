@@ -1,3 +1,15 @@
+{# ===========================================================================
+   _flash_messages.html - renders whatever the last request flashed.
+
+   Included once by base_admin.html, so every page shows messages in the same
+   place. The category doubles as the Bootstrap alert colour, which is why the
+   routes flash Bootstrap's own names:
+
+     success  a green bar   e.g. "Enrolled 1 face sample for Musonda Banda."
+     danger   a red bar     e.g. "Your face did not match the enrolled record."
+     warning  an amber bar  e.g. "You are already clocked in."
+     info     a blue bar    e.g. "Worker 'Chipo Mwale' has been deactivated."
+   =========================================================================== #}
 {% with messages = get_flashed_messages(with_categories=true) %}
   {% if messages %}
     {% for category, message in messages %}

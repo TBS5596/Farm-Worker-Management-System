@@ -1,25 +1,145 @@
+/* ===========================================================================
+   admin.css - the shell every signed-in page sits inside.
+   Loaded by templates/base_admin.html, so it applies to Dashboard, Workers,
+   Attendance, CCTV, Biometric, Payroll, Cloud Sync, Users, Audit Log,
+   Data Hub, Settings and Manual.
+
+   Palette (kept identical across every page and every other stylesheet):
+     #1a4731  deep farm green   - sidebar, login header, primary hover
+     #2e7d52  mid green         - primary buttons, accents, active states
+     #f4f6f9  page background
+     #fff     cards and the top bar
+
+   LAYOUT
+   ------
+   The page is a two-column flexbox on the body element:
+
+       body (display: flex)
+       |-- nav.sidebar        240px wide, sticky, full viewport height
+       +-- main.main-content  everything else, flex: 1
+
+   The sidebar is `position: sticky` rather than `position: fixed`, and its
+   nav list scrolls inside the panel. That combination fixes two real bugs:
+
+     1. On a short window the nav used to overflow off the bottom with no way
+        to reach it. Example: a MacBook Air gives about 720px of content
+        height, while the twelve nav items plus the brand and the logout link
+        need 808px - so "Manual" and "Logout" were permanently invisible. The
+        page scrolled; the fixed panel did not. Now the middle section scrolls
+        on its own and the logout link is pinned to the bottom, always visible.
+
+     2. `overflow-x: hidden` on body used to be needed to hide the horizontal
+        overflow the old `margin-left: 240px` hack could cause. In WebKit that
+        combination can turn body into the scroll container and make
+        `position: fixed` children scroll away with the content - the exact
+        symptom this file previously produced in Safari. The flex layout needs
+        no such hack, so the declaration is gone.
+
+   Below 992px the sidebar becomes an off-canvas drawer: it switches back to
+   `position: fixed` (which takes it out of the flex flow, so the main column
+   gets the full width) and slides in when body carries `.sidebar-open`.
+   static/js/admin-layout.js toggles that class.
+   =========================================================================== */
+
+/* --- Page shell ---------------------------------------------------------- */
+
 body {
   background-color: #f4f6f9;
-  overflow-x: hidden;
+  /* Two columns: sidebar, then everything else. */
+  display: flex;
+  align-items: flex-start; /* NOT stretch: the sidebar sets its own height,
+                              and stretching it to the document height would
+                              defeat position: sticky. */
+  min-height: 100vh;
+  margin: 0;
 }
 
+/* While the mobile drawer is open, lock the page behind it so a swipe scrolls
+   the drawer rather than the report underneath. */
 body.sidebar-open {
   overflow: hidden;
 }
 
+/* --- Sidebar ------------------------------------------------------------- */
+
 .sidebar {
+  /* flex-basis 240px, and neither grow nor shrink, so the nav never squeezes
+     when a wide table pushes the main column. */
+  flex: 0 0 240px;
   width: 240px;
-  min-height: 100vh;
   background: #1a4731;
-  position: fixed;
-  top: 0;
-  left: 0;
   z-index: 100;
+
+  /* Sticks to the top of the viewport as the page scrolls. */
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh; /* dvh accounts for mobile browser chrome; browsers that do
+                     not understand it keep the 100vh line above. */
+
+  /* The panel itself never scrolls - its middle section does (see
+     .sidebar-nav), which keeps the brand at the top and logout at the bottom. */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .sidebar .brand {
+  flex: 0 0 auto; /* fixed height: the farm name stays put while the nav scrolls */
   padding: 1.5rem 1rem 1rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* The scrolling middle section. Example: on a 600px-tall window the twelve
+   items no longer fit, so this region gains its own scrollbar while the brand
+   and the logout link stay visible. */
+.sidebar .sidebar-nav {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain; /* reaching the end here must not start
+                                   scrolling the page behind it */
+  -webkit-overflow-scrolling: touch;
+
+  /* Bootstrap's .nav sets `flex-wrap: wrap`. Combined with .flex-column that
+     means items which do not fit wrap into a SECOND COLUMN rather than
+     overflowing downwards - so the list silently splits in two inside a 240px
+     panel and the overflow is invisible. Example: at 560px window height only
+     six items fitted, and Payroll through Manual were laid out in a second
+     column hidden behind the first, with scrollHeight still reporting no
+     overflow. Forcing nowrap is what makes overflow-y: auto do anything. */
+  flex-wrap: nowrap;
+}
+
+/* Bootstrap's .nav is itself a flexbox, so with .flex-column the list items
+   are flex children and shrink by default. Left alone they compress instead of
+   overflowing, and the region never scrolls. Example: in a 560px-tall window
+   twelve items were squeezed from 46px to 23px each, clipping the labels.
+   Pinning their basis keeps each item full height and lets the list overflow,
+   which is what .sidebar-nav's overflow-y: auto is there to handle. */
+.sidebar .sidebar-nav > .nav-item {
+  flex: 0 0 auto;
+}
+
+/* Slim scrollbar so the nav does not look like a text area. */
+.sidebar .sidebar-nav::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar .sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+}
+
+.sidebar .sidebar-nav {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+}
+
+/* Logout: pinned to the bottom of the panel, never scrolled out of reach. */
+.sidebar .sidebar-footer {
+  flex: 0 0 auto;
+  padding: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .sidebar .nav-link {
@@ -34,22 +154,53 @@ body.sidebar-open {
   background: rgba(255, 255, 255, 0.15);
 }
 
+/* Keyboard focus must be visible: the sidebar is the main way around the app. */
+.sidebar .nav-link:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: -2px;
+}
+
+/* --- Main column --------------------------------------------------------- */
+
 .main-content {
-  margin-left: 240px;
+  flex: 1 1 auto;
+  /* min-width: 0 is the flexbox rule that matters most here. Without it a
+     flex item refuses to shrink below its content's intrinsic width, so one
+     wide table (Attendance has twelve columns) would stretch the whole page
+     and produce a horizontal scrollbar. With it, the table scrolls inside its
+     own .table-responsive wrapper instead. */
+  min-width: 0;
   padding: 2rem;
   min-height: 100vh;
 }
 
-/* Top bar stretches edge-to-edge by pulling against the parent padding */
+/* The top bar stretches edge to edge by pulling against .main-content's
+   padding, and sticks below nothing - so it stays while the page scrolls. */
 .top-bar {
   margin: -2rem -2rem 1.5rem;
   padding: 0.5rem 2rem;
   position: sticky;
   top: 0;
   z-index: 99;
-  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
 }
 
+/* --- Row action buttons -------------------------------------------------- */
+
+/* Action columns hold two or three small buttons, each in its own form.
+   Without nowrap they stack vertically and the row grows tall. Example: the
+   Workers table's edit / reset-PIN / deactivate / enrol-face group. */
+.table td.actions-cell {
+  white-space: nowrap;
+}
+
+.table td.actions-cell .btn {
+  margin-bottom: 0.15rem;
+}
+
+/* --- Mobile drawer (below 992px) ----------------------------------------- */
+
+/* The backdrop only exists for the drawer, so it is hidden on desktop. */
 .sidebar-backdrop {
   position: fixed;
   inset: 0;
@@ -65,31 +216,32 @@ body.sidebar-open .sidebar-backdrop {
   visibility: visible;
 }
 
-body.sidebar-open .sidebar {
-  transform: translateX(0);
-}
-
 @media (max-width: 991.98px) {
   .sidebar {
+    /* Fixed, so it leaves the flex flow entirely and the main column gets the
+       full width behind it. */
+    position: fixed;
+    top: 0;
+    left: 0;
     width: 280px;
     max-width: 82vw;
-    min-height: 100vh;
+    flex-basis: auto;
     transform: translateX(-100%);
     transition: transform 0.22s ease;
-    z-index: 100;
-    overflow-y: auto;
+  }
+
+  /* admin-layout.js adds .sidebar-open to body when the hamburger is tapped. */
+  body.sidebar-open .sidebar {
+    transform: translateX(0);
   }
 
   .main-content {
-    margin-left: 0;
     padding: 1rem;
   }
 
   .top-bar {
     margin: -1rem -1rem 1rem;
     padding: 0.5rem 1rem;
-    position: sticky;
-    top: 0;
     z-index: 97;
   }
 
@@ -103,11 +255,26 @@ body.sidebar-open .sidebar {
 }
 
 @media (min-width: 992px) {
+  /* The drawer transform must never linger on desktop: resizing a phone-width
+     window up to desktop would otherwise leave the sidebar translated off
+     screen. */
   .sidebar {
-    transform: translateX(0) !important;
+    transform: none !important;
   }
 
   .sidebar-backdrop {
     display: none;
+  }
+
+  /* The close button belongs to the drawer only. */
+  #sidebarCloseBtn {
+    display: none;
+  }
+}
+
+/* Respect a reduced-motion preference: the drawer still opens, just instantly. */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
   }
 }

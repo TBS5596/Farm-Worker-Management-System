@@ -1,3 +1,17 @@
+/* ===========================================================================
+   login.css - the public page at "/", which does two unrelated jobs:
+
+     1. Worker clock in and clock out (the default tab). This is the screen at
+        the terminal by the gate, used dozens of times a day by people who
+        never sign in to the dashboard.
+     2. Admin sign-in.
+
+   login.html does not extend base_admin.html, so this file is standalone: it
+   carries its own body styling and does not inherit the dashboard shell.
+   =========================================================================== */
+
+/* The green gradient marks this page as the front door - the same palette as
+   the sidebar, so the two read as one system. */
 body {
   background: linear-gradient(135deg, #1a4731 0%, #2e7d52 60%, #4caf50 100%);
   min-height: 100vh;
@@ -13,10 +27,12 @@ body {
 }
 
 .card-header {
+  /* !important overrides Bootstrap's own .card-header radius reset. */
   border-radius: 1rem 1rem 0 0 !important;
   background: #1a4731;
 }
 
+/* Bootstrap's pills default to blue; these follow the farm palette. */
 .nav-pills .nav-link.active {
   background-color: #2e7d52;
 }
@@ -35,6 +51,14 @@ body {
   border-color: #1a4731;
 }
 
+/* --- Live camera preview -------------------------------------------------
+   The worker sees themselves before submitting, which is what makes a failed
+   face match understandable: they can tell whether they are in frame, lit, and
+   facing the camera. The src is an endless MJPEG stream, so the dark
+   background stands in until the first frame arrives - and stays if no camera
+   is attached, where the stream instead serves a readable "camera
+   unavailable" frame drawn by cctv_engine.build_unavailable_frame(). */
+
 .worker-preview {
   border: 1px solid rgba(46, 125, 82, 0.25);
   border-radius: 0.8rem;
@@ -52,6 +76,7 @@ body {
   background: #0f1115;
 }
 
+/* Keeps the card a readable width on a wide monitor at the gate terminal. */
 .login-shell {
   max-width: 480px;
 }

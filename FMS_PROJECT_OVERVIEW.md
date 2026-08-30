@@ -1,1191 +1,739 @@
-# Farm Worker Management System (FMS) - Comprehensive Technical Documentation
+# Farm Worker Management System - Technical Documentation
 
-## 1. Executive Overview
+Reference document for the implementation: architecture, modules, data model,
+routes, algorithms and deployment. Written to be readable alongside the code and
+usable as source material for the project report.
 
-The Farm Worker Management System (FMS) is a Flask web application for farm operations management with integrated attendance capture, admin workflows, CCTV/biometric modules, payroll records, and cloud-sync configuration.
-
-Primary capabilities:
-- Admin and worker login modes on a single entry page
-- Worker attendance logging with camera-assisted verification
-- Snapshot capture for attendance events (check-in/check-out)
-- Admin dashboards for workers, users, attendance, audit logs, settings, CCTV, biometric, payroll, and cloud sync
-- Generic table browsing for operational datasets
-
-Primary stack:
-- Python 3.11 runtime (Docker image)
-- Flask 3 + Flask-SQLAlchemy
-- SQLite (`fms.db`)
-- OpenCV for camera streaming and detection overlays
-- Jinja2 templates + static CSS/JS assets
+- **Project:** Remote Farm Worker Management System integrated with CCTV cameras
+  and biometrics
+- **Stack:** Flask, Flask-SQLAlchemy, SQLite, OpenCV (contrib), Bootstrap 5
+- **Biometric modality:** face, via OpenCV LBPH. Camera-only - the project has no
+  fingerprint scanner, and none is budgeted
+- **Target hardware:** mini PC or Raspberry Pi 4 in the farm office, USB webcam at
+  the clock-in point, RTSP IP cameras for surveillance
 
 ---
 
-## 2. Full Repository Tree (Project Scope)
+## 1. Executive overview
 
-```text
-fms/
-  .dockerignore
-  .gitignore
-  Dockerfile
-  README.md
-  app.py
-  database.py
-  docker-compose.yml
-  fms.db
-  models.py
-  requirements.txt
-  captures/
-  docs/
-    manual.md
-  static/
-    css/
-      admin.css
-      attendance.css
-      dashboard.css
-      datatables.css
-      login.css
-      manual.css
-      settings.css
-      workers.css
-    js/
-      admin-layout.js
-      attendance.js
-      audit-log-page.js
-      biometric-page.js
-      cctv-page.js
-      cloud-sync-page.js
-      components.js
-      edit-modals.js
-      login.js
-      payroll-page.js
-      table-records-page.js
-      users-page.js
-      workers.js
-  templates/
-    _admin_sidebar.html
-    _flash_messages.html
-    attendance.html
-    audit_log.html
-    base_admin.html
-    biometric.html
-    cctv.html
-    cloud_sync.html
-    dashboard.html
-    login.html
-    manual.html
-    payroll.html
-    settings.html
-    table_records.html
-    tables_hub.html
-    users.html
-    workers.html
+The system answers three questions with recorded evidence:
+
+1. **Was this worker actually here?** A clock-in is accepted only when the face at
+   the camera matches the samples enrolled for that Worker ID. Every attempt,
+   accepted or refused, is stored with its match score.
+2. **Where were they?** Each punch stores the reported coordinates and the measured
+   distance from the farm centre; enforcement is optional.
+3. **What are they owed?** Hours come from the recorded sessions. Gross pay,
+   NAPSA, NHIMA and net pay are computed, never typed.
+
+Everything runs on one machine with SQLite, so a dropped internet link does not
+stop attendance. Cloud upload is optional and queued.
+
+### 1.1 What changed from the first release
+
+| Area | Before | Now |
+| --- | --- | --- |
+| Identity | Haar cascade confirmed *a* face was present; a PIN plus any face recorded attendance | LBPH matching against per-worker enrolled templates; a mismatch is refused |
+| `face_templates` | Table existed, never written | One row per enrolled sample, with quality score and reference crop |
+| `biometric_transactions` | Never written | Every verification attempt, with score, threshold and reason |
+| Payroll | Every figure read from the submitted form | Hours from attendance; gross, NAPSA, NHIMA, net computed |
+| `daily_attendance_summary` | Never written | Rebuilt on each punch and on demand; drives payroll and the trend chart |
+| `cctv_feeds.rtsp_url` | Stored and ignored | The stream source; feeds and live views are one list |
+| Recordings | One marker row, no video | mp4 clips written per attendance event and on demand |
+| Geolocation | Stored, never checked | Distance from the farm centre, with optional enforcement |
+| `offline_sync_queue` | Never written | Failed uploads queued and retried |
+| `hardware_health_logs` | Never written | Camera probes and failures recorded |
+| Roles | `users.role` stored, never enforced | Permissions enforced in the routes and reflected in the UI |
+| API | None | `/api/v1`, 14 endpoints, API key auth |
+| Tests | None | 63 pytest tests |
+| Secret key | Regenerated every boot | From env, else cached in `.secret_key` |
+| Debug server | `debug=True` on `0.0.0.0` | Off unless `FMS_DEBUG` is set |
+| Default credentials | `admin`/`admin`, documented | Same, but a password change is forced before anything opens |
+| Port | 6000 in code, 5000 in docs | 8010 everywhere (browsers refuse 6000: `ERR_UNSAFE_PORT`) |
+| Schema source | `models.py` and a hand-written MySQL `Workers.sql` disagreed | `Workers.sql` generated from `models.py` |
+
+---
+
+## 2. Module map
+
+The route layer is thin; the logic lives in focused modules. Every module,
+template, stylesheet and script carries a header comment explaining its purpose,
+and worked examples where the behaviour is not obvious from the code.
+
+| File | Responsibility |
+| --- | --- |
+| `app.py` | App factory, seeding, routes, request guards |
+| `models.py` | Schema. Single source of truth |
+| `migrations.py` | Additive `ALTER TABLE ADD COLUMN` for existing databases |
+| `database.py` | Shared SQLAlchemy instance |
+| `paths.py` | `BASE_DIR`, `CAPTURES_DIR`, `FACES_DIR`, `CLIPS_DIR` |
+| `face_engine.py` | Detection, normalisation, template storage, LBPH training, matching |
+| `attendance_service.py` | The clock in/out pipeline, shared by the web page and the API |
+| `cctv_engine.py` | Camera source resolution, capture, MJPEG streaming, clip recording, health |
+| `payroll_engine.py` | Daily summaries, pay arithmetic, weekly generation, trend data |
+| `geofence.py` | Coordinate validation and distance from the farm centre |
+| `sync_engine.py` | Firebase upload, offline queue, per-record sync state |
+| `security.py` | Role to permission mapping and route decorators |
+| `exports.py` | CSV builders |
+| `api.py` | JSON API blueprint |
+| `tools/export_schema.py` | Regenerates `Workers.sql` from the models |
+| `tools/seed_demo.py` | Realistic demo data |
+
+Import direction is one-way: `app.py` and `api.py` depend on the engines; the
+engines depend only on `models`, `database` and `paths`. `cctv_engine` imports
+`face_engine` lazily inside a function to keep overlay drawing available without a
+module cycle.
+
+---
+
+## 3. Runtime lifecycle
+
+### 3.1 Entry point
+
+```python
+app = create_app()
+
+if __name__ == "__main__":
+    app.run(debug=FMS_DEBUG, host=FMS_HOST, port=FMS_PORT)   # 0.0.0.0:8010
 ```
 
-Inventory notes:
-- Tree intentionally excludes generated/infrastructure internals: `.git/`, `.venv/`, `__pycache__/`.
-- `captures/` is runtime storage for local JPEG snapshots.
-- `fms.db` is the live SQLite database file used by default.
+### 3.2 `create_app()`
+
+1. Resolve the secret key: `FMS_SECRET_KEY`, else a key cached in `.secret_key`
+   (mode 0600), else an in-memory fallback.
+2. Database URI from `FMS_DATABASE_URI`, default `sqlite:///fms.db`.
+3. `MAX_CONTENT_LENGTH` 16 MB for enrolment photo uploads.
+4. `db.create_all()` - creates missing tables.
+5. `apply_migrations()` - adds missing columns to existing tables, logged.
+6. `_seed_defaults()` - default admin, settings rows, API key, baseline feed.
+7. `ensure_dirs()` - `captures/`, `captures/faces/`, `captures/clips/`.
+8. Register Jinja globals `can`, `role_labels`, `face_engine_info`.
+9. Register the `/api/v1` blueprint, then the page routes.
+
+### 3.3 Seeded settings
+
+| Key | Default | Used by |
+| --- | --- | --- |
+| `org_name` | FMS Farm | UI |
+| `camera_index` | 0 | Built-in camera fallback |
+| `camera_sources` | empty | Extra JSON-defined sources |
+| `face_match_threshold` | 35 | Verification |
+| `face_verification_required` | on | Verification |
+| `face_require_eyes` | on | Detection quality gate |
+| `farm_latitude` / `farm_longitude` | empty | Geofence |
+| `geofence_radius_m` | 500 | Geofence |
+| `geofence_enforce` | off | Geofence |
+| `standard_day_hours` | 8 | Overtime split |
+| `overtime_multiplier` | 1.5 | Pay |
+| `napsa_rate` | 0.05 | Deductions |
+| `nhima_rate` | 0.01 | Deductions |
+| `default_hourly_rate` | 15 | Pay |
+| `shift_start_time` / `shift_end_time` | 07:00 / 17:00 | Lateness, early departure |
+| `clip_recording_enabled` | on | Event clips |
+| `clip_seconds` | 6 | Clip length |
+| `firebase_bucket` / `firebase_project_id` / `firebase_credentials_json` | empty | Cloud sync |
+| `api_key` | generated | API auth |
+
+Deduction rates are settings rather than constants because statutory rates change;
+a hard-coded 5% would quietly become wrong.
+
+### 3.4 Request guards
+
+`before_request` blocks a signed-in user whose account still has a temporary
+password: every endpoint except the password-change flow, logout, the manual and
+static files redirects to `/profile/password-change`.
 
 ---
 
-## 3. Runtime and Application Lifecycle
+## 4. Face verification
 
-## 3.1 Entry Point
+### 4.1 Why LBPH
 
-`app.py` creates the application through `create_app()` and exposes `app` at module level. It runs with:
-- Host: `0.0.0.0`
-- Port: `6000`
-- Debug: `True` when executed as `__main__`
+The available biometric is a camera. LBPH (Local Binary Patterns Histograms) ships
+in `opencv-contrib-python`, trains on a handful of samples per person, runs on a
+Raspberry Pi without a GPU, and returns a distance that maps cleanly onto a
+threshold. Deep-learning encoders (dlib, FaceNet) are more accurate but need a
+build toolchain and far more compute than the target hardware has.
 
-## 3.2 Startup Sequence (`create_app`)
+If `cv2.face` is unavailable the engine falls back to a normalised-correlation
+matcher so the app still runs, and says so in `engine_info()`, on the Biometric
+page and on the dashboard. The fallback is measurably weaker and should not be
+used to collect evaluation results.
 
-1. Instantiate Flask app.
-2. Configure:
-   - `SECRET_KEY` from `os.urandom(32)`
-   - `SQLALCHEMY_DATABASE_URI` as local SQLite path to `fms.db`
-   - `SQLALCHEMY_TRACK_MODIFICATIONS = False`
-3. Bind SQLAlchemy (`db.init_app`).
-4. Inside app context:
-   - `db.create_all()`
-   - `_seed_defaults()`
-5. Ensure `captures/` exists (`os.makedirs(..., exist_ok=True)`).
-6. Register all routes via `_register_routes(app)`.
+> **Packaging trap:** `opencv-python` and `opencv-contrib-python` both provide
+> `cv2`. If both are installed the plain build wins and `cv2.face` becomes an empty
+> namespace, silently disabling LBPH. `requirements.txt` lists only the contrib
+> build and the Dockerfile removes the plain one after install.
 
-## 3.3 Default Seeding Behavior
+### 4.2 Normalisation
 
-`_seed_defaults()` ensures:
-- Admin user:
-  - username: `admin`
-  - name: `System Administrator`
-  - email: `admin@example.com`
-  - phone: `0000000000`
-  - password: `admin`
-- Core settings rows (if missing):
-  - `org_name`
-  - `camera_index`
-  - `camera_sources`
-  - `firebase_api_key`
-  - `firebase_bucket`
-  - `firebase_project_id`
-- Calls `_ensure_default_cctv_entries()` to guarantee baseline CCTV rows.
+Every enrolled sample and every probe goes through the same steps, so the
+recognizer always compares like with like:
 
-## 3.4 CCTV Baseline Rows
+1. Detect faces with `haarcascade_frontalface_default`, take the largest.
+2. Reject a face smaller than 60 px.
+3. Require at least one eye via `haarcascade_eye` (configurable). This is a cheap
+   quality gate that also rejects some printed-photo attempts.
+4. Crop, convert to grayscale, resize to 200x200, `equalizeHist`.
+5. Quality score = Laplacian variance (blur measure), stored per sample.
 
-`_ensure_default_cctv_entries()`:
-- Creates a built-in feed (`builtin://<camera_index>`) if missing.
-- Ensures one marker `CCTVRecording` row exists per built-in feed:
-  - path: `default://builtin-camera-<camera_index>`
-  - zero-size marker metadata row
+### 4.3 Storage
 
----
+One `face_templates` row per sample: `face_embedding` holds the raw 40 000-byte
+uint8 crop, plus `algorithm`, `sample_index`, `quality_score` and a reference JPEG
+under `captures/faces/`. Up to 8 samples per worker; the UI treats 3 as the
+minimum for reliable matching.
 
-## 4. Security and Authentication Model
+### 4.4 Training and cache invalidation
 
-## 4.1 Session Guards
+The recognizer is trained lazily and cached in memory behind a re-entrant lock.
+The cache key is `(row count, max face_id)`, so any enrolment or clearing forces a
+retrain on next use. `face_engine.invalidate()` clears it explicitly.
 
-`admin_required` decorator checks `session['admin_logged_in']`.
-- If missing: redirects to `/` with warning flash.
-- Protects all admin dashboards/configuration routes.
+### 4.5 Matching
 
-## 4.2 Login Modes
+```python
+label, distance = model.predict(crop)      # LBPH: lower distance is better
+confidence = max(0.0, 100.0 - distance)    # expressed so "higher is better"
+matched = (label == worker_pk) and (confidence >= threshold)
+```
 
-Route `/` (GET/POST) supports:
-- `mode = admin`
-  - validates username/password against `User`
-  - sets session keys
-- `mode = worker`
-  - validates active worker (`worker_id`, PIN)
-  - handles attendance IN/OUT operation
+`verify_worker()` walks the captured frames, keeps the best-scoring frame, and
+returns early on the first accepted match. Its result distinguishes:
 
-## 4.3 Password and PIN Handling
+| Reason | Meaning |
+| --- | --- |
+| `no_face_detected` | No face in any frame |
+| `eyes_not_visible` | Face found, quality gate failed |
+| `face_too_small` | Worker too far from the camera |
+| `worker_not_enrolled` | No samples for this worker |
+| `face_did_not_match` | Best score below the threshold |
+| `face_matched_another_worker` | Best match was a different enrolled worker |
 
-- User passwords: Werkzeug hash (`set_password` / `check_password`)
-- Worker PINs: Werkzeug hash + SHA-256 fingerprint (`pin_fingerprint`) for uniqueness checks
-- `reset-password` and `reset-pin` routes generate or validate new secrets
+The last case is the buddy-punching signal and is reported as such to the worker.
 
----
+`identify()` does the same 1:N without a claimed identity, for the API.
 
-## 5. Camera, Face Verification, and Snapshot Pipeline
+### 4.6 Accuracy evidence
 
-## 5.1 Camera Source Resolution
-
-- `_get_camera_sources()` loads `camera_sources` JSON list from settings.
-- Falls back to built-in camera index from `camera_index` setting.
-- `_coerce_camera_source()` converts numeric strings to integer camera indexes.
-
-## 5.2 Cross-Platform Camera Opening
-
-`_open_camera(source)` backend strategy:
-- Linux: `CAP_V4L2` for integer indexes with `/dev/video*` existence check
-- macOS: `CAP_AVFOUNDATION`
-- Windows: `CAP_DSHOW`
-- Fallback: open without explicit backend if first attempt fails
-
-## 5.3 Face/Eye Detection
-
-- Uses OpenCV Haar cascades:
-  - frontal face cascade
-  - eye cascade
-- `_detect_faces_and_eyes(frame)` returns face boxes + eye boxes per face.
-- `_verify_face_on_camera()` requires repeated valid detections (`required_hits`) within timeout.
-
-## 5.4 Attendance Capture
-
-`_capture_photo(worker_id, require_face=False)`:
-- Opens primary source, then fallback source if needed
-- Reads and refreshes frames to avoid stale buffer
-- Saves JPEG as `captures/<worker_id>_<timestamp>.jpg`
-- Returns `(relative_path, status)` where status in:
-  - `ok`
-  - `camera_error`
-  - `no_face` (documented return code, though face requirement path is not currently enforced)
-
-## 5.5 Live Stream Generator
-
-`_camera_frame_generator(source, fallback_source, overlay_faces, overlay_motion)`:
-- Produces MJPEG multipart stream frames
-- Supports overlays:
-  - motion boxes via frame differencing
-  - face/eye boxes
-- On unavailable camera, yields synthetic status frame continuously
+`accuracy_snapshot()` reads `biometric_transactions`: attempts, accepted,
+rejected, acceptance rate and mean accepted score - shown on the dashboard and the
+Biometric page, and exportable as CSV. Because every attempt is stored with its
+score, threshold and reason, false accepts and false rejects can be counted
+directly from the table rather than estimated.
 
 ---
 
-## 6. Attendance Workflow (Worker Mode)
+## 5. The attendance pipeline
 
-Worker flow on `/` POST with `mode=worker`:
-1. Validate worker ID, PIN, and active status.
-2. For `log_type=IN`:
-   - run face verification
-   - if failed: abort with error flash
-3. Capture clean snapshot frame.
-4. Optionally upload snapshot to Firebase (if configured).
-5. For `OUT`:
-   - locate latest open attendance row (`check_out_time IS NULL`)
-   - set check-out time and optional coordinates
-6. For `IN`:
-   - create attendance row with `verified_by_cctv` flag
-7. Create `EventSnapshot` row using local path or cloud URL.
-8. Commit and write audit log entry.
+`attendance_service.record_punch(app, worker, log_type, lat, lon, frames=None)`
 
-Coordinate normalization:
-- `_normalize_coordinates` validates lat/lon with `geopy.Point` and drops invalid values.
+Order matters: identity first, because a punch that cannot be attributed should
+never reach the attendance table.
 
----
+1. **Camera.** `cctv_engine.grab_frames(count=8)` opens the attendance camera
+   **once** and returns several frames. The first release opened the camera twice -
+   once to verify, once to snapshot - which fought over a single webcam and caused
+   intermittent failures. A camera failure is written to `hardware_health_logs`.
+2. **Identity.** `face_engine.verify_worker(...)`. The attempt is written to
+   `biometric_transactions` whether it passed or not. If verification is required
+   and failed, the function returns with a plain-language message.
+3. **Location.** `geofence.evaluate(lat, lon)`. Distance is always recorded; the
+   punch is refused only when enforcement is on, the farm centre is configured and
+   the worker is outside the radius (or sent no position).
+4. **Snapshot.** The best frame is written to `captures/` with no overlays drawn
+   into it. If the write fails, nothing is recorded.
+5. **Attendance row.**
+   - `IN`: refused if an open session already exists, else a new row with
+     `verified_by_face`, `check_in_match_score`, `within_geofence`,
+     `distance_from_farm_m`.
+   - `OUT`: closes the most recent row with a null `check_out_time`, storing
+     `check_out_match_score`; refused if there is none.
+   An `EventSnapshot` is linked and `verified_by_cctv` set.
+6. **Cloud.** `sync_engine.upload_or_queue(...)` - upload, or queue for retry.
+7. **Clip.** `cctv_engine.record_clip(...)` in a background thread.
+8. **Summary.** `payroll_engine.rebuild_day(...)` for that worker and date.
 
-## 7. Complete Route Matrix
-
-## 7.1 Public Routes
-
-- `GET/POST /`
-  - Login page and submission handler for admin and worker
-- `GET /worker-camera-stream`
-  - Public preview stream with face + motion overlays
-- `GET /manual`
-  - Manual page
-
-## 7.2 Session/Utility Routes
-
-- `GET /logout`
-  - Clears session and redirects to login
-- `GET /captures/<path:filename>` (admin required)
-  - Serves captured image files from `captures/`
-- `GET /camera-stream/<int:camera_idx>` (admin required)
-  - Stream endpoint for indexed configured camera source
-
-## 7.3 Admin View Routes
-
-- `GET /dashboard`
-- `GET /workers`
-- `GET /attendance`
-- `GET /users`
-- `GET/POST /settings`
-- `GET /audit-log`
-- `GET /tables-hub`
-- `GET /tables-hub/<string:table_key>`
-- `GET /cctv`
-- `GET /biometric`
-- `GET /payroll`
-- `GET/POST /cloud-sync`
-
-## 7.4 Worker Management Write Routes
-
-- `POST /workers/add`
-- `POST /workers/<int:worker_pk>/update`
-- `POST /workers/<int:worker_pk>/reset-pin`
-- `POST /workers/<int:worker_pk>/toggle`
-
-## 7.5 User Management Write Routes
-
-- `POST /users/add`
-- `POST /users/<int:user_pk>/update`
-- `POST /users/<int:user_pk>/reset-password`
-- `POST /profile/change-password`
-
-## 7.6 Configuration Write Routes
-
-CCTV:
-- `POST /config/cctv/settings`
-- `POST /config/cctv-feeds`
-- `POST /config/cctv-feeds/<int:feed_id>/update`
-- `POST /config/cctv-feeds/<int:feed_id>/deactivate`
-
-Biometric:
-- `POST /config/biometric-devices`
-- `POST /config/biometric-devices/<int:device_id>/update`
-- `POST /config/biometric-devices/<int:device_id>/deactivate`
-
-Payroll:
-- `POST /config/payroll`
-- `POST /config/payroll/<int:payroll_id>/update`
-- `POST /config/payroll/<int:payroll_id>/deactivate`
+Two flags are kept deliberately separate: `verified_by_cctv` means a snapshot was
+captured and linked; `verified_by_face` means the identity matched. Conflating them
+was a defect in the first release.
 
 ---
 
-## 8. Database Schema Reference
+## 6. Cameras, streaming and clips
 
-Defined in `models.py`.
+### 6.1 Source resolution
 
-## 8.1 Core Models
+`get_camera_sources()` returns, in order:
 
-### `Setting`
-- Key-value system settings table
-- unique key constraint via `key`
+1. Active `cctv_feeds` rows with a source, primary first.
+2. Extra entries from the `camera_sources` JSON setting.
+3. A built-in fallback, so the list is never empty.
 
-### `User`
-- Admin users and profile metadata
-- fields include role, linked worker, and password hash
-- methods: `set_password`, `check_password`
+`coerce_source()` maps `"0"` to device index `0`, strips `builtin://`, and passes
+`rtsp://...` through unchanged. `primary_source()` is what attendance uses.
 
-### `Worker`
-- Worker registry and operational profile data
-- includes `worker_id` (unique), `nrc_number` (unique nullable), PIN hash/fingerprint
-- methods: `set_pin`, `check_pin`
+### 6.2 Opening a camera
 
-### `Attendance`
-- Attendance sessions with check-in/check-out times
-- optional coordinates and CCTV verification boolean
+`open_camera()` picks the platform backend - V4L2 on Linux (skipping the noisy
+FFMPEG fallback when `/dev/videoN` does not exist), AVFoundation on macOS, DSHOW
+on Windows - then retries with no hint. `open_best_camera()` falls back to the
+configured built-in index.
 
-### `AuditLog`
-- Audit events with username, action, details, IP, timestamp
+### 6.3 Streaming
 
-## 8.2 Operational Models
+`frame_generator()` yields multipart JPEG frames with optional face/eye and motion
+overlays, and a readable "camera unavailable" frame when nothing opens. It touches
+no database - it runs outside the request context, so all values are resolved
+before it starts. Overlays are drawn only on the live view; saved snapshots are
+clean frames.
 
-### `CCTVFeed`
-- Camera definitions, RTSP/source URL, status, last heartbeat
+### 6.4 Clips
 
-### `CCTVRecording`
-- Recording metadata with location, size, cloud upload status
+`record_clip()` runs in a daemon thread: opens the source, writes mp4v frames for
+N seconds into `captures/clips/`, then registers a `cctv_recordings` row with
+duration, size, trigger type and the linked `attendance_id`. Event clips rather
+than continuous recording is a deliberate choice - continuous capture fills a
+Pi's SD card in hours, while a few seconds around a punch is what a supervisor
+actually reviews.
 
-### `EventSnapshot`
-- Attendance snapshot linkage and file/cloud path
+### 6.5 Health
 
-### `BiometricDevice`
-- Device inventory with identity, connection info, status
-
-### `BiometricTransaction`
-- Biometric action records with success/match/error details
-
-### `FaceTemplate`
-- Worker face embedding and quality metadata
-
-### `Payroll`
-- Weekly worker payroll records and deduction/net values
-
-### `OfflineSyncQueue`
-- Retryable operation queue for deferred sync
-
-### `CloudSyncMetadata`
-- Per-record sync state and cloud IDs
-- unique constraint on `(table_name, record_id)`
-
-### `DailyAttendanceSummary`
-- Per worker/day summary and totals
-- unique constraint on `(worker_id, summary_date)`
-
-### `HardwareHealthLog`
-- Device health status telemetry
+`probe_feed()` opens a feed, reads one frame, updates `status` and
+`last_heartbeat`, and writes a `hardware_health_logs` row with the response time
+or the failure reason. Exposed per camera (Test) and for all cameras (Health
+Check).
 
 ---
 
-## 9. Business Rules and Validation Logic
+## 7. Payroll and analytics
 
-## 9.1 Worker ID Generation
+### 7.1 Daily summaries
 
-`_generate_worker_id()`:
-- scans existing numeric worker IDs
-- increments max sequence
-- emits zero-padded 4-digit ID
-- hard guard: sequence cannot exceed `9999`
+`rebuild_day(worker_pk, day)` reads that worker's sessions for the day and writes
+one `daily_attendance_summary` row:
 
-## 9.2 Worker Add/Update Validation
+- `total_hours` - sum of closed sessions only; an open session contributes zero
+- `overtime_hours` - `max(0, total_hours - standard_day_hours)`
+- `late_minutes` - first check-in minus `shift_start_time`, floored at zero
+- `early_departure_minutes` - `shift_end_time` minus last check-out, floored at zero
+- `sessions_count`, `verified_by_cctv`, `verified_by_face`
 
-- Required on add: name, phone, PIN
-- PIN minimum length: 4
-- PIN uniqueness enforced via fingerprint
-- NRC uniqueness enforced if provided
-- Enrollment date parsed from `YYYY-MM-DD`
+`refresh_range(from, to)` rebuilds a window; the Attendance page exposes it as
+*Rebuild Daily Summaries*.
 
-## 9.3 User Validation
+### 7.2 Pay arithmetic
 
-- Add requires username + name
-- Username normalized to lowercase and uniqueness checked
-- Random default password generated on create/reset
+`compute_pay()` is pure, so the tests can pin it down:
 
-## 9.4 Payroll Validation
+```
+overtime_hours = min(overtime_hours, total_hours)
+regular_hours  = total_hours - overtime_hours
+basic_pay      = regular_hours  x rate
+overtime_pay   = overtime_hours x rate x overtime_multiplier
+gross_pay      = basic_pay + overtime_pay
+napsa          = gross_pay x napsa_rate
+nhima          = gross_pay x nhima_rate
+net_pay        = gross_pay - napsa - nhima
+```
 
-- Worker + week ending required
-- Date parsing enforced
-- Payment date optional but validated when provided
+Worked example - 42 hours of which 2 overtime, ZMW 20/hour, 5% and 1%:
 
-## 9.5 CCTV Settings Validation
+| Item | Value |
+| --- | --- |
+| Regular 40 h x 20 | 800.00 |
+| Overtime 2 h x 20 x 1.5 | 60.00 |
+| Gross | 860.00 |
+| NAPSA 5% | 43.00 |
+| NHIMA 1% | 8.60 |
+| **Net** | **808.40** |
 
-- `camera_sources` must parse as JSON array when provided
+All amounts are ZMW. The rates in force are stored on each payroll row
+(`napsa_rate`, `nhima_rate`), so a historical payslip stays reproducible after the
+settings change.
 
----
+### 7.3 Weekly generation
 
-## 10. Audit Logging Coverage
+`generate_week(week_ending)`:
 
-Main audited operations include:
-- admin login/logout
-- attendance verification failures and attendance writes
-- worker add/update/toggle/reset-pin
-- user add/update/password reset/change
-- settings save
-- cloud sync settings save
-- CCTV/biometric/payroll config add/update/deactivate
+1. Rebuild summaries for the seven days ending on that date.
+2. For each active worker, total hours and overtime from those summaries.
+3. Skip workers with no hours (counted and reported).
+4. Compute pay from the worker's rate, or the default.
+5. Create or update the `payroll` row - **never** if it is already `paid`.
+6. Mark `computed_from_attendance` and stamp `generated_at`.
 
-Logging method:
-- `_log_audit(action, details)`
-- resilient to context or DB failures (rollback on exception)
+A unique constraint on `(worker_id, week_ending)` prevents duplicate weeks.
+Manual rows go through the same `compute_pay()`, so a hand-entered correction still
+has calculated deductions; only hours and rate are entered.
 
----
+### 7.4 Trend data
 
-## 11. Template and Frontend Asset Mapping
-
-## 11.1 Template Files
-
-Shell and shared partials:
-- `templates/base_admin.html`
-- `templates/_admin_sidebar.html`
-- `templates/_flash_messages.html`
-
-Feature pages:
-- `templates/login.html`
-- `templates/dashboard.html`
-- `templates/workers.html`
-- `templates/attendance.html`
-- `templates/users.html`
-- `templates/settings.html`
-- `templates/audit_log.html`
-- `templates/tables_hub.html`
-- `templates/table_records.html`
-- `templates/cctv.html`
-- `templates/biometric.html`
-- `templates/payroll.html`
-- `templates/cloud_sync.html`
-- `templates/manual.html`
-
-## 11.2 JavaScript Assets
-
-Shared behaviors:
-- `static/js/components.js`
-- `static/js/edit-modals.js`
-- `static/js/admin-layout.js`
-
-Page scripts:
-- `static/js/login.js`
-- `static/js/workers.js`
-- `static/js/attendance.js`
-- `static/js/users-page.js`
-- `static/js/audit-log-page.js`
-- `static/js/cctv-page.js`
-- `static/js/biometric-page.js`
-- `static/js/payroll-page.js`
-- `static/js/cloud-sync-page.js`
-- `static/js/table-records-page.js`
-
-## 11.3 CSS Assets
-
-- `static/css/admin.css`
-- `static/css/login.css`
-- `static/css/dashboard.css`
-- `static/css/workers.css`
-- `static/css/attendance.css`
-- `static/css/settings.css`
-- `static/css/manual.css`
-- `static/css/datatables.css`
+`attendance_trend(days=14)` buckets summaries by date into workers present, hours
+worked and face-verified counts - rendered with Chart.js on the dashboard and
+served at `/api/v1/attendance/trend`.
 
 ---
 
-## 12. Deployment and Containerization
+## 8. Geofencing
 
-## 12.1 Dockerfile Behavior
+`geofence.evaluate(lat, lon)` returns `configured`, `has_position`, `within`,
+`distance_m`, `radius_m`, `enforce`. Distance is `geopy.distance.geodesic` between
+the configured farm centre and the reported position.
 
-Base image:
-- `python:3.11-slim`
-
-System packages installed (for OpenCV/camera/media support):
-- `ffmpeg`
-- `libglib2.0-0`
-- `libgl1`
-- `libsm6`
-- `libxext6`
-- `libxrender1`
-- `v4l-utils`
-
-Build/runtime flow:
-1. Copy `requirements.txt`
-2. Install pip dependencies
-3. Copy application source
-4. Ensure `/app/captures` exists
-5. Expose port `6000`
-6. Start via `python app.py`
-
-## 12.2 Docker Compose
-
-`docker-compose.yml` defines service `fms`:
-- builds from local `Dockerfile`
-- container name: `fms-app`
-- port mapping: `6000:6000`
-- bind mounts:
-  - `./fms.db:/app/fms.db`
-  - `./captures:/app/captures`
-- restart policy: `unless-stopped`
+Coordinates are self-reported by the worker's browser, so this is corroboration,
+not proof - it catches a punch from the wrong side of the district, not a
+determined spoof. That is why enforcement defaults to off: run it in recording
+mode first, look at real distances on the Attendance page, then decide on a radius.
 
 ---
 
-## 13. Configuration Keys and Their Use
+## 9. Cloud sync
 
-Settings table keys currently used by application logic:
-- `org_name`: branding and page display label
-- `camera_index`: default/fallback camera source index
-- `camera_sources`: JSON list of camera source objects
-- `firebase_api_key`: used during Firebase credential assembly
-- `firebase_bucket`: target bucket for upload
-- `firebase_project_id`: Firebase project metadata for credential initialization
+Optional. Without it, everything stays local - the normal state on a remote farm.
 
----
+`is_configured()` requires both a bucket and a service-account JSON. The first
+release built a credential dictionary from three settings fields and omitted
+`private_key`, so it could never authenticate against a real service account; the
+whole JSON is now pasted in and validated for a `private_key` field on save.
 
-## 14. Dependencies (requirements.txt)
-
-- Flask>=3.0.0
-- Flask-SQLAlchemy>=3.1.1
-- opencv-python>=4.9.0
-- Werkzeug>=3.0.0
-- geopy>=2.4.1
-- pandas>=2.0.0
-- numpy>=2.0.0
-- scikit-learn>=1.2.0
-- matplotlib>=3.5.0
-
-Note:
-- Some listed data science packages are not central to the current route logic, but remain project dependencies.
+- `upload_file(path)` - returns `(url, error)`; a missing configuration is
+  `not_configured`, not an error the user must act on.
+- `upload_or_queue(...)` - on failure, enqueues `snapshot_upload` in
+  `offline_sync_queue` and marks `cloud_sync_metadata` pending; the local path is
+  kept so the record is never lost.
+- `drain(base_dir, limit=25)` - retries pending and failed items up to
+  `MAX_RETRIES = 5`, updating snapshot `cloud_url` and per-record sync state.
+- `queue_stats()` - pending, failed, synced, tracked, configured.
 
 ---
 
-## 15. Local Development Operations
+## 10. Access control
 
-## 15.1 Recommended Startup
+`security.py` maps roles to named permissions:
+
+| Permission | admin | supervisor | viewer |
+| --- | --- | --- | --- |
+| `view` | yes | yes | yes |
+| `worker.manage` | yes | yes | - |
+| `attendance.manage` | yes | yes | - |
+| `payroll.manage` | yes | yes | - |
+| `cctv.manage` | yes | yes | - |
+| `biometric.manage` | yes | yes | - |
+| `sync.manage` | yes | yes | - |
+| `user.manage` | yes | - | - |
+| `settings.manage` | yes | - | - |
+
+- `admin_required` - any signed-in dashboard user.
+- `permission_required(perm)` - signed in **and** permitted, else a flash and a
+  redirect.
+- `can(perm)` is a Jinja global, so the UI hides what the role cannot do while the
+  route still enforces it.
+
+Unknown roles degrade to `viewer`. On startup any pre-existing account with an
+unrecognised role is promoted to `admin` once, so nobody is locked out by the new
+checks. The last active administrator cannot be demoted or deactivated.
+
+Other hardening: passwords and PINs hashed with Werkzeug; generated passwords are
+10 characters and temporary; minimum password length 8; every mutation audited
+with username, action, detail and IP.
+
+`_pin_fingerprint()` is a SHA-256 of the PIN used solely to enforce PIN uniqueness
+across workers. It is not a biometric - the misleading name in the first release
+caused exactly that confusion.
+
+---
+
+## 11. Data model
+
+`models.py` is authoritative. `Workers.sql` is generated by
+`python tools/export_schema.py`. `migrations.py` adds any missing column at
+startup and never drops or renames.
+
+### 11.1 Core
+
+| Table | Notes |
+| --- | --- |
+| `settings` | Key/value configuration |
+| `users` | Dashboard accounts: `role`, `is_active`, `must_change_password`, `last_login_at` |
+| `workers` | Profile, `hourly_rate`, `pin_hash`, `pin_fingerprint`, `face_enrolled_at`, status |
+| `attendance` | Session with `verified_by_cctv`, `verified_by_face`, `check_in_match_score`, `check_out_match_score`, `within_geofence`, `distance_from_farm_m` |
+| `audit_logs` | Username, action, details, IP, timestamp |
+
+### 11.2 Biometric
+
+| Table | Notes |
+| --- | --- |
+| `face_templates` | One enrolled sample per row: crop bytes, algorithm, sample index, quality score, reference image |
+| `biometric_transactions` | Every attempt: type, modality, success, `match_score`, `threshold_used`, reason |
+| `biometric_devices` | Registry of cameras and terminals; `device_type` defaults to `camera` |
+
+### 11.3 CCTV
+
+| Table | Notes |
+| --- | --- |
+| `cctv_feeds` | `rtsp_url` is the live source; `is_primary` marks the attendance camera |
+| `cctv_recordings` | Real clips: `attendance_id`, `trigger_type`, duration, size |
+| `event_snapshots` | Photo per attendance event, with optional `cloud_url` |
+
+### 11.4 Payroll and analytics
+
+| Table | Notes |
+| --- | --- |
+| `payroll` | Hours, overtime, rate, gross, rates used, deductions, net, `computed_from_attendance`; unique per `(worker, week_ending)` |
+| `daily_attendance_summary` | Per worker per day: hours, overtime, sessions, lateness, early departure, verification flags |
+
+### 11.5 Operations
+
+| Table | Notes |
+| --- | --- |
+| `offline_sync_queue` | Queued uploads with retry count and last error |
+| `cloud_sync_metadata` | Per-record sync state, unique per `(table, record)` |
+| `hardware_health_logs` | Device probes: status, error code, response time |
+
+Every table is now written by the application. Nothing in the schema is decorative.
+
+---
+
+## 12. Route reference
+
+### Public
+
+| Route | Purpose |
+| --- | --- |
+| `GET/POST /` | Worker clock in/out and admin login |
+| `GET /worker-camera-stream` | Live preview on the clock-in page |
+| `GET /manual` | In-app manual |
+| `GET /api/v1/health` | Service status |
+
+### Dashboard (signed in)
+
+`GET /dashboard`, `/workers`, `/attendance`, `/cctv`, `/biometric`, `/payroll`,
+`/cloud-sync`, `/audit-log`, `/tables-hub`, `/tables-hub/<key>`, `/settings`,
+`/users` (admin), `/captures/<path>`, `/camera-stream/<idx>`,
+`/export/<key>.csv`, `/profile/password-change`, `/logout`
+
+### Mutations, by permission
+
+| Permission | Routes |
+| --- | --- |
+| `worker.manage` | `/workers/add`, `/workers/<pk>/update`, `/workers/<pk>/reset-pin`, `/workers/<pk>/toggle` |
+| `biometric.manage` | `/workers/<pk>/face/enroll`, `/workers/<pk>/face/clear`, `/config/biometric-devices...` |
+| `attendance.manage` | `/attendance/refresh-summaries` |
+| `payroll.manage` | `/payroll/generate`, `/config/payroll`, `/config/payroll/<id>/update`, `/config/payroll/<id>/deactivate` |
+| `cctv.manage` | `/config/cctv-feeds`, `/config/cctv-feeds/<id>/update`, `/deactivate`, `/primary`, `/test`, `/cctv/health-check`, `/cctv/record-now`, `/config/cctv/settings` |
+| `sync.manage` | `POST /cloud-sync`, `/cloud-sync/drain` |
+| `user.manage` | `/users`, `/users/add`, `/users/<pk>/update`, `/users/<pk>/reset-password`, `/users/<pk>/toggle` |
+| `settings.manage` | `POST /settings`, `/settings/api-key/regenerate` |
+
+### JSON API (`X-API-Key` or session)
+
+`/api/v1/health`, `/verification/stats`, `/workers`, `/workers/<code>`,
+`/attendance`, `POST /attendance/clock`, `/attendance/trend`, `/summary/daily`,
+`/payroll`, `POST /payroll/generate`, `/cctv/feeds`, `/cctv/recordings`,
+`/biometric/transactions`, `/sync/queue`, `POST /sync/drain`
+
+### CSV exports
+
+`attendance`, `payroll`, `daily-summary`, `biometric`, `audit-log`
+
+---
+
+## 13. Frontend
+
+`base_admin.html` provides the shell: sidebar, sticky top bar with the role
+badge, flash area and the change-password modal. Palette: `#1a4731` sidebar,
+`#2e7d52` primary green, `#f4f6f9` page background. Bootstrap 5.3 and Bootstrap
+Icons via CDN; DataTables for table search, sort and paging; Chart.js for the
+trend chart.
+
+### 13.1 The shell layout
+
+The page is a two-column flexbox on `body`:
+
+```
+body (display: flex)
+|-- nav.sidebar        240px, position: sticky, height: 100dvh
+|   |-- .brand         fixed at the top
+|   |-- .sidebar-nav   the only scrolling region
+|   +-- .sidebar-footer logout, pinned to the bottom
++-- main.main-content  flex: 1, min-width: 0
+```
+
+The sidebar is **sticky, not fixed**, and only its middle section scrolls. Three
+defects made that necessary, all reproduced with Playwright at real window
+sizes:
+
+1. **The nav wrapped into a hidden second column.** Bootstrap's `.nav` sets
+   `flex-wrap: wrap`, so with `.flex-column` any item that did not fit wrapped
+   sideways instead of overflowing downwards - inside a 240px panel, where it
+   was clipped. Measured at 1470x720: six items visible, Payroll through Manual
+   laid out in a second column behind them, and `scrollHeight` reporting no
+   overflow at all. Fixed with `flex-wrap: nowrap` on `.sidebar-nav`.
+
+2. **The panel overflowed a short window with no way to reach the rest.** The
+   nav needed 808px while a MacBook Air offers about 720px of content height,
+   and a `position: fixed` panel does not scroll with the page - so Manual and
+   Logout were permanently off screen. Now the nav region scrolls on its own and
+   logout sits outside it, always visible.
+
+3. **`overflow-x: hidden` on `body`.** It was there to hide the horizontal
+   overflow the old `margin-left: 240px` hack could cause, but in WebKit that
+   combination can make `position: fixed` children scroll away with the content
+   - the reported symptom. The flex layout needs no such hack; `min-width: 0` on
+   the main column lets wide tables scroll inside their own
+   `.table-responsive` wrapper instead.
+
+Below 992px the sidebar switches back to `position: fixed`, which takes it out
+of the flex flow so the main column gets the full width, and slides in as a
+drawer when `static/js/admin-layout.js` puts `.sidebar-open` on the body.
+
+Verified after the change at 1280x560, 1440x640, 1470x720, 1512x850 and
+1440x900, on Dashboard, Attendance and Biometric: the panel holds at viewport
+top 0 after scrolling to the bottom of the page, the brand and logout stay
+visible, the nav scrolls when it needs to, and no page gains a horizontal
+scrollbar.
+
+| Template | Notes |
+| --- | --- |
+| `login.html` | Worker clock-in and admin tabs, live preview, geolocation capture |
+| `dashboard.html` | Stat cards, Control Center, trend chart, System Readiness, live feeds |
+| `workers.html` | Roster with rate and enrolment badge; quick capture button |
+| `biometric.html` | Enrolment centre: live preview, per-worker samples, upload, recent attempts |
+| `attendance.html` | Sessions with identity score, location badge, photos and clip links |
+| `payroll.html` | Generate-from-attendance panel, computed table, correction form |
+| `cctv.html` | Live feeds, feeds table with test/primary, clips, hardware health |
+| `cloud_sync.html` | Queue counters, service-account JSON, drain action |
+| `settings.html` | All configuration, grouped; API key panel |
+| `users.html` | Accounts with role and account-state badges |
+| `force_password_change.html` | The gate for temporary passwords |
+| `manual.html` | In-app manual with flowcharts |
+| `tables_hub.html`, `table_records.html`, `audit_log.html` | Raw table browsing and the audit trail |
+
+Shared scripts: `components.js` (DataTables helper, delegated clicks),
+`edit-modals.js` (declarative record-to-modal binding), `admin-layout.js`
+(responsive sidebar), plus one script per page.
+
+Blob columns are rendered as `<N bytes>` in the Data Hub rather than dumped, so
+browsing `face_templates` does not print 40 KB of pixels per row.
+
+---
+
+## 14. Tests
+
+`pytest` - 63 tests, temporary database, never touches `fms.db`.
+
+| File | Covers |
+| --- | --- |
+| `test_workers.py` | Sequential 4-digit IDs, collision skipping, PIN uniqueness |
+| `test_face_engine.py` | Template round trip, malformed blobs, unenrolled rejection, correct-worker matching, two-worker separation, clearing, retrain on change |
+| `test_attendance.py` | Unenrolled refusal, transaction logging, session creation and snapshot, double clock-in, clock-out rules, geofence recording and enforcement, summary update |
+| `test_payroll.py` | Pay arithmetic, overtime clamping, hours/lateness/overtime from sessions, open sessions, weekly generation, paid-week protection, rate fallback |
+| `test_cctv_and_sync.py` | Feeds as sources, inactive exclusion, primary selection, source coercion, non-empty list, queueing on failure, drain without configuration, stats, tracking |
+| `test_security_and_api.py` | Permission hierarchy, role degradation, viewer/supervisor/admin route access, anonymous redirect, temporary-password gate, API auth, clock credentials, payroll validation, exports |
+| `test_real_face.py` | A real photograph: detection and normalisation, enrolment through the HTTP endpoint, acceptance for its own Worker ID, refusal when claiming another's (`face_matched_another_worker`), 1:N identification, rejection of an image with no face. Skips unless `scikit-image` is installed, which supplies the sample photograph |
+
+Fixtures: `app_context` (fresh schema and seed per test), `client`, `setting`,
+`make_worker`, `signed_in(role)`.
+
+The real-photograph test is the one that exercises the whole claim end to end.
+A measured result on the bundled photograph: three enrolled samples, a held-out
+capture of the same person scores **71.8%** against a threshold of 35 and is
+accepted; the same capture claiming a different enrolled worker's ID is refused
+with `face_matched_another_worker`.
+
+---
+
+## 15. Deployment
+
+### 15.1 Docker
+
+`python:3.11-slim` with `ffmpeg`, `libgl1`, `libglib2.0-0`, `libsm6`, `libxext6`,
+`libxrender1`, `v4l-utils` and `curl`. Requirements installed, then plain
+`opencv-python` removed so `cv2.face` survives. `captures/faces` and
+`captures/clips` created. Exposes 8010. `HEALTHCHECK` polls
+`/api/v1/health` every 30 s, so `docker ps` shows real health.
+
+`docker-compose.yml` maps 8010, passes `FMS_SECRET_KEY` and `FMS_DEBUG`, persists
+`fms.db` and `captures/`, restarts unless stopped, and carries a commented
+`devices:` block for USB camera passthrough.
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python app.py
+echo "FMS_SECRET_KEY=$(python -c 'import secrets;print(secrets.token_hex(32))')" > .env
+docker compose up -d --build
 ```
 
-Access URL:
-- `http://127.0.0.1:6000`
+### 15.2 Port choice
 
-## 15.2 Default Credentials
+8010. Port 6000 is on the Chrome and Firefox blocked-port list (it is the X11
+range), so `http://localhost:6000` fails with `ERR_UNSAFE_PORT` no matter what the
+server does. 5000 collides with AirPlay Receiver on macOS.
 
-- Username: `admin`
-- Password: `admin`
+### 15.3 Raspberry Pi notes
 
-Change default credentials immediately in non-local environments.
-
----
-
-## 16. Documentation Sources in Repository
-
-- Product and architecture summary: `README.md`
-- End-user operations manual: `docs/manual.md`
-- In-app manual route: `/manual`
+- Both `opencv-contrib-python` and the base image publish arm64 wheels.
+- V4L2 is selected automatically for integer device indexes on Linux.
+- Event clips instead of continuous recording keeps SD card writes down.
+- Keep `captures/` on external storage if long retention is needed.
 
 ---
 
-## 17. Known Behavioral Notes
+## 16. Design decisions worth defending
 
-- Snapshot capture writes local files first; cloud URL replaces path only when Firebase upload succeeds.
-- Attendance clock-out requires an existing open check-in row.
-- Camera stream and verification perform fallback to configured `camera_index` if primary source fails.
-- Dashboard and attendance views derive aggregated session stats from attendance rows plus event snapshots.
-
----
-
-## 18. Quick Reference Tables
-
-## 18.1 Core Python Modules
-
-- `app.py`: application factory, helpers, routes, runtime entry
-- `models.py`: SQLAlchemy schema definitions
-- `database.py`: shared DB object initialization
-
-## 18.2 Data and Runtime Directories
-
-- `captures/`: captured attendance images
-- `docs/`: markdown manual
-- `templates/`: Jinja UI templates
-- `static/css/`: stylesheets
-- `static/js/`: frontend scripts
-
-## 18.3 Persistence Artifacts
-
-- `fms.db`: SQLite database file
+| Decision | Rationale |
+| --- | --- |
+| Face instead of fingerprint | No scanner exists or is budgeted; dusty hands are a known accuracy problem in field work; the hardware list already specifies a webcam |
+| LBPH instead of a deep encoder | Trains on a handful of samples, runs on a Pi, no build toolchain; accuracy is adequate at a controlled clock-in point |
+| Fallback matcher when contrib is missing | The app must still boot and be demonstrable; the degraded state is stated in the UI rather than hidden |
+| Refuse rather than flag an unmatched punch | The problem statement is fraud. A flagged-but-recorded punch still pays a ghost worker |
+| SQLite | The deployment is a single edge machine on unreliable power and network; a server database adds a failure mode with no benefit at this scale |
+| Event clips, not continuous recording | Storage on a Pi is small; supervisors review the moment of the punch |
+| Geofence off by default | Browser coordinates are corroboration, not proof; measure before enforcing |
+| Deduction rates as settings | Statutory rates change |
+| Never overwrite a paid payroll week | Re-running generation must be safe |
+| Threshold as a setting | The right value depends on camera, lighting and enrolment quality at each site |
 
 ---
 
-## 19. Suggested Next Documentation Enhancements
+## 17. Known limits and future work
 
-If you want this to go even deeper, the next layer can include:
-- endpoint-by-endpoint request/response payload examples
-- ERD diagram for all model relationships
-- role-based access matrix per route
-- operational runbook for backup/restore and log retention
-- test plan matrix (unit/integration/manual)
-# Farm Worker Management System (FMS) - Comprehensive Project Reference
-
-## 1. System Overview
-
-FMS is a Flask web platform for farm workforce operations with a focus on:
-- Worker identity and PIN management
-- Attendance capture (IN/OUT sessions)
-- Camera-assisted verification and snapshots
-- CCTV feed/device management
-- Biometric device records
-- Payroll records
-- Cloud-sync settings and queue visibility
-- Admin auditability and table-level data inspection
-
-Primary stack:
-- Python 3.11+
-- Flask
-- Flask-SQLAlchemy
-- SQLite (`fms.db`)
-- OpenCV (camera stream, face/eye detection, motion overlays)
-- Jinja2 templates + static CSS/JS
+- **Coordinates are self-reported.** A determined worker could spoof the browser
+  position. Anchoring location to the terminal, or a QR/beacon at the gate, would
+  close it.
+- **LBPH is illumination-sensitive.** Enrol in the conditions workers actually
+  clock in under, or add a light at the terminal.
+- **No liveness detection.** The eye check rejects some printed photos, not a phone
+  screen. Blink or challenge-response detection would be the next step.
+- **Single-machine deployment.** Multiple gates would need one instance per gate
+  syncing to a central store; the offline queue is the foundation for this.
+- **No mobile application.** The proposal mentions a Flutter prototype; the
+  delivered client is a responsive web dashboard. The JSON API exists so a mobile
+  client can be added without touching the core.
+- **TAM study outstanding.** The Technology Acceptance Model evaluation in the
+  proposal methodology is a research deliverable, not a code one. The system now
+  produces the quantitative material it needs: verification attempts with scores,
+  acceptance rates, hours recorded and payroll accuracy.
+- **Continuous recording and cloud video** are deliberately out of scope for the
+  target hardware.
 
 ---
 
-## 2. Repository Inventory (Complete)
+## 18. Quick navigation
 
-```text
-fms/
-  .dockerignore
-  .gitignore
-  Dockerfile
-  README.md
-  app.py
-  database.py
-  docker-compose.yml
-  fms.db
-  models.py
-  requirements.txt
-  captures/
-  docs/
-    manual.md
-  static/
-    css/
-      admin.css
-      attendance.css
-      dashboard.css
-      datatables.css
-      login.css
-      manual.css
-      settings.css
-      workers.css
-    js/
-      admin-layout.js
-      attendance.js
-      audit-log-page.js
-      biometric-page.js
-      cctv-page.js
-      cloud-sync-page.js
-      components.js
-      edit-modals.js
-      login.js
-      payroll-page.js
-      table-records-page.js
-      users-page.js
-      workers.js
-  templates/
-    _admin_sidebar.html
-    _flash_messages.html
-    attendance.html
-    audit_log.html
-    base_admin.html
-    biometric.html
-    cctv.html
-    cloud_sync.html
-    dashboard.html
-    login.html
-    manual.html
-    payroll.html
-    settings.html
-    table_records.html
-    tables_hub.html
-    users.html
-    workers.html
-```
+**Backend:** `app.py`, `models.py`, `migrations.py`, `database.py`, `paths.py`
 
-Excluded internals from scan output:
-- `.git/`
-- `.venv/`
-- `__pycache__/`
+**Engines:** `face_engine.py`, `attendance_service.py`, `cctv_engine.py`,
+`payroll_engine.py`, `geofence.py`, `sync_engine.py`, `security.py`,
+`exports.py`, `api.py`
 
----
+**Infra:** `Dockerfile`, `docker-compose.yml`, `requirements.txt`
 
-## 3. High-Level Architecture
+**Tools:** `tools/export_schema.py`, `tools/seed_demo.py`
 
-```mermaid
-flowchart TD
-    A[Browser UI] --> B[Flask Routes in app.py]
-    B --> C[Auth and Session Guard]
-    B --> D[Business Helpers]
-    D --> E[OpenCV Camera Pipeline]
-    B --> F[SQLAlchemy ORM]
-    F --> G[(SQLite fms.db)]
-    B --> H[captures/ image files]
-    B --> I[Optional Firebase Upload]
-```
+**Docs:** `README.md`, `INSTALL.md`, `manual.md`, `FMS_PROJECT_OVERVIEW.md`
 
-Execution model:
-1. `create_app()` builds app and config
-2. SQLAlchemy initialized via shared `db`
-3. `db.create_all()` creates schema
-4. `_seed_defaults()` creates baseline admin/settings and CCTV defaults
-5. `captures/` directory is ensured
-6. `_register_routes(app)` binds all endpoints
+**UI:** `templates/`, `static/css/`, `static/js/`
 
----
+**Tests:** `tests/`
 
-## 4. Runtime and Deployment
-
-### 4.1 Local Runtime
-- App entry point: `app.py`
-- App binds: `0.0.0.0:6000`
-- Debug mode in direct run: enabled
-
-Local run commands:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python app.py
-```
-
-### 4.2 Container Runtime
-- Base image: `python:3.11-slim`
-- System packages installed for OpenCV/media support:
-  - `ffmpeg`, `libglib2.0-0`, `libgl1`, `libsm6`, `libxext6`, `libxrender1`, `v4l-utils`
-- Exposed container port: `6000`
-- Compose host mapping: `6000:6000`
-- Persistent mounts:
-  - `./fms.db:/app/fms.db`
-  - `./captures:/app/captures`
-
-### 4.3 Important Documentation Mismatch
-- `app.py` runs on port `6000`.
-- Some markdown docs still mention `5000` / `127.0.0.1:5000`.
-
----
-
-## 5. Core Python Files (Purpose and Responsibilities)
-
-### 5.1 `app.py`
-Central application module:
-- app factory and bootstrap
-- camera and image-processing helpers
-- Firebase upload helper
-- authentication decorator
-- full route registration
-- business workflows for workers, users, attendance, CCTV, biometric, payroll, cloud sync, and table hub
-
-### 5.2 `database.py`
-Contains only shared ORM instance:
-- `db = SQLAlchemy()`
-
-### 5.3 `models.py`
-Defines all SQLAlchemy models and constraints. Includes credential helper methods:
-- `User.set_password`, `User.check_password`
-- `Worker.set_pin`, `Worker.check_pin`
-
----
-
-## 6. Configuration and Seeded Defaults
-
-At startup (`_seed_defaults`):
-- Creates default admin user if missing:
-  - username: `admin`
-  - password: `admin`
-- Creates baseline `settings` keys if missing:
-  - `org_name = FMS Farm`
-  - `camera_index = 0`
-  - `camera_sources = ""`
-  - `firebase_api_key = ""`
-  - `firebase_bucket = ""`
-  - `firebase_project_id = ""`
-- Ensures default CCTV feed + marker recording exists (`_ensure_default_cctv_entries`)
-
----
-
-## 7. Helper Function Catalog (`app.py`)
-
-### 7.1 Data and Utility Helpers
-- `_get_setting(key, default)`
-- `_generate_password(length=8)`
-- `_log_audit(action, details="")`
-- `_normalize_coordinates(lat_raw, lon_raw)`
-- `_pin_fingerprint(pin)`
-- `_is_pin_unique(pin, exclude_worker_id=None)`
-- `_generate_worker_id()`
-
-### 7.2 Camera and Detection Helpers
-- `_coerce_camera_source(source_value)`
-- `_get_camera_sources()`
-- `_open_camera(source)`
-- `_verify_face_on_camera(timeout_seconds=3.0, required_hits=2)`
-- `_capture_photo(worker_id, require_face=False)`
-- `_detect_faces_and_eyes(frame)`
-- `_draw_detections(frame, detections)`
-- `_detect_motion_regions(prev_gray, frame)`
-- `_draw_motion_regions(frame, boxes)`
-- `_build_camera_unavailable_frame(message)`
-- `_camera_frame_generator(source, fallback_source, overlay_faces=False, overlay_motion=False)`
-
-### 7.3 Cloud and Display Helpers
-- `_upload_to_firebase(local_path)`
-- `_build_attendance_sessions(rows)`
-
-### 7.4 Security Decorator
-- `admin_required(f)`
-
----
-
-## 8. Authentication and Session Model
-
-Login route: `/` (`GET`, `POST`)
-- `mode=admin`:
-  - validates username/password against `users`
-  - sets session keys:
-    - `admin_logged_in = True`
-    - `admin_username = <username>`
-- `mode=worker`:
-  - validates worker ID + PIN for active workers
-  - `IN` requires successful face+eye verification
-  - captures snapshot; fails attendance if capture fails
-  - writes attendance and `event_snapshots`
-
-Logout route: `/logout`
-- logs audit event
-- clears session
-
----
-
-## 9. Attendance Processing Pipeline
-
-Worker `IN` flow:
-1. Validate worker credentials
-2. Run `_verify_face_on_camera`
-3. Capture image with `_capture_photo`
-4. Optional Firebase upload (`_upload_to_firebase`)
-5. Create `Attendance` row with `verified_by_cctv=True/False`
-6. Create `EventSnapshot` as `photo_check_in`
-7. Commit and audit-log action
-
-Worker `OUT` flow:
-1. Validate worker credentials
-2. Capture image
-3. Find latest open attendance session (no checkout)
-4. Set `check_out_time`
-5. Create `EventSnapshot` as `photo_check_out`
-6. Commit and audit-log action
-
-Validation behavior:
-- OUT without open IN session is rejected
-- capture failure blocks write
-- invalid PIN/ID rejected
-- geolocation is optional, normalized via `geopy.Point`
-
----
-
-## 10. Full Route Matrix
-
-### 10.1 Public Routes
-- `GET|POST /` - login handler for admin and worker
-- `GET /worker-camera-stream` - MJPEG stream for worker preview
-- `GET /manual` - in-app manual page
-
-### 10.2 Authenticated Admin Routes
-- `GET /captures/<path:filename>` - serve captured images
-- `GET /logout` - clear session
-- `GET /dashboard` - dashboard statistics and summaries
-- `GET|POST /workers` - list workers; POST used only for stale-form warning redirect
-- `GET /attendance` - attendance sessions and summary counts
-- `POST /workers/add` - create worker
-- `POST /workers/<int:worker_pk>/update` - update worker fields
-- `POST /workers/<int:worker_pk>/reset-pin` - set new worker PIN
-- `POST /workers/<int:worker_pk>/toggle` - active/inactive toggle
-- `GET|POST /settings` - org settings page and save
-- `GET /users` - list users with worker linkage options
-- `POST /users/add` - add user with generated password
-- `POST /users/<int:user_pk>/update` - update user profile fields
-- `POST /users/<int:user_pk>/reset-password` - regenerate user password
-- `POST /profile/change-password` - change current admin password
-- `GET /audit-log` - audit history (latest 500)
-- `GET /tables-hub` - grouped table navigation
-- `GET /tables-hub/<string:table_key>` - generic table browser by registry key
-- `GET /cctv` - CCTV management page
-- `POST /config/cctv-feeds` - add CCTV feed
-- `POST /config/cctv-feeds/<int:feed_id>/update` - update CCTV feed
-- `POST /config/cctv-feeds/<int:feed_id>/deactivate` - mark feed inactive
-- `POST /config/cctv/settings` - save camera settings JSON and index
-- `GET /biometric` - biometric devices page
-- `POST /config/biometric-devices` - add biometric device
-- `POST /config/biometric-devices/<int:device_id>/update` - update device
-- `POST /config/biometric-devices/<int:device_id>/deactivate` - deactivate device
-- `GET /payroll` - payroll list and worker context
-- `POST /config/payroll` - add payroll record
-- `POST /config/payroll/<int:payroll_id>/update` - update payroll record
-- `POST /config/payroll/<int:payroll_id>/deactivate` - mark payroll row inactive
-- `GET|POST /cloud-sync` - cloud settings + queue/metadata visibility
-- `GET /camera-stream/<int:camera_idx>` - admin MJPEG stream by configured source index
-
----
-
-## 11. Database Schema Reference
-
-### 11.1 `settings`
-- PK: `id`
-- Unique: `key`
-- Purpose: dynamic app configuration values
-
-### 11.2 `users`
-- PK: `id`
-- Unique: `username`
-- FK: `linked_worker_id -> workers.id` (nullable)
-- Credentials: `password_hash`
-
-### 11.3 `audit_logs`
-- PK: `id`
-- Optional FK: `user_id -> users.id`
-- Fields: username, action, details, ip, timestamp
-
-### 11.4 `workers`
-- PK: `id`
-- Unique: `worker_id`, `nrc_number` (nullable unique), `pin_fingerprint` used for duplicate PIN checks
-- Fields: profile metadata, enrollment, status, hashed PIN
-
-### 11.5 `attendance`
-- PK: `attendance_id`
-- FK: `worker_id -> workers.id`
-- Fields: check-in/out timestamps, lat/lon, `verified_by_cctv`
-
-### 11.6 `cctv_feeds`
-- PK: `feed_id`
-- Fields: name, location, rtsp_url, status, heartbeat
-
-### 11.7 `payroll`
-- PK: `payroll_id`
-- FK: `worker_id -> workers.id`
-- Fields: period date, hours/rates, deductions, net, payment status/date
-
-### 11.8 `biometric_devices`
-- PK: `device_id`
-- Unique: `device_serial` (nullable unique)
-- Fields: connectivity and location metadata
-
-### 11.9 `face_templates`
-- PK: `face_id`
-- FK: `worker_id -> workers.id`
-- Fields: embedding blob, reference image path, quality, timestamps
-
-### 11.10 `biometric_transactions`
-- PK: `transaction_id`
-- FK: `device_id -> biometric_devices.device_id` (nullable)
-- FK: `worker_id -> workers.id` (nullable)
-- Fields: type, success, score, error, timestamp
-
-### 11.11 `cctv_recordings`
-- PK: `recording_id`
-- FK: `camera_id -> cctv_feeds.feed_id` (nullable)
-- Fields: storage path, window, file size, cloud metadata
-
-### 11.12 `event_snapshots`
-- PK: `snapshot_id`
-- FK: `attendance_id -> attendance.attendance_id`
-- FK: `camera_id -> cctv_feeds.feed_id` (nullable)
-- Fields: type, path/url, timestamp
-
-### 11.13 `offline_sync_queue`
-- PK: `sync_id`
-- Optional FKs to device/worker
-- Fields: operation payload, status, retries, error, sync timestamps
-
-### 11.14 `cloud_sync_metadata`
-- PK: `sync_id`
-- Unique composite: `(table_name, record_id)`
-- Fields: cloud state and sync timing
-
-### 11.15 `daily_attendance_summary`
-- PK: `summary_id`
-- FK: `worker_id -> workers.id`
-- Unique composite: `(worker_id, summary_date)`
-- Fields: in/out times, hours, lateness/early-leave minutes, verification flag
-
-### 11.16 `hardware_health_logs`
-- PK: `log_id`
-- Fields: device type/id, status, error info, response time, timestamp
-
----
-
-## 12. Camera and Streaming Details
-
-Feed source resolution:
-- Parses `camera_sources` setting as JSON array
-- Falls back to built-in camera index (`camera_index`) when sources missing/invalid
-
-Cross-platform backend selection (`_open_camera`):
-- Linux integer source: V4L2 with `/dev/video*` guard
-- macOS: AVFoundation
-- Windows: DirectShow
-- fallback: generic `cv2.VideoCapture(source)`
-
-Stream behavior:
-- MJPEG frame boundary: `multipart/x-mixed-replace; boundary=frame`
-- Optional overlay flags:
-  - face/eye rectangles
-  - motion bounding boxes
-- When no camera is available, serves generated placeholder frame with guidance text
-
-Snapshot behavior:
-- Writes clean JPG to `captures/` as `<worker_id>_<UTC timestamp>.jpg`
-- Attendance references local path unless Firebase upload returns public URL
-
----
-
-## 13. Cloud Sync and Firebase Behavior
-
-Settings used:
-- `firebase_api_key`
-- `firebase_bucket`
-- `firebase_project_id`
-
-Upload path behavior:
-- Local snapshot path uploaded to bucket object under `captures/<filename>`
-- If upload succeeds, `file_path` in `event_snapshots` stores public URL
-- If not configured or upload fails, local path is kept
-
-Cloud sync pages:
-- Show `cloud_sync_metadata` rows
-- Show `offline_sync_queue` rows
-- Allow settings updates through `/cloud-sync`
-
----
-
-## 14. Frontend Structure Reference
-
-### 14.1 Templates (`templates/`)
-- `base_admin.html`: main admin shell/layout
-- `_admin_sidebar.html`: shared left navigation
-- `_flash_messages.html`: reusable feedback alerts
-- `login.html`: entry/login and worker clock-in/out form
-- `dashboard.html`: admin dashboard and summaries
-- `workers.html`: worker CRUD/reset/toggle interface
-- `attendance.html`: session list and attendance stats
-- `users.html`: user management and credential reset actions
-- `settings.html`: organization/system settings
-- `audit_log.html`: recent audit entries
-- `cctv.html`: CCTV feed and settings controls
-- `biometric.html`: biometric device listing/editing
-- `payroll.html`: payroll CRUD interface
-- `cloud_sync.html`: sync metadata/queue + Firebase settings
-- `tables_hub.html`: grouped data-table entry page
-- `table_records.html`: generic table renderer for configured model registry
-- `manual.html`: in-app usage guide
-
-### 14.2 JavaScript (`static/js/`)
-- `admin-layout.js`: shared admin layout/nav interactions
-- `components.js`: reusable frontend helpers/components
-- `edit-modals.js`: edit modal population/submit utility logic
-- `login.js`: login-page specific behaviors
-- `workers.js`: worker page form/table actions
-- `attendance.js`: attendance page interactions
-- `users-page.js`: user-page actions/modals
-- `cctv-page.js`: CCTV form/state interactions
-- `biometric-page.js`: biometric page controls
-- `payroll-page.js`: payroll page calculations and form handling
-- `cloud-sync-page.js`: cloud sync settings/table interactions
-- `audit-log-page.js`: audit log table filtering/sorting interactions
-- `table-records-page.js`: generic table-records behaviors
-
-### 14.3 CSS (`static/css/`)
-- `admin.css`: shared admin styling foundation
-- `dashboard.css`: dashboard page presentation
-- `workers.css`: workers module styling
-- `attendance.css`: attendance module styling
-- `settings.css`: settings module styles
-- `manual.css`: manual page typography/layout
-- `login.css`: login and worker check-in UI styles
-- `datatables.css`: table-focused visual adjustments
-
----
-
-## 15. Dependencies (`requirements.txt`)
-
-- Flask >= 3.0.0
-- Flask-SQLAlchemy >= 3.1.1
-- opencv-python >= 4.9.0
-- Werkzeug >= 3.0.0
-- geopy >= 2.4.1
-- pandas >= 2.0.0
-- numpy >= 2.0.0
-- scikit-learn >= 1.2.0
-- matplotlib >= 3.5.0
-
----
-
-## 16. Security and Operational Notes
-
-Observed security-sensitive implementation details:
-- App secret key is generated with `os.urandom(32)` on each boot, which invalidates prior signed sessions after restart.
-- Default admin credentials are seeded (`admin/admin`) if account does not exist; this is convenient for dev but high-risk in production if unchanged.
-- Password and PIN values are hashed (Werkzeug helpers).
-
-Operational notes:
-- Attendance page builds sessions from latest 400 attendance rows.
-- Audit page returns latest 500 audit entries.
-- Several data pages cap rows at 150-300 for UI load control.
-- Built-in camera fallback entries are auto-maintained.
-
----
-
-## 17. Key End-to-End Workflows
-
-### 17.1 Worker Enrollment
-1. Admin opens Workers page
-2. Adds worker profile + unique PIN
-3. System auto-generates next 4-digit worker ID
-4. Record is committed and auditable
-
-### 17.2 Admin User Provisioning
-1. Admin creates user profile
-2. System auto-generates temporary password
-3. Admin can later reset password or user can change own password
-
-### 17.3 Attendance Session Lifecycle
-1. Worker clocks in with ID/PIN
-2. Face/eye checks pass
-3. Snapshot saved/uploaded
-4. Attendance row created (open session)
-5. Worker clocks out later
-6. Existing open row updated with checkout time and final snapshot
-
----
-
-## 18. Known Gaps and Improvement Opportunities
-
-- Documentation consistency: unify port references (currently mixed 5000 vs 6000 in docs).
-- Secrets handling: avoid storing service credentials in generic settings fields without dedicated secure secret management.
-- Production hardening: set stable `SECRET_KEY` through environment variable.
-- Attendance scalability: `_build_attendance_sessions` performs per-row lookups and snapshot queries; could be optimized with joins/eager loading for larger datasets.
-
----
-
-## 19. Quick Navigation Index
-
-Backend:
-- `app.py`
-- `models.py`
-- `database.py`
-
-Infra:
-- `Dockerfile`
-- `docker-compose.yml`
-- `requirements.txt`
-
-Docs:
-- `README.md`
-- `docs/manual.md`
-- `FMS_PROJECT_OVERVIEW.md`
-
-UI:
-- `templates/`
-- `static/js/`
-- `static/css/`
-
-Data:
-- `fms.db`
-- `captures/`
+**Data:** `fms.db`, `Workers.sql`, `captures/`

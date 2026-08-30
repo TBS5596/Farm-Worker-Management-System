@@ -1,5 +1,21 @@
 {% extends 'base_admin.html' %}
 
+{# ===========================================================================
+   tables_hub.html - the Data Hub index: a link per table in the schema.
+
+   Useful for checking raw records and for pulling figures into a report
+   without a database client. Each link opens table_records.html, which renders
+   any table generically.
+
+   The tables worth knowing:
+     biometric_transactions   every verification attempt with its score and
+                              reason - the source for accuracy figures
+     face_templates           enrolled samples, one row per sample
+     daily_attendance_summary hours, overtime and lateness per worker per day
+     hardware_health_logs     camera probes and failures
+     offline_sync_queue       uploads waiting for the link to return
+   =========================================================================== #}
+
 {% block title %}{{ org_name }} - Data Hub{% endblock %}
 
 {% block extra_css %}
