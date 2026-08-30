@@ -40,6 +40,12 @@ flowchart TD
     M --> N["return app"]
 ```
 
+**Reading this diagram:** the start-up sequence, top to bottom, run once when the
+program launches. Read it as a checklist: read the settings, connect the
+database, create anything missing, upgrade anything out of date, put the default
+data in place, make the folders, then wire up the pages. Only after all of that
+does the app start answering requests.
+
 The module ends with `app = create_app()`, so importing `app` gives you a fully
 built application — which is what `conftest.py` and the WSGI entry point both
 rely on.
@@ -164,6 +170,12 @@ def toggle_worker(worker_pk):
 
 **Step 6 matters:** redirect after a POST rather than rendering. Otherwise a
 browser refresh re-submits the form and the action happens twice.
+
+## What it produces
+
+Forty-nine routes, each rendering a page like this one:
+
+![The dashboard, one of the 49 routes registered by this module](../images/dashboard.png)
 
 ## Gotchas
 

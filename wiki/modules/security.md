@@ -122,11 +122,21 @@ flowchart LR
     end
 ```
 
+**Reading this diagram:** two boxes doing two different jobs that are easy to
+confuse. On the left, the decorator on the route — this is the actual lock. On
+the right, the check inside the template — this only hides a button.
+
 **Hiding a control protects nothing** — anyone can type the URL. The decorator is
 what enforces the rule, and it is what the nineteen tests in
 `tests/test_security_and_api.py` assert, route by route, role by role.
 
 **If you add a route, add the decorator.** Hiding the link is not enough.
+
+## What it produces
+
+Every action a signed-in user takes lands in the audit log, refusals included:
+
+![The audit log showing who did what, when, and which attendance attempts were refused](../images/audit-log.png)
 
 ## Gotchas
 

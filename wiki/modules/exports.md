@@ -46,6 +46,11 @@ flowchart LR
     E --> F["download as payroll.csv"]
 ```
 
+**Reading this diagram:** one route serves every export. The bit of the URL
+before `.csv` is looked up in a dictionary, which hands back the function that
+builds that file. Add an entry to the dictionary and a new download appears — no
+new route, no new page.
+
 ## The helpers
 
 ### `_csv(header, rows)`

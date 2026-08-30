@@ -54,6 +54,15 @@ flowchart TD
     G --> H["Return whatever opened, and what it was"]
 ```
 
+**Reading this diagram:** the top half is opening one specific camera — try the
+capture method that suits this operating system, and if it fails, try the others
+before giving up. The bottom half is the "just get me a working camera" version:
+try the one asked for, then the farm's main camera, then anything at all.
+
+> **Analogy: starting a car in the cold.** Try the usual way. If that fails, try
+> the choke. If that fails, try a jump start. You want a working engine, not a
+> particular method.
+
 The backend fallback exists because **identical code opened a camera on one
 development machine and failed silently on another.** OpenCV offers several
 capture backends and the one that works depends on the operating system. Trying
@@ -134,6 +143,14 @@ and a replacement.
 `log_health()` is also called from `attendance_service` when a punch fails for
 lack of frames, so camera failures during real use are recorded, not just those
 found by deliberate probes.
+
+## What it produces
+
+The CCTV page is this module end to end — configured feeds, the live view each
+one produces, and the form where a camera source is entered as a device number or
+an address:
+
+![The CCTV page showing two live feeds and the camera configuration form](../images/cctv.png)
 
 ## Gotchas
 

@@ -35,6 +35,11 @@ flowchart TB
     web --> svc --> data
 ```
 
+**Reading this diagram:** the same three layers as the rest of the wiki, with the
+actual filenames in them. Arrows point downwards only — the web layer asks the
+service layer for things, the service layer asks the data layer. Nothing reaches
+back up.
+
 ## Pages
 
 | Page | Module | Lines | What it is |

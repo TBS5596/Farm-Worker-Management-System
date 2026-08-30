@@ -20,6 +20,8 @@ camera. About a third of a second later the screen says:
 
 > *Welcome, Musonda Banda! Clock-IN recorded at 07:12:30 (face match 72%).*
 
+![The clock-in screen showing an accepted punch with the worker name and match score](images/clockin-accepted.png)
+
 Here is everything that happened in that third of a second.
 
 ## The whole path at a glance
@@ -64,7 +66,17 @@ sequenceDiagram
     R-->>B: page with a green flash message
 ```
 
-Now step by step.
+**Reading this diagram:** each vertical line is one part of the system, and time
+runs **downwards**. Every numbered arrow is one part asking another to do
+something; dotted arrows are answers coming back. Read it top to bottom like a
+transcript.
+
+The one-sentence version: *the browser hands the request to a route, the route
+hands the whole job to one service function, and that function talks to the
+camera, the face matcher, the geofence and the database in a fixed order — then
+does three tidy-up jobs afterwards that are allowed to fail.*
+
+Do not worry about the details yet. Now step by step.
 
 ---
 
@@ -204,6 +216,20 @@ flowchart TD
     WHY -- "yes, but below threshold" --> NOMATCH["reason: face_did_not_match"]
 ```
 
+**Reading this diagram:** start at the top left. Diamonds are questions, and each
+one has a way out to the left labelled with a refusal reason. The loop in the
+middle is the system trying each of the eight photos in turn — as soon as one
+photo matches well enough, it stops and accepts. If it runs out of photos without
+a match, it drops to the bottom and works out *which* refusal reason applies from
+what it saw along the way.
+
+> **Analogy: checking a signature against a bank card.** You have eight
+> photocopies of the signature, some smudged. You compare them one at a time, and
+> the first clear match ends the job. If none matches, the reason matters: was
+> the page blank (no face detected)? Was it somebody else's signature entirely
+> (matched another worker)? Or was it the right person but too smudged to be sure
+> (didn't match)? Those three call for three different responses.
+
 Three details that repay attention:
 
 **It returns on the first good frame.** As soon as one frame matches above the
@@ -281,6 +307,15 @@ stateDiagram-v2
     Closed --> Open: a later clock IN opens a new session
 ```
 
+**Reading this diagram:** each box is a state a worker can be in today, and each
+arrow is an event that moves them. The important part is what is **missing**:
+there is no arrow that gets you from *Open* to *Open* by clocking in again, and
+none from *NoSession* to *Closed*. Those changes are impossible by design.
+
+> **Analogy: a car park barrier.** You cannot take a second ticket while you
+> still have one, and you cannot pay to leave if you never came in. The barrier
+> enforces that; a paper visitor book does not.
+
 **Clocking out** looks for the most recent row with no `check_out_time`. If
 there isn't one, the punch is refused with `no_open_session` — you cannot clock
 out of a shift you never started.
@@ -308,6 +343,12 @@ row = Attendance(
 
 Then an `EventSnapshot` row links the saved image file to this attendance row,
 and the transaction commits.
+
+Here is what that row actually looks like on screen. Each line carries the
+photo taken at the moment, the confidence of the match, and how far from the farm
+the punch was made:
+
+![The attendance register showing snapshot, match score and distance against each record](images/attendance-register.png)
 
 > **This is the payoff of the whole system.** Compare the two records:
 >
@@ -385,6 +426,16 @@ has been knocked out of position. "Success" alone would have withheld that.
 
 Nine ways this transaction can end without an attendance record. Each has its
 own code and its own message.
+
+Two of them as the worker actually sees them:
+
+![A refusal because the worker has no enrolled face](images/refused-not-enrolled.png)
+
+![A refusal because no face was found in the captured photos](images/refused-no-face.png)
+
+Notice that each message says **what to do next**, not just that something
+failed. That is a deliberate design rule, covered in
+[07 — Design Decisions](07-design-decisions.md#10-distinct-refusal-reasons).
 
 | Code | What happened | What the operator should do |
 | --- | --- | --- |

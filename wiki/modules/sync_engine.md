@@ -36,6 +36,18 @@ flowchart TD
     S -- no --> X["Leave it as failed, with last_error<br/>so somebody can see why"]
 ```
 
+**Reading this diagram:** the first question is simply whether cloud upload is set
+up at all. If it is not — which is the normal state for a farm with no internet
+account — the item goes straight into a queue and the caller carries on. If it is
+set up, try the upload; and if that fails, the item goes into the same queue. The
+loop at the bottom is a later retry, which gives up after five attempts rather
+than retrying forever.
+
+> **Analogy: posting a letter during a postal strike.** You do not cancel your
+> correspondence. You put the letters in a drawer, and post them when the strike
+> ends. The drawer is a real drawer, not something you have to remember — which
+> is why the queue is a database table and not a list in memory.
+
 ## The functions
 
 ### `is_configured()`

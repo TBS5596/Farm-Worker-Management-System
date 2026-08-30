@@ -115,6 +115,16 @@ flowchart TD
     AFTER3 --> OK["return ok with message and score"]
 ```
 
+**Reading this diagram:** start at the top and follow the arrows down. Every
+diamond is a check, and every check has an escape route to the side labelled with
+the reason it refuses. A punch only becomes a record if it survives all of them.
+The three boxes at the very bottom, after `COMMIT`, run **after** the record is
+safely saved — they cannot undo it.
+
+> **Analogy: a checklist before takeoff.** Each item can stop the flight, and the
+> order matters: you check the engine before you check the in-flight catering. If
+> catering fails you still fly. The three steps after `COMMIT` are catering.
+
 ### The ordering, and why each position matters
 
 | # | Step | Why it is here and not elsewhere |
@@ -169,6 +179,13 @@ paper. Both are asserted in `tests/test_attendance.py`.
 `category` is a Bootstrap flash class (`success`, `warning`, `danger`), so the
 route can flash the message without deciding anything. The route's job is
 presentation and auditing; the decision was made here.
+
+## What it produces
+
+Every successful call to this function adds one row like these — with the photo,
+the match score and the distance from the farm all attached to it:
+
+![The attendance register, one row per session, carrying its own evidence](../images/attendance-register.png)
 
 ## Gotchas
 

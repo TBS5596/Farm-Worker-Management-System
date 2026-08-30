@@ -28,6 +28,11 @@ Worker.query.filter_by(status="active").all()
 you declare on the next start-up. It is genuinely the source of truth;
 `Workers.sql` is generated from it.
 
+> **If you are new to this file:** each Python class here *is* a database table,
+> and each `db.Column(...)` line *is* a column in it. You never write `CREATE
+> TABLE` — you write the class, and the system builds the table to match. See
+> [04 — The Database](../04-the-database.md) for the diagram of how they connect.
+
 ## The sixteen tables
 
 ### `Setting` → `settings`
@@ -191,6 +196,13 @@ faults are distinguishable from permanent ones.
 
 **Dead table.** Reserved for a fingerprint scanner that was never bought. Present
 so one could be added without a schema change.
+
+## Seeing the raw rows
+
+The Data Hub page browses any of these tables directly — useful when you want to
+check what a column actually contains rather than what you think it contains:
+
+![The Data Hub showing the raw biometric_transactions table](../images/data-hub-biometric-transactions.png)
 
 ## Conventions to follow
 

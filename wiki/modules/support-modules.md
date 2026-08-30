@@ -56,6 +56,10 @@ flowchart TD
     BASE --> DB["fms.db"]
 ```
 
+**Reading this diagram:** where things sit on disk. One project folder at the
+top, with the database file beside a `captures` folder, which itself holds the
+enrolment reference images and the event video clips.
+
 `ensure_dirs()` is called during start-up, so a fresh clone with no `captures/`
 directory works without anyone creating it by hand.
 
@@ -83,6 +87,11 @@ flowchart TD
     F --> G["Record the change<br/>and return it to be logged"]
     G --> A
 ```
+
+**Reading this diagram:** a loop over every table the code knows about. Ask the
+database what columns it actually has, compare, and add any that are missing. It
+never removes anything — which is exactly why it is safe to run on a database
+full of real attendance records.
 
 Two helpers do the translation:
 

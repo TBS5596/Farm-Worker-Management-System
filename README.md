@@ -410,7 +410,7 @@ the daily summaries from the Attendance page if sessions were imported directly.
 
 | Document | What it covers |
 | --- | --- |
-| **[wiki/](wiki/README.md)** | **The developer manual.** How the code works, with diagrams: a guided tour plus a page per module |
+| **[wiki/](wiki/README.md)** | **The developer manual.** How the code works, in plain English, with 38 diagrams and 12 annotated screenshots: a guided tour plus a page per module |
 | [INSTALL.md](INSTALL.md) | Installing on Windows, Linux, macOS and Docker; services, backups, troubleshooting |
 | `/manual` (in the app) | Operator manual, reachable from the sidebar while signed in |
 | [manual.md](manual.md) | The same operator manual as a file, for printing |

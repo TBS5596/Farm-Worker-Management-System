@@ -5,7 +5,15 @@
 ---
 
 No computer vision background is assumed. If you have never touched OpenCV, this
-page is written for you.
+page is written for you. There is no maths beyond counting.
+
+> **The whole page in three sentences.** First the computer finds *where* a face
+> is in the photo, using a fast trick based on the fact that eyes are darker than
+> cheeks. Then it tidies that face up — crops it, makes it grey, makes it the same
+> size and brightness as every other face — so that two photos of the same person
+> in different light look alike. Finally it describes the face as a big list of
+> numbers, and compares that list to the lists it stored when the worker was
+> enrolled.
 
 ## Detection and recognition are two different jobs
 
@@ -28,6 +36,17 @@ flowchart LR
     C --> REC["RECOGNITION<br/>LBPH"]
     REC --> OUT["worker 1, distance 28.2"]
 ```
+
+**Reading this diagram:** left to right, one stage feeding the next. A colour
+photo goes in; the detector marks a rectangle around the face; that rectangle is
+cropped and cleaned up into a standard small grey square; and only then does the
+recognition step run and say *which worker, and how sure*.
+
+> **Analogy: reading a name badge across a room.** First you notice *that* there
+> is a badge (detection). Then you get close enough and hold it still enough to
+> read it (normalisation). Only then can you tell whose badge it is
+> (recognition). Skipping straight to the last step is what makes systems fail —
+> you cannot read a badge you have not located.
 
 Every stage of that pipeline is in `face_engine.py`.
 
@@ -158,6 +177,18 @@ flowchart LR
     D --> E["Join the 64 histograms<br/>= the face signature"]
 ```
 
+**Reading this diagram:** four steps, left to right. Turn every pixel into a
+texture code; chop the picture into 64 squares; in each square, count how many
+times each code appeared; then string all 64 counts together into one long list.
+That list is the face's signature.
+
+> **Analogy: describing a house without a photograph.** You could say "the whole
+> house is 30% brick, 20% glass, 50% wood" — but so is half the street. Instead
+> you go room by room: *kitchen* mostly tile, *lounge* mostly wood, *bathroom*
+> mostly tile. Now the description is specific, because it records **what** and
+> **where**. The 8×8 grid is the rooms; the histograms are what each room is made
+> of.
+
 The grid is what preserves geometry: the histogram from the eye region is
 compared with the eye region, not with the chin.
 
@@ -220,6 +251,18 @@ than statistics:
 Because it is a setting rather than a constant, a farm that measures its own
 population can move it without a code change.
 
+## What enrolment looks like in the app
+
+![The enrolment centre, showing the camera, each worker's sample count, and recent verification attempts](images/enrolment-centre.png)
+
+Three things on that page connect directly to what you have just read. The
+**Samples** column (`3 / 8`) is how many stored templates each worker has — three
+is the working minimum. The **Recent Verification Attempts** table at the bottom
+shows the score, the threshold and the reason for each attempt, which is exactly
+what this page has been describing. And the panel at the top confirms the
+**recognizer in use is LBPH** — if it ever said anything else, the install would
+be broken.
+
 ## Enrolment: what is actually stored
 
 ```python
@@ -272,6 +315,16 @@ flowchart TD
     STORE --> USE
 ```
 
+**Reading this diagram:** every time a face check runs, the system asks a cheap
+question — "have the stored faces changed since I last did the expensive work?"
+If no, it reuses what it already has, for free. If yes, it redoes the expensive
+work once and remembers the answer.
+
+> **Analogy: a shopping list on the fridge.** Rewriting the whole list every time
+> you open the fridge would be daft. You rewrite it only when something has
+> actually been used up. The `(count, highest id)` pair is the quick glance that
+> tells you whether anything changed.
+
 **Two consequences you need to know:**
 
 1. If you insert or delete `face_templates` rows **outside the app** (in
@@ -280,6 +333,17 @@ flowchart TD
    change and the cache goes stale. Call `face_engine.invalidate()` or restart.
 2. The cache is per-process and guarded by an `RLock`. It is not shared between
    worker processes, which is one reason this app runs single-process.
+
+## Seeing all this in the running system
+
+The verification log records every attempt with its score, the threshold in
+force, and — for the failures — the reason:
+
+![The verification log listing accepted and refused attempts with scores and reasons](images/verification-log.png)
+
+Read a few rows of that and the ideas on this page stop being abstract: accepted
+attempts cluster around 70%, refusals sit near 0%, and the threshold of 35% is
+the line drawn in the wide empty gap between them.
 
 ## The fallback you should never see
 

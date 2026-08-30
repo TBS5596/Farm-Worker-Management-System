@@ -98,6 +98,16 @@ flowchart TB
     L1 --> L2 --> L3 --> L4
 ```
 
+**Reading this diagram:** four boxes stacked from cheapest and narrowest at the
+top to slowest and broadest at the bottom. Level 1 tests one function with no
+database and no camera. Level 4 drives the whole system over real HTTP with a
+real photograph.
+
+> **Analogy: checking a car.** Level 1 is testing the brake pads on a bench.
+> Level 2 is testing the brakes fitted to the car, on a ramp. Level 3 is checking
+> that the doors lock for the people who should be locked out. Level 4 is driving
+> it round the block. You want all four, and the cheap ones catch most faults.
+
 **Level 3 is what turns the permission matrix from a statement of intent into a
 verified property.** Nineteen tests request protected routes as each role and
 assert the outcome.
@@ -151,6 +161,7 @@ completely the wrong reason.
 ---
 
 ## The scripts in `tools/`
+
 
 Four scripts. None is part of the running application.
 
@@ -225,6 +236,13 @@ after a schema change so the two do not drift.
 ---
 
 ## A sensible workflow
+
+**Reading the diagram below:** it is the loop to follow for any change. Confirm
+the tests pass *before* you touch anything — otherwise you will not know what you
+broke. Write a test that fails for the right reason, make it pass, then click
+through the real app, because a passing test is not the same as a working page.
+The branch at the end only matters if you touched face matching or payroll, in
+which case re-measure rather than assume.
 
 ```mermaid
 flowchart LR
