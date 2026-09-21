@@ -55,6 +55,7 @@ back up.
 | [sync_engine.md](sync_engine.md) | `sync_engine.py` | ~195 | Cloud upload and the offline queue |
 | [exports.md](exports.md) | `exports.py` | ~175 | CSV generation |
 | [api.md](api.md) | `api.py` | ~390 | The 15 JSON endpoints |
+| [portal.md](portal.md) | `portal.py` | ~460 | The worker self-service portal at `/me` |
 | [frontend.md](frontend.md) | `templates/`, `static/` | — | HTML, CSS, JavaScript |
 | [support-modules.md](support-modules.md) | `database.py`, `paths.py`, `migrations.py` | ~100 | The small ones |
 

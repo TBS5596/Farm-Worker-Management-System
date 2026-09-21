@@ -32,6 +32,7 @@ import geofence
 import payroll_engine
 import sync_engine
 from api import api as api_blueprint
+from portal import portal as portal_blueprint
 from attendance_service import match_threshold, record_punch
 from database import db
 from migrations import apply_migrations
@@ -131,6 +132,10 @@ def create_app() -> Flask:
     )
 
     app.register_blueprint(api_blueprint)
+    # The worker self-service portal at /me. A separate blueprint, and a
+    # separate session: nothing under /me can satisfy @admin_required, and
+    # nothing on the dashboard can satisfy @worker_required.
+    app.register_blueprint(portal_blueprint)
     _register_routes(app)
     return app
 
@@ -154,6 +159,9 @@ DEFAULT_SETTINGS = {
     "geofence_radius_m": "500",
     "geofence_enforce": "off",
     # Payroll
+    # The farm-wide pay cycle. Any worker can override it on their own record;
+    # a blank override means "use this". weekly | fortnightly | semi-monthly | monthly
+    "payroll_period": "weekly",
     "standard_day_hours": "8",
     "overtime_multiplier": "1.5",
     "napsa_rate": "0.05",
@@ -164,6 +172,12 @@ DEFAULT_SETTINGS = {
     # Recording
     "clip_recording_enabled": "on",
     "clip_seconds": "6",
+    # Worker self-service portal (/me)
+    "portal_enabled": "on",
+    # Kept separate from face_verification_required on purpose: switching
+    # attendance verification off for a demonstration must not silently drop
+    # the portal to PIN-only access to wage history.
+    "portal_require_face": "on",
     # Cloud
     "firebase_bucket": "",
     "firebase_project_id": "",
@@ -212,7 +226,30 @@ def _seed_defaults() -> None:
             candidate.is_active = True
             db.session.commit()
 
+    _backfill_payroll_periods()
     _ensure_default_cctv_entries()
+
+
+def _backfill_payroll_periods() -> None:
+    """Stamp legacy payroll rows as the weeks they actually were.
+
+    Every row written before pay cycles existed covered the seven days ending
+    on week_ending, because that was the only period the system had. Leaving
+    period_type NULL would make a mixed history unreadable - a payslip list
+    cannot say whether 875 was a week or a month - so the rows are labelled
+    once, here.
+
+    Idempotent: it only touches rows that have no period_type, so a second
+    start-up finds nothing to do.
+    """
+    stale = Payroll.query.filter(Payroll.period_type.is_(None)).all()
+    if not stale:
+        return
+    for row in stale:
+        row.period_type = "weekly"
+        if row.period_start is None and row.week_ending:
+            row.period_start = row.week_ending - timedelta(days=6)
+    db.session.commit()
 
 
 def _ensure_default_cctv_entries() -> None:
@@ -657,6 +694,8 @@ def _register_routes(app: Flask) -> None:
             workers=workers,
             face_samples=face_engine.sample_counts(),
             default_rate=payroll_engine.rates()["default_hourly_rate"],
+            periods=payroll_engine.PERIODS,
+            farm_period=payroll_engine.farm_period(),
             active_page="workers",
             org_name=_get_setting("org_name", "FMS Farm"),
         )
@@ -701,6 +740,9 @@ def _register_routes(app: Flask) -> None:
             emergency_contact=request.form.get("emergency_contact", "").strip(),
             department=request.form.get("department", "").strip(),
             hourly_rate=_float_or_none(request.form.get("hourly_rate")),
+            # Blank means "follow the farm default", the same convention the
+            # hourly rate uses.
+            payroll_period=(request.form.get("payroll_period") or "").strip() or None,
             enrollment_date=enrollment_date,
             status=request.form.get("status", "active").strip().lower() or "active",
             pin_fingerprint=_pin_fingerprint(pin),
@@ -728,6 +770,7 @@ def _register_routes(app: Flask) -> None:
         worker.nrc_number = request.form.get("nrc_number", "").strip() or None
         worker.status = request.form.get("status", "active").strip().lower() or "active"
         worker.hourly_rate = _float_or_none(request.form.get("hourly_rate"))
+        worker.payroll_period = (request.form.get("payroll_period") or "").strip() or None
 
         if not worker.name or not worker.phone_number:
             flash("Worker name and phone number are required.", "danger")
@@ -923,6 +966,8 @@ def _register_routes(app: Flask) -> None:
                 "farm_longitude": "" if lon is None else str(lon),
                 "geofence_radius_m": request.form.get("geofence_radius_m", "500").strip() or "500",
                 "geofence_enforce": "on" if request.form.get("geofence_enforce") else "off",
+                "payroll_period": payroll_engine.normalize_period(
+                    request.form.get("payroll_period")),
                 "standard_day_hours": request.form.get("standard_day_hours", "8").strip() or "8",
                 "overtime_multiplier": request.form.get("overtime_multiplier", "1.5").strip() or "1.5",
                 "napsa_rate": request.form.get("napsa_rate", "0.05").strip() or "0.05",
@@ -941,6 +986,7 @@ def _register_routes(app: Flask) -> None:
             "settings.html",
             settings={s.key: s.value for s in Setting.query.all()},
             engine=face_engine.engine_info(),
+            periods=payroll_engine.PERIODS,
             active_page="settings",
             org_name=_get_setting("org_name", "FMS Farm"),
         )
@@ -1385,27 +1431,59 @@ def _register_routes(app: Flask) -> None:
                 Payroll.week_ending.desc(), Payroll.payroll_id.desc()).limit(200).all(),
             rates=payroll_engine.rates(),
             default_week_ending=default_week_ending.isoformat(),
+            periods=payroll_engine.PERIODS,
+            farm_period=payroll_engine.farm_period(),
+            period_label=payroll_engine.period_label,
+            worker_period=payroll_engine.worker_period,
         )
 
     @app.route("/payroll/generate", methods=["POST"])
     @permission_required(PAYROLL_MANAGE)
     def generate_payroll_page():
-        week_ending = _parse_date(request.form.get("week_ending", ""))
-        if not week_ending:
-            flash("Choose a valid week ending date.", "danger")
+        anchor = _parse_date(request.form.get("week_ending", ""))
+        if not anchor:
+            flash("Choose a valid date for the period.", "danger")
             return redirect(url_for("payroll_page"))
+        # Which cycle to run. Defaults to the farm-wide setting, so a farm with
+        # one cycle never has to think about this control at all.
+        period_type = payroll_engine.normalize_period(
+            request.form.get("payroll_period") or payroll_engine.farm_period())
 
-        outcome = payroll_engine.generate_week(week_ending)
+        outcome = payroll_engine.generate_period(anchor, period_type)
+        label = outcome["label"]
+
         _log_audit("payroll.generate",
-                   f"Generated payroll for week ending {week_ending}: "
-                   f"{outcome['created']} created, {outcome['updated']} updated")
+                   f"Generated {outcome['period_type']} payroll for {label} "
+                   f"({outcome['period_start']} to {outcome['period_end']}): "
+                   f"{outcome['created']} created, {outcome['updated']} updated, "
+                   f"{outcome['skipped_overlap']} blocked by an overlapping paid period")
+
         if outcome["created"] or outcome["updated"]:
-            flash(f"Payroll for week ending {week_ending}: {outcome['created']} created, "
-                  f"{outcome['updated']} updated from recorded attendance. "
-                  f"{outcome['skipped_no_hours']} worker(s) had no hours.", "success")
+            note = (f"{label}: {outcome['created']} created, {outcome['updated']} updated "
+                    f"from recorded attendance.")
+            if outcome["skipped_no_hours"]:
+                note += f" {outcome['skipped_no_hours']} had no hours."
+            if outcome["skipped_other_cycle"]:
+                note += (f" {outcome['skipped_other_cycle']} are on a different pay "
+                         f"cycle and were not touched.")
+            if outcome["skipped_already_paid"]:
+                note += f" {outcome['skipped_already_paid']} already paid."
+            flash(note, "success")
+        elif outcome["skipped_other_cycle"] and not outcome["rows"]:
+            flash(f"No active worker is on the {outcome['period_type']} cycle, "
+                  f"so nothing was generated for {label}.", "warning")
         else:
-            flash(f"No attendance hours found for the week ending {week_ending}, "
-                  "so nothing was generated.", "warning")
+            flash(f"No attendance hours found for {label}, so nothing was generated.",
+                  "warning")
+
+        # The overlap guard is reported separately and loudly: it means somebody
+        # would have been paid twice for the same days, which is not a detail to
+        # bury at the end of a success message.
+        for clash in outcome["conflicts"]:
+            flash(f"{clash['worker_id']} {clash['name']} was skipped: "
+                  f"{clash['paid_period']} is already paid and covers some of "
+                  f"these days. Paying both would pay the same day twice.", "danger")
+
         return redirect(url_for("payroll_page"))
 
     @app.route("/config/payroll", methods=["POST"])

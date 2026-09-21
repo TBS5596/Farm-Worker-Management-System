@@ -13,13 +13,23 @@ them is the fastest way to write a security bug here.
 | --- | --- | --- |
 | Who | People who clock in | Supervisors, administrators, office staff |
 | Table | `workers` | `users` |
-| Credential | 4-digit PIN + **their face** | Username + password |
-| Gets a session? | **No** | Yes |
-| Can reach the dashboard? | Never | Yes, subject to their role |
-| Verified by | `record_punch()` | `login()` and `@admin_required` |
+| Credential | Worker code + PIN + **their face** | Username + password |
+| Gets a session? | Only in the portal at `/me` | Yes, on the dashboard |
+| Session key | `worker_logged_in` | `admin_logged_in` |
+| Can reach the dashboard? | **Never** | Yes, subject to their role |
+| Can reach `/me`? | Yes, their own records only | **No** |
+| Verified by | `record_punch()`, `portal.do_login()` | `login()` and `@admin_required` |
 
-A worker is the *subject* of a transaction, not a user of the system. There is
-no `session["worker_logged_in"]` anywhere, and there should never be one.
+**Clocking in creates no session.** A worker walks up to a shared terminal,
+proves who they are, a row is written, and the screen forgets them. That is the
+only safe way for a screen a queue of people share.
+
+**The portal is a separate door.** Since workers also need to read their own
+hours and payslips, `/me` gives them a session of their own — but the two keys
+fit different locks. `@admin_required` tests `admin_logged_in`; `@worker_required`
+tests `worker_logged_in`; and neither side ever writes the other's key. A
+parametrised test walks every admin route with a worker session and asserts each
+one bounces. See [modules/portal.md](modules/portal.md).
 
 ## Passwords and PINs
 

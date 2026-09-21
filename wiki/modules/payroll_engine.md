@@ -37,6 +37,89 @@ Attendance rows are never read directly by payroll generation. Everything goes
 through the summary table, which is what keeps weekly generation fast for two
 hundred workers.
 
+## Pay cycles
+
+Four of them: **weekly**, **fortnightly**, **semi-monthly** and **monthly**. A
+farm sets a default in Settings, and any individual worker can override it on
+their own record — casual labour weekly and permanent staff monthly, on the same
+farm, at the same time.
+
+```mermaid
+flowchart TD
+    A["Which cycle is this worker on?"] --> B{"worker.payroll_period set?"}
+    B -- yes --> C["Use it"]
+    B -- "no (blank)" --> D["Use the farm default<br/>from Settings"]
+    C --> E["period_bounds(anchor, cycle)"]
+    D --> E
+    E --> F["A start and an end date"]
+```
+
+**Reading this diagram:** exactly the same shape as `worker_rate()` — one
+worker-level value with a farm-level fallback. One idiom to learn, not two.
+
+### How the date you pick is read
+
+This differs by cycle, and the difference is not arbitrary:
+
+| Cycle | The date you pick means |
+| --- | --- |
+| weekly | the **last day** — a farm can end its week on any day it likes |
+| fortnightly | the **last day** |
+| semi-monthly | **any day inside** the half-month; bounds snap to 1–15 or 16–end |
+| monthly | **any day inside** the month; bounds snap to the calendar month |
+
+A month ends when the calendar says so, not when somebody picks a date. Snapping
+also means a clerk typing the 23rd gets September, rather than an error.
+
+### Why this was cheap to add
+
+**The arithmetic did not change at all.** `compute_pay()` takes hours and a rate
+and has no idea what period they came from, and overtime is decided **per day**
+in `rebuild_day()` against the standard *day*, never against the period. A
+monthly run just sums thirty days of already-correct daily overtime instead of
+seven.
+
+> **Analogy: a till roll.** The daily totals are already printed down the strip.
+> Choosing a pay period is only a decision about where to tear it.
+
+### The period is recorded on the row, not just in Settings
+
+`Payroll` carries `period_start` and `period_type` alongside `week_ending`
+(which now means *period* ending — the additive-only migration cannot rename a
+column). This is not bookkeeping for its own sake: a farm that switches from
+weekly to monthly still has to be able to read last year's payslips, and a list
+showing `875` next to `3,400` with no labels is one a worker will read as being
+short-paid.
+
+Rows written before cycles existed are backfilled as weekly on first start-up by
+`app._backfill_payroll_periods()`.
+
+## The overlap guard
+
+`paid_overlap()` is the money-safety check, and it is the reason this feature is
+more than a dropdown.
+
+```mermaid
+flowchart TD
+    A["About to write a period<br/>for this worker"] --> B{"Is this exact period<br/>already PAID?"}
+    B -- yes --> S1["Skip: already_paid"]
+    B -- no --> C{"Does a DIFFERENT paid period<br/>cover any of these days?"}
+    C -- yes --> S2["Skip: overlap<br/>+ report the clash loudly"]
+    C -- no --> W["Write the row"]
+```
+
+**Reading this diagram:** two separate questions. The first stops a settled
+period being rewritten. The second stops a *different* settled period being paid
+over the top of.
+
+The case it exists for: a worker paid weekly has four settled weeks, then the
+farm moves them to monthly. Generating the month would re-pay every one of those
+days. Nothing else in the system would have noticed.
+
+Only **paid** periods block — a pending row is provisional by definition. Legacy
+rows with no `period_start` are treated as the weeks they were, their start
+inferred as six days before their end.
+
 ## `rates()` — configuration, not constants
 
 ```python
@@ -143,7 +226,7 @@ Returns all twelve components — hours, rate, basic, overtime, gross, each rate
 each deduction, net — not just `net_pay`, so a worker who queries a payment can
 be shown how it was derived.
 
-## `generate_week(week_ending, worker_pk=None)`
+## `generate_period(anchor, period_type=None, worker_pk=None)`
 
 ```mermaid
 flowchart TD
@@ -166,7 +249,16 @@ three-way branch at the bottom is the important part — a brand new row is
 inserted, an unpaid row is updated, and **a row already marked paid is left
 completely alone**.
 
-**A paid week is never rewritten.** Once `paid_status` is `paid`, regenerating
+**Only workers on the cycle being generated are touched.** Running a monthly
+period must not quietly generate for the casual labourers paid weekly, so each
+worker's effective cycle is checked first. The outcome counts four separate skip
+reasons — `other_cycle`, `no_hours`, `already_paid`, `overlap` — so the operator
+is told what happened rather than left wondering.
+
+`generate_week()` still exists as a thin wrapper that calls this with `"weekly"`,
+so callers written before cycles existed keep working.
+
+**A paid period is never rewritten.** Once `paid_status` is `paid`, regenerating
 skips that row. Payroll is a financial record; silently changing a figure
 somebody has already been paid against would destroy the audit trail.
 `tests/test_payroll.py` asserts this.

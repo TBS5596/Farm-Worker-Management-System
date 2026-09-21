@@ -88,6 +88,10 @@ def payroll_csv() -> str:
             row.payroll_id,
             worker.worker_id if worker else row.worker_id,
             worker.name if worker else "",
+            # Period columns come first so a spreadsheet sorted by worker
+            # reads chronologically and says what each row actually covers.
+            row.period_type or "weekly",
+            _stamp(row.period_start),
             _stamp(row.week_ending),
             row.total_hours or 0,
             row.overtime_hours or 0,
@@ -102,7 +106,8 @@ def payroll_csv() -> str:
             _stamp(row.payment_date),
         ])
     return _csv([
-        "payroll_id", "worker_id", "worker_name", "week_ending", "total_hours",
+        "payroll_id", "worker_id", "worker_name",
+        "period_type", "period_start", "period_end", "total_hours",
         "overtime_hours", "hourly_rate", "overtime_pay", "gross_pay_zmw",
         "napsa_deduction_zmw", "nhima_deduction_zmw", "net_pay_zmw", "source",
         "paid_status", "payment_date",

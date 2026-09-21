@@ -44,6 +44,7 @@ One page per source file. See [modules/README.md](modules/README.md) for the ind
 | [sync_engine.py](modules/sync_engine.md) | Cloud upload with an offline queue |
 | [exports.py](modules/exports.md) | CSV generation |
 | [api.py](modules/api.md) | The JSON API |
+| [portal.py](modules/portal.md) | The worker self-service portal at `/me` |
 | [Front end](modules/frontend.md) | Templates, CSS and JavaScript |
 | [Support modules](modules/support-modules.md) | `database.py`, `paths.py`, `migrations.py` |
 

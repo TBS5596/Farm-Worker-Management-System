@@ -307,3 +307,101 @@ samples before their first shift.
 
 **When a worker leaves:** deactivate them on Workers. Their records stay for the
 audit trail, but they can no longer clock in.
+
+---
+
+## For workers: checking your own hours and payslips
+
+Workers can look up their own records without asking anyone. This is separate
+from clocking in, and it does **not** give access to the office dashboard.
+
+**How to get there.** On the farm WiFi, open the same address the clock-in
+screen uses and tap **My hours & payslips** at the bottom, or go straight to
+`/me`.
+
+**Signing in takes three things:**
+
+1. Your Worker ID, for example `0001`
+2. Your PIN
+3. A photo of your face, taken there and then
+
+The photo is the point. Anyone who saw you type your PIN at the terminal still
+cannot open your payslips, because the system checks the face against the one
+enrolled for that Worker ID. If your face has not been enrolled yet, you cannot
+sign in here — ask a supervisor to enrol you on the Biometric page.
+
+**What a worker sees:**
+
+- **Home** — whether they are clocked in right now, hours and days this week and
+  this month, their own details, and their last payslip
+- **Attendance** — every shift recorded for them, newest first, with the photo
+  taken at clock-in
+- **Payslips** — each paid week, with hours, overtime, rate, gross pay, NAPSA,
+  NHIMA and net pay all shown
+
+**What a worker cannot do.** Everything here is read-only. They cannot see any
+other worker, cannot reach any office page, and cannot change a single figure.
+Corrections are made by a supervisor on the dashboard.
+
+**Why the current week is missing.** A week appears only once it has been marked
+paid. Until then the figure can still change when payroll is regenerated, and
+showing a number that later moves causes more disputes than it settles.
+
+**If somebody is locked out.** Five wrong attempts in fifteen minutes locks that
+Worker ID for fifteen minutes. Waiting clears it; so does a supervisor resetting
+the PIN on the Workers page.
+
+**Switching it off.** Settings has two controls: one disables the portal
+entirely, and one drops sign-in to Worker ID and PIN without the face check.
+Leave the face check on — it is what makes a PIN safe to use for wage history.
+
+---
+
+## Choosing how often payroll runs
+
+The farm can be paid weekly, fortnightly, twice a month, or monthly — and
+individual workers can be on a different cycle from everybody else. Casual
+labour weekly and permanent staff monthly, on the same farm, is a common
+arrangement and is fully supported.
+
+**Set the farm default** on **Settings → Pay Cycle**. Most farms set this once
+and never touch it again.
+
+**Put an individual worker on a different cycle** on the **Workers** page, in
+the *Pay Cycle* box on their record. Leaving it on *Farm default* is what you
+want for almost everybody.
+
+**Running payroll.** On the Payroll page, choose the cycle and a date, then
+press Generate. The cycle box already shows the farm default, so if your farm
+runs one cycle you can ignore it.
+
+How the date is read depends on the cycle, and this catches people out:
+
+| Cycle | What the date means |
+| --- | --- |
+| Weekly | The **last day** of the week you are paying |
+| Fortnightly | The **last day** of the fortnight |
+| Twice a month | **Any day** in the half-month — it fills in 1–15 or 16 to month end |
+| Monthly | **Any day** in the month — it fills in the whole month |
+
+So on a monthly cycle you can type any date in September and get September.
+
+**Only workers on that cycle are paid.** Running a monthly period does not
+touch the weekly casuals, and the message afterwards tells you how many were
+left alone for that reason.
+
+**Two protections you cannot switch off.**
+
+A period already marked **paid** is never regenerated, so re-running after a
+correction elsewhere is always safe.
+
+And if a worker's days are already covered by a *different* paid period, they
+are skipped with a red message naming the clash. This matters when you move
+somebody from weekly to monthly: without it, the first monthly run would pay
+again for days already settled in their weekly payslips. **If you see that
+message, nothing went wrong — the system stopped a double payment.** Mark the
+old period unpaid, or generate from the date after it ends.
+
+**Changing the cycle does not change existing payslips.** Every payslip records
+the period it covered, so a worker who moved from weekly to monthly sees their
+old weeks correctly labelled as weeks.
