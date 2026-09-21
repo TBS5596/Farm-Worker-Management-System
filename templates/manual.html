@@ -39,13 +39,16 @@
   <ol>
     <li>Sign in as <code>admin</code> / <code>admin</code> and set a real password when asked.</li>
     <li><strong>Settings</strong> - organisation name, farm coordinates, geofence radius,
-        hourly rate, NAPSA and NHIMA rates, shift times.</li>
+        hourly rate, NAPSA and NHIMA rates, shift times, and the
+        <strong>pay cycle</strong> (weekly, fortnightly, twice a month or monthly).</li>
     <li><strong>CCTV</strong> - add the clock-in camera, press <em>Test</em>, then the
         <i class="bi bi-star"></i> button to make it the attendance camera.</li>
     <li><strong>Workers</strong> - add each worker with an hourly rate and a unique PIN.</li>
     <li><strong>Biometric</strong> - enrol at least three face samples per worker.</li>
     <li>Have a worker clock in from the home page and check <strong>Attendance</strong>.</li>
-    <li><strong>Payroll</strong> - pick a week ending date and generate.</li>
+    <li><strong>Payroll</strong> - pick the cycle and a date in the period, and generate.</li>
+    <li>Tell workers they can check their own hours and payslips at <code>/me</code>
+        on their phones (section 7).</li>
   </ol>
 
   <h5 class="section-title">2) Worker Onboarding</h5>
@@ -54,6 +57,8 @@
     <ol class="mb-0">
       <li>Go to <strong>Workers</strong> and click <strong>Add Worker</strong>.</li>
       <li>Enter name, phone, NRC, department and hourly rate; set status to <strong>active</strong>.</li>
+      <li>Leave <strong>Pay Cycle</strong> on <em>Farm default</em> unless this worker is
+          paid on a different cycle from the rest of the farm.</li>
       <li>Create a unique PIN (at least 4 digits).</li>
       <li>Click <strong>Save Worker</strong>. A 4-digit Worker ID is generated automatically.</li>
       <li>Go to <strong>Biometric</strong> and enrol his face before his first shift.</li>
@@ -188,27 +193,71 @@
   <div class="example-box">
     <p class="mb-2"><strong>Example:</strong> pay the week ending Sunday 23 August.</p>
     <ol class="mb-0">
-      <li>Go to <strong>Payroll</strong> and set <strong>Week Ending</strong> to that Sunday.</li>
+      <li>Go to <strong>Payroll</strong>. Leave <strong>Pay cycle</strong> on the farm
+          default unless you are paying a different cycle.</li>
+      <li>Set <strong>Date in the period</strong> to that Sunday.</li>
       <li>Click <strong>Generate Payroll</strong>.</li>
       <li>Check the rows, then export the CSV as the payment list.</li>
-      <li>After paying, edit each row and set status to <em>paid</em> with the payment date.</li>
+      <li>After paying, edit each row and set status to <em>paid</em> with the payment date.
+          Marking a period paid is also what releases the payslip to the worker's phone.</li>
     </ol>
   </div>
+
+  <h6 class="flow-title">Choosing the period</h6>
+  <p>
+    The farm can be paid <strong>weekly, fortnightly, twice a month or monthly</strong>,
+    set on the Settings page. An individual worker can be put on a different cycle from
+    their record on the Workers page - casual labour weekly and permanent staff monthly
+    is a common arrangement.
+  </p>
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered align-middle">
+      <thead><tr><th>Cycle</th><th>What the date you choose means</th></tr></thead>
+      <tbody>
+        <tr><td>Weekly</td><td>The <strong>last day</strong> of the week you are paying</td></tr>
+        <tr><td>Fortnightly</td><td>The <strong>last day</strong> of the fortnight</td></tr>
+        <tr><td>Twice a month</td><td><strong>Any day</strong> in the half-month. It fills in 1-15, or 16 to month end</td></tr>
+        <tr><td>Monthly</td><td><strong>Any day</strong> in the month. It fills in the whole month</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    Only workers on the cycle you chose are paid. Running the monthly period does not
+    touch the weekly casuals, and the message afterwards says how many were left alone
+    for that reason.
+  </p>
   <p class="mt-3">
     Hours come from the recorded sessions; gross pay, NAPSA, NHIMA and net pay are
-    calculated from the worker's rate. Weeks already marked paid are never overwritten,
+    calculated from the worker's rate. Periods already marked paid are never overwritten,
     so re-running is safe. A hand-entered correction still has its pay calculated - you
     enter hours and a rate, never an amount.
   </p>
 
+  <div class="example-box">
+    <p class="mb-1"><strong>If you see a red "already paid" message</strong></p>
+    <p class="mb-0">
+      A worker is skipped when a <em>different</em> paid period already covers some of
+      these days. That happens when somebody moves from weekly to monthly: their first
+      four weeks are already settled. <strong>Nothing went wrong - the system stopped a
+      double payment.</strong> Either mark the old period unpaid, or generate from the
+      date after it ends.
+    </p>
+  </div>
+
   <h6 class="flow-title">Flowchart: Payroll</h6>
-  <pre class="flowchart-block">[Choose week ending]
+  <pre class="flowchart-block">[Choose cycle + a date in the period]
         |
         v
-[Rebuild daily summaries for those 7 days]
+[Work out the period start and end]
         |
         v
-[Total hours per worker] --> [Split regular / overtime]
+[Rebuild daily summaries for those days]
+        |
+        v
+[For each ACTIVE worker on THIS cycle]
+        |
+        v
+[Total hours] --> [Split regular / overtime]
         |
         v
 [Gross = regular x rate + overtime x rate x multiplier]
@@ -217,9 +266,103 @@
 [NAPSA and NHIMA deducted] --> [Net pay]
         |
         v
-[Payroll row created or updated]  (paid weeks skipped)</pre>
+[Payroll row created or updated]
+   |
+   +-- already paid?          --> skipped
+   +-- other paid period      --> skipped, reported in red
+       covers these days          (stops a double payment)</pre>
 
-  <h5 class="section-title">7) Cameras and Clips</h5>
+  <h5 class="section-title">7) For Workers: Your Own Hours and Payslips</h5>
+  <p>
+    Workers can look up their own records without asking anyone. This is separate from
+    clocking in, and it gives <strong>no access to the office pages</strong>.
+  </p>
+
+  <div class="example-box">
+    <p class="mb-2"><strong>Example:</strong> Musonda checks last month's payslip on his phone.</p>
+    <ol class="mb-0">
+      <li>On the farm WiFi, open the clock-in screen and tap
+          <strong>My hours &amp; payslips</strong> at the bottom (or go to <code>/me</code>).</li>
+      <li>Type Worker ID <code>0001</code> and his PIN.</li>
+      <li>Tap <strong>Take a photo</strong> and take a photo of his face.</li>
+      <li>Tap <strong>Sign in</strong>.</li>
+    </ol>
+  </div>
+
+  <p class="mt-3"><strong>Signing in takes three things:</strong> the Worker ID, the PIN,
+  and a photo taken there and then.</p>
+
+  <div class="example-box">
+    <p class="mb-1"><strong>Why the photo</strong></p>
+    <p class="mb-0">
+      Anyone who watched a worker type their PIN at the terminal still cannot open their
+      payslips, because the system checks the face against the one enrolled for that
+      Worker ID. A PIN was only ever meant to guard a clock-in; it is four digits, and it
+      gets typed in front of a queue. <strong>A worker whose face is not enrolled cannot
+      sign in here at all</strong> - enrol them on the Biometric page first.
+    </p>
+  </div>
+
+  <div class="table-responsive mt-3">
+    <table class="table table-sm table-bordered align-middle">
+      <thead><tr><th>Tab</th><th>What it shows</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Home</strong></td>
+            <td>Whether they are clocked in right now, hours and days this week and this
+                month, their own details, their pay cycle, and their last payslip</td></tr>
+        <tr><td><strong>Attendance</strong></td>
+            <td>Every shift recorded for them, newest first, with the photo taken at
+                clock-in</td></tr>
+        <tr><td><strong>Payslips</strong></td>
+            <td>Each <em>paid</em> period, with hours, overtime, rate, gross pay, NAPSA,
+                NHIMA and net pay</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    <strong>Everything here is read-only.</strong> A worker cannot see any other worker,
+    cannot reach any office page, and cannot change a single figure. Corrections are made
+    by a supervisor on the dashboard.
+  </p>
+
+  <p>
+    <strong>Why the current period is missing.</strong> A period appears only once it has
+    been marked paid. Until then the figure can still change when payroll is regenerated,
+    and showing a number that later moves causes more disputes than it settles.
+  </p>
+
+  <p>
+    <strong>If somebody is locked out.</strong> Five wrong attempts in fifteen minutes
+    locks that Worker ID for fifteen minutes. Waiting clears it, and so does a supervisor
+    resetting the PIN on the Workers page.
+  </p>
+
+  <h6 class="flow-title">Flowchart: Worker sign-in</h6>
+  <pre class="flowchart-block">[Worker ID + PIN + photo]
+        |
+        v
+[Too many recent failures?] --yes--> [Refused: wait 15 minutes]
+        |no
+        v
+[ID active and PIN correct?] --no--> [Refused: "ID or PIN is incorrect"]
+        |yes
+        v
+[Face enrolled?] --no--> [Refused: ask a supervisor to enrol you]
+        |yes
+        v
+[Face matches THIS worker?] --no--> [Refused, with the reason]
+        |yes
+        v
+[Signed in]  -->  Home / Attendance / Payslips  (their own records only)</pre>
+
+  <p class="text-muted" style="font-size:.9rem;">
+    Settings has two controls for this: one turns the portal off entirely, and one drops
+    sign-in to ID and PIN without the face check. <strong>Leave the face check on</strong>
+    - it is what makes a PIN safe to use for wage history.
+  </p>
+
+  <h5 class="section-title">8) Cameras and Clips</h5>
   <ul>
     <li><strong>Health Check</strong> opens every registered camera and records the result
         under Hardware Health. Worth running each morning.</li>
@@ -230,7 +373,7 @@
         snapshots; the rest are surveillance.</li>
   </ul>
 
-  <h5 class="section-title">8) Users and Roles</h5>
+  <h5 class="section-title">9) Users and Roles</h5>
   <div class="table-responsive">
     <table class="table table-sm table-bordered align-middle">
       <thead class="table-light"><tr><th>Role</th><th>Can do</th></tr></thead>
@@ -250,7 +393,7 @@
     deactivated. Every action is recorded on the <strong>Audit Log</strong> page.
   </p>
 
-  <h5 class="section-title">9) Edit and Reset Operations</h5>
+  <h5 class="section-title">10) Edit and Reset Operations</h5>
   <div class="example-box">
     <ol class="mb-0">
       <li>Click the row's <i class="bi bi-pencil-square"></i> button.</li>
@@ -260,7 +403,7 @@
     </ol>
   </div>
 
-  <h5 class="section-title">10) Troubleshooting</h5>
+  <h5 class="section-title">11) Troubleshooting</h5>
   <div class="table-responsive">
     <table class="table table-sm table-bordered align-middle">
       <thead class="table-light"><tr><th>Symptom</th><th>Cause and fix</th></tr></thead>
@@ -278,20 +421,41 @@
                 installed alongside it. Reinstall from <code>requirements.txt</code></td></tr>
         <tr><td>Payroll generates nothing</td>
             <td>No recorded hours that week, or rebuild the daily summaries first</td></tr>
+        <tr><td>Payroll skipped a worker, "already paid" in red</td>
+            <td>A different <em>paid</em> period already covers some of those days -
+                usually after moving somebody from weekly to monthly. Nothing is broken;
+                the system stopped a double payment. Mark the old period unpaid, or
+                generate from the date after it ends.</td></tr>
+        <tr><td>Payroll skipped workers "on a different pay cycle"</td>
+            <td>Correct behaviour. Run that cycle separately from the Pay cycle box.</td></tr>
+        <tr><td>Worker cannot sign in at <code>/me</code></td>
+            <td>Their face is not enrolled, or they have had five failed attempts in
+                fifteen minutes. Enrol them on the Biometric page, or wait, or reset the
+                PIN on Workers.</td></tr>
+        <tr><td>Worker sees no payslips</td>
+            <td>Only <em>paid</em> periods appear. Mark the period paid on the Payroll
+                page and it shows up.</td></tr>
+        <tr><td>"Take a photo" does nothing on a phone</td>
+            <td>Allow the browser access to the camera. The button opens the phone's own
+                camera app, so it works over plain http on the farm network.</td></tr>
         <tr><td>Everyone signed out after a restart</td>
             <td>Set <code>FMS_SECRET_KEY</code> so the session key is stable</td></tr>
       </tbody>
     </table>
   </div>
 
-  <h5 class="section-title">11) Weekly Routine</h5>
+  <h5 class="section-title">12) Routine</h5>
   <ul class="mb-0">
     <li><strong>Each morning:</strong> CCTV &rarr; Health Check; confirm the attendance
         camera is online.</li>
     <li><strong>During the day:</strong> watch Attendance; refused attempts and their
         reasons appear on the Biometric page.</li>
-    <li><strong>Friday:</strong> Payroll &rarr; generate &rarr; export &rarr; mark paid.</li>
-    <li><strong>New worker:</strong> add on Workers, then enrol at least three samples.</li>
+    <li><strong>End of each pay period</strong> - Friday on a weekly cycle, month end on a
+        monthly one: Payroll &rarr; choose the cycle and a date &rarr; generate &rarr;
+        export &rarr; mark paid. Marking paid also releases the payslip to the worker's
+        phone. If the farm runs two cycles, run each one separately.</li>
+    <li><strong>New worker:</strong> add on Workers, then enrol at least three samples.
+        Without enrolment they can neither clock in nor use the worker portal.</li>
     <li><strong>Worker leaves:</strong> deactivate on Workers. Records stay for the audit
         trail; they can no longer clock in.</li>
   </ul>
