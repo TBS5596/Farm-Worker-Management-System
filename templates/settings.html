@@ -56,6 +56,86 @@
         </div>
       </div>
 
+      {# ====================================================================
+         Clock-in verification.
+
+         This used to be three switches in two different corners of this page:
+         "require a face match" up here, "workers scan a card" and "still ask
+         for the PIN" a long way below. Each was individually clear and the
+         combination was not, which is a poor way to answer the only question
+         that matters - what does the terminal actually check?
+
+         One chooser instead. The three settings underneath are unchanged and
+         still the source of truth; this writes all three at once and the mode
+         is derived back from them, so a farm that edited the table by hand
+         still sees the truth rather than a stale label.
+
+         The weak combinations are kept and labelled. A demonstration on a
+         laptop with no camera needs one, and hiding them would only push
+         people to turn the camera check off somewhere less visible.
+         ==================================================================== #}
+      <div class="card shadow-sm mb-3" id="clockin-verification">
+        <div class="card-body p-4">
+          <h6 class="text-muted text-uppercase fw-bold mb-1">Clock-in Verification</h6>
+          <p class="text-muted small mb-3">
+            What a worker must present to clock in and out. Three checks are available:
+            the <strong>card</strong> they <em>have</em>, the <strong>PIN</strong> they
+            <em>know</em>, and the <strong>face</strong> they <em>are</em>.
+          </p>
+
+          {% set active = clockin_modes[clockin_mode] %}
+          <div class="alert {{ 'alert-success' if active.strength == 'strong' else 'alert-warning' }} d-flex align-items-start gap-2 mb-4">
+            <i class="bi {{ 'bi-shield-check' if active.strength == 'strong' else 'bi-shield-exclamation' }} mt-1"></i>
+            <div>
+              <strong>Currently: {{ active.label }}.</strong>
+              {{ active.summary }}
+              {% if active.strength == 'weak' %}
+              <div class="mt-1">{{ active.note }}</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="mode-list">
+            {% for key, mode in clockin_modes.items() %}
+            <label class="mode-option {{ 'is-weak' if mode.strength == 'weak' }} {{ 'is-active' if key == clockin_mode }}"
+                   for="mode-{{ key }}">
+              <input class="form-check-input mt-1" type="radio" name="clockin_mode"
+                     id="mode-{{ key }}" value="{{ key }}"
+                     {% if key == clockin_mode %}checked{% endif %} />
+              <span class="mode-body">
+                <span class="mode-head">
+                  <span class="mode-label">{{ mode.label }}</span>
+                  {% if mode.strength == 'weak' %}
+                  <span class="badge bg-warning text-dark">Weak</span>
+                  {% endif %}
+                </span>
+
+                {# The factors as three small chips, so the combination can be
+                   read without parsing the sentence underneath. #}
+                <span class="mode-factors">
+                  {% for name, on in [('Card', mode.factors[0]), ('PIN', mode.factors[1]), ('Face', mode.factors[2])] %}
+                  <span class="factor {{ 'on' if on else 'off' }}">
+                    <i class="bi {{ 'bi-check-lg' if on else 'bi-x-lg' }}"></i>{{ name }}
+                  </span>
+                  {% endfor %}
+                </span>
+
+                <span class="mode-summary">{{ mode.summary }}</span>
+                <span class="mode-note {{ 'text-danger-emphasis' if mode.strength == 'weak' }}">{{ mode.note }}</span>
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+
+          <div class="form-text mt-3">
+            Cards must also be issued before a card-based method will work &mdash;
+            <a href="{{ url_for('print_cards') }}">Workers &rarr; Print cards</a>. A worker
+            who has no card yet can still clock in with their worker number, and the audit
+            log records that the card was not used.
+          </div>
+        </div>
+      </div>
+
       <div class="card shadow-sm mb-3">
         <div class="card-body p-4">
           <h6 class="text-muted text-uppercase fw-bold mb-3">Face Verification</h6>
@@ -81,16 +161,14 @@
               </div>
             </div>
             <div class="col-md-8">
-              <div class="form-check form-switch mb-2">
-                <input class="form-check-input" type="checkbox" role="switch" id="faceRequired" name="face_verification_required"
-                       {% if settings.get('face_verification_required', 'on') == 'on' %}checked{% endif %} />
-                <label class="form-check-label" for="faceRequired">
-                  Require a face match before recording attendance
-                </label>
-                <div class="form-text">
-                  Turn this off only for a demonstration without a camera. With it off, a PIN alone
-                  records attendance and buddy-punching becomes possible again.
-                </div>
+              {# Whether a face is required at all is set under Clock-in
+                 Verification above, with the other two factors, so that the
+                 combination is chosen in one place. What stays here is how the
+                 matching behaves once it runs. #}
+              <div class="alert alert-light border small mb-3">
+                Whether a face match is required is part of
+                <a href="#clockin-verification">Clock-in Verification</a> above.
+                Currently: <strong>{{ clockin_modes[clockin_mode].short }}</strong>.
               </div>
               <div class="form-check form-switch">
                 <input class="form-check-input" type="checkbox" role="switch" id="faceEyes" name="face_require_eyes"
@@ -259,33 +337,15 @@
           <h6 class="text-muted text-uppercase fw-bold mb-3">Worker Identity Cards</h6>
 
           <div class="row g-3">
-            <div class="col-md-6">
-              <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" role="switch" id="barcodeEnabled" name="barcode_enabled"
-                       {% if settings.get('barcode_enabled', 'off') == 'on' %}checked{% endif %} />
-                <label class="form-check-label" for="barcodeEnabled">
-                  Workers scan a card to clock in and out
-                </label>
-              </div>
-              <div class="form-text">
-                Adds a third check at the capture point. The card is something the worker
-                <em>has</em>, the PIN something they <em>know</em>, the face something they
-                <em>are</em>. A worker without a card can still clock in with their worker number,
-                and the audit log records when the card was not used.
-              </div>
-            </div>
-
-            <div class="col-md-6">
-              <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" role="switch" id="barcodeRequirePin" name="barcode_require_pin"
-                       {% if settings.get('barcode_require_pin', 'on') == 'on' %}checked{% endif %} />
-                <label class="form-check-label" for="barcodeRequirePin">
-                  Still ask for the PIN after a card is scanned
-                </label>
-              </div>
-              <div class="form-text">
-                Leave this on to keep all three checks. Turning it off makes the queue faster but
-                drops to two: the card and the face.
+            {# Whether cards are scanned at all, and whether the PIN is still
+               asked for afterwards, are set under Clock-in Verification at the
+               top of this page together with the face check. What remains here
+               is what a card carries and how it is read. #}
+            <div class="col-12">
+              <div class="alert alert-light border small mb-0">
+                Whether workers scan a card is part of
+                <a href="#clockin-verification">Clock-in Verification</a> at the top of this
+                page. Currently: <strong>{{ clockin_modes[clockin_mode].short }}</strong>.
               </div>
             </div>
 

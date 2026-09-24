@@ -39,8 +39,10 @@
   <ol>
     <li>Sign in as <code>admin</code> / <code>admin</code> and set a real password when asked.</li>
     <li><strong>Settings</strong> - organisation name, farm coordinates, geofence radius,
-        hourly rate, NAPSA and NHIMA rates, shift times, and the
-        <strong>pay cycle</strong> (weekly, fortnightly, twice a month or monthly).</li>
+        hourly rate, NAPSA and NHIMA rates, shift times, the
+        <strong>pay cycle</strong> (weekly, fortnightly, twice a month or monthly), and
+        <strong>Clock-in verification</strong> - what a worker must present to clock in
+        (section 2).</li>
     <li><strong>CCTV</strong> - add the clock-in camera, press <em>Test</em>, then the
         <i class="bi bi-star"></i> button to make it the attendance camera.</li>
     <li><strong>Workers</strong> - add each worker with an hourly rate and a unique PIN.</li>
@@ -49,12 +51,80 @@
     <li><strong>Payroll</strong> - pick the cycle and a date in the period, and generate.</li>
     <li><em>Optional:</em> <strong>Settings &rarr; Worker cards</strong> to switch cards
         on, then <strong>Workers &rarr; Issue cards</strong> and print the sheet
-        (sections 4 and 5).</li>
+        (sections 5 and 6).</li>
     <li>Tell workers they can check their own hours and payslips at <code>/me</code>
-        on their phones (section 10).</li>
+        on their phones (section 11).</li>
   </ol>
 
-  <h5 class="section-title">2) Worker Onboarding</h5>
+  <h5 class="section-title">2) Clock-in Verification: What The Terminal Checks</h5>
+  <p>
+    <strong>Settings &rarr; Clock-in verification.</strong> One setting decides what a
+    worker must present at the terminal, and therefore what your attendance record is
+    worth. Three checks are available.
+  </p>
+
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered align-middle">
+      <thead class="table-light"><tr><th>Check</th><th>What it is</th><th>Why it counts</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Card</strong></td><td>Something the worker <em>has</em></td>
+            <td>Says who is being claimed, before anything is typed</td></tr>
+        <tr><td><strong>PIN</strong></td><td>Something the worker <em>knows</em></td>
+            <td>Four digits, typed in front of a queue</td></tr>
+        <tr><td><strong>Face</strong></td><td>Something the worker <em>is</em></td>
+            <td>The only one that cannot be handed to a friend</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Pick the combination from the list on the settings page. Each option shows which of
+     the three it uses and what it gives up.</p>
+
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered align-middle">
+      <thead class="table-light"><tr><th>Setting</th><th>Use it when</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Card, PIN and face</strong></td>
+            <td>The strongest. Wherever attendance feeds payroll without a supervisor
+                standing at the terminal</td></tr>
+        <tr><td><strong>PIN and face</strong></td>
+            <td>Before cards have been printed. A shared PIN still records nothing, because
+                the face must match</td></tr>
+        <tr><td><strong>Card and face</strong></td>
+            <td>A busy gate. Faster, and still safe &mdash; the card says who is claimed,
+                the face decides whether to believe it</td></tr>
+        <tr><td>Card and PIN, no camera <span class="badge bg-warning text-dark">Weak</span></td>
+            <td>Both can be handed to a friend</td></tr>
+        <tr><td>PIN only, no camera <span class="badge bg-warning text-dark">Weak</span></td>
+            <td>A demonstration setting</td></tr>
+        <tr><td>Card only <span class="badge bg-warning text-dark">Weak</span></td>
+            <td>Whoever holds the card is recorded as present</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="example-box">
+    <p class="mb-1"><strong>About the three weak settings</strong></p>
+    <p class="mb-0">
+      They exist because a demonstration on a laptop with no working camera needs one. They
+      are marked <em>Weak</em> and say plainly what they give up, because a farm that
+      quietly stays in one of them has an attendance record that no longer means what
+      everybody assumes it means. <strong>If you switch to one for a demonstration, switch
+      it back afterwards.</strong> Two things make that hard to forget: the
+      <strong>Dashboard</strong> shows what is being checked in its System Readiness list,
+      in amber if a check is off, linking straight back to the setting; and every change is
+      written to the <strong>Audit Log</strong> by name.
+    </p>
+  </div>
+
+  <p class="mt-3">
+    <strong>A card method needs cards.</strong> Choosing a card option does not issue
+    anybody one &mdash; do that on the Workers page (section 5). A worker not yet issued a
+    card can still clock in with their worker number, and the audit log records that the
+    card was not used.
+  </p>
+
+  <h5 class="section-title">3) Worker Onboarding</h5>
   <div class="example-box">
     <p class="mb-2"><strong>Example:</strong> add a new worker named "Moses Banda".</p>
     <ol class="mb-0">
@@ -86,7 +156,7 @@
         v
 [Worker can now clock in]</pre>
 
-  <h5 class="section-title">3) Face Enrolment</h5>
+  <h5 class="section-title">4) Face Enrolment</h5>
   <p>
     On the <strong>Biometric</strong> page each worker has a row showing how many samples
     are stored. Ask the worker to stand square to the camera in even light, with no hat
@@ -105,7 +175,7 @@
     samples for that worker so you can start again.
   </p>
 
-  <h5 class="section-title">4) Worker Cards</h5>
+  <h5 class="section-title">5) Worker Cards</h5>
   <p>
     Optional. Scanning a card says <em>who is standing here</em> before any PIN is typed,
     so a clock-in can check all three things at once: the card the worker
@@ -129,7 +199,7 @@
         <tr>
           <td><strong>Back</strong></td>
           <td>The barcode, the code in readable type, and &mdash; deliberately &mdash; the
-              worker's name and ID again in small print. Section 5 of this page explains
+              worker's name and ID again in small print. Section 6 of this page explains
               why that small print matters more than it looks.</td>
         </tr>
       </tbody>
@@ -195,7 +265,7 @@
     morning.
   </p>
 
-  <h5 class="section-title">5) Printing Cards Without Mixing Up The Barcodes</h5>
+  <h5 class="section-title">6) Printing Cards Without Mixing Up The Barcodes</h5>
 
   <div class="example-box">
     <p class="mb-1"><strong>What can go wrong, and why it is expensive</strong></p>
@@ -292,7 +362,7 @@
     seconds on a batch, and much cheaper than finding out from a payslip.
   </p>
 
-  <h5 class="section-title">6) Verified Clock In and Out</h5>
+  <h5 class="section-title">7) Verified Clock In and Out</h5>
   <p>
     Workers use the home page - they never sign in to the dashboard. They enter their
     Worker ID and PIN, choose Clock In or Clock Out, and look at the camera. With cards
@@ -394,7 +464,7 @@
     </table>
   </div>
 
-  <h5 class="section-title">7) Attendance Records</h5>
+  <h5 class="section-title">8) Attendance Records</h5>
   <ul>
     <li><strong>Identity</strong> - a green badge with the match score means the face
         matched the enrolled template.</li>
@@ -405,7 +475,7 @@
     <li><strong>Export CSV</strong> - the whole table for a spreadsheet or report.</li>
   </ul>
 
-  <h5 class="section-title">8) Analytics</h5>
+  <h5 class="section-title">9) Analytics</h5>
   <p>
     <strong>Dashboard &rarr; Analytics.</strong> The Attendance page says what happened;
     this page says what it means. Every figure is computed from the attendance and payroll
@@ -470,7 +540,7 @@
     tab.
   </p>
 
-  <h5 class="section-title">9) Payroll</h5>
+  <h5 class="section-title">10) Payroll</h5>
   <div class="example-box">
     <p class="mb-2"><strong>Example:</strong> pay the week ending Sunday 23 August.</p>
     <ol class="mb-0">
@@ -553,7 +623,7 @@
    +-- other paid period      --> skipped, reported in red
        covers these days          (stops a double payment)</pre>
 
-  <h5 class="section-title">10) For Workers: Your Own Hours and Payslips</h5>
+  <h5 class="section-title">11) For Workers: Your Own Hours and Payslips</h5>
   <p>
     Workers can look up their own records without asking anyone. This is separate from
     clocking in, and it gives <strong>no access to the office pages</strong>.
@@ -667,7 +737,7 @@
     - it is what makes a PIN safe to use for wage history.
   </p>
 
-  <h5 class="section-title">11) Cameras and Clips</h5>
+  <h5 class="section-title">12) Cameras and Clips</h5>
   <ul>
     <li><strong>Health Check</strong> opens every registered camera and records the result
         under Hardware Health. Worth running each morning.</li>
@@ -678,7 +748,7 @@
         snapshots; the rest are surveillance.</li>
   </ul>
 
-  <h5 class="section-title">12) Users and Roles</h5>
+  <h5 class="section-title">13) Users and Roles</h5>
   <div class="table-responsive">
     <table class="table table-sm table-bordered align-middle">
       <thead class="table-light"><tr><th>Role</th><th>Can do</th></tr></thead>
@@ -698,7 +768,7 @@
     deactivated. Every action is recorded on the <strong>Audit Log</strong> page.
   </p>
 
-  <h5 class="section-title">13) Edit and Reset Operations</h5>
+  <h5 class="section-title">14) Edit and Reset Operations</h5>
   <div class="example-box">
     <ol class="mb-0">
       <li>Click the row's <i class="bi bi-pencil-square"></i> button.</li>
@@ -708,7 +778,7 @@
     </ol>
   </div>
 
-  <h5 class="section-title">14) Troubleshooting</h5>
+  <h5 class="section-title">15) Troubleshooting</h5>
   <div class="table-responsive">
     <table class="table table-sm table-bordered align-middle">
       <thead class="table-light"><tr><th>Symptom</th><th>Cause and fix</th></tr></thead>
@@ -719,6 +789,14 @@
             <td>Wrong source, another app holding the camera, or the USB device is not passed into Docker</td></tr>
         <tr><td>Everyone rejected at clock-in</td>
             <td>Camera not working, or nobody is enrolled. Check the Biometric page</td></tr>
+        <tr><td>Nobody is asked for a card, or a PIN, or their face</td>
+            <td>That check is switched off. <strong>Settings &rarr; Clock-in
+                verification</strong> (section 2). The Dashboard's System Readiness list
+                also shows what is currently being checked</td></tr>
+        <tr><td>Attendance looks wrong and nobody can explain it</td>
+            <td>Check <strong>Settings &rarr; Clock-in verification</strong> first. A farm
+                left in a weak setting may have had one worker clocking in for another. The
+                Audit Log records when the setting was last changed, and to what</td></tr>
         <tr><td>One genuine worker keeps failing</td>
             <td>Too few samples or poor light. Enrol more samples in the conditions they actually use</td></tr>
         <tr><td>"Recognizer: correlation-fallback" warning</td>
@@ -751,7 +829,7 @@
                 is not creased across the bars</td></tr>
         <tr><td>The back of a card names a different worker from the front</td>
             <td>The double-sided print went wrong. Destroy those cards and reprint using
-                <strong>Fold</strong> (section 5). Check the attendance recorded since they
+                <strong>Fold</strong> (section 6). Check the attendance recorded since they
                 were issued &mdash; hours may have gone to the wrong person</td></tr>
         <tr><td>A card shows a grey outline instead of a photograph</td>
             <td>That worker's face is not enrolled. Enrol them on the Biometric page and
@@ -771,10 +849,12 @@
     </table>
   </div>
 
-  <h5 class="section-title">15) Routine</h5>
+  <h5 class="section-title">16) Routine</h5>
   <ul class="mb-0">
     <li><strong>Each morning:</strong> CCTV &rarr; Health Check; confirm the attendance
-        camera is online.</li>
+        camera is online. While you are on the Dashboard, glance at <strong>Clock-in
+        checks</strong> in System Readiness &mdash; it should be green. Amber means a check
+        has been switched off.</li>
     <li><strong>During the day:</strong> watch Attendance; refused attempts and their
         reasons appear on the Biometric page.</li>
     <li><strong>End of each pay period</strong> - Friday on a weekly cycle, month end on a
@@ -793,7 +873,7 @@
         and print a replacement. Voiding is what stops the old card working; printing a new
         one on its own does not.</li>
     <li><strong>After printing a batch of cards:</strong> fan through them and check a few
-        at random that the face on the front and the name on the back agree (section 5).</li>
+        at random that the face on the front and the name on the back agree (section 6).</li>
   </ul>
 </div>
 {% endblock %}

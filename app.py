@@ -33,6 +33,7 @@ import geofence
 import payroll_engine
 import reports_engine
 import sync_engine
+import attendance_service
 from api import api as api_blueprint
 from portal import portal as portal_blueprint
 from attendance_service import match_threshold, record_punch
@@ -766,6 +767,7 @@ def _register_routes(app: Flask) -> None:
             open_sessions=sum(1 for s in sessions if s["clock_in_time"] and not s["clock_out_time"]),
             geofence_ready=farm_lat is not None and farm_lon is not None,
             geofence_enforced=geofence.is_enforced(),
+            clockin_mode=attendance_service.clockin_mode_info(),
             trend=payroll_engine.attendance_trend(14),
             active_page="dashboard",
             org_name=_get_setting("org_name", "FMS Farm"),
@@ -1218,10 +1220,19 @@ def _register_routes(app: Flask) -> None:
                 flash("Farm coordinates are not valid. Use decimal degrees, e.g. -15.4067 and 28.2871.", "danger")
                 return redirect(url_for("settings"))
 
+            # Resolve the clock-in mode before anything is written. An
+            # unrecognised value must leave the farm's current combination
+            # alone: silently dropping a check because a form field was
+            # mangled would change what every later attendance row means.
+            previous_mode = attendance_service.clockin_mode()
+            mode_key = (request.form.get("clockin_mode") or "").strip().lower()
+            if mode_key not in attendance_service.CLOCKIN_MODES:
+                mode_key = previous_mode
+            mode_settings = attendance_service.settings_for_mode(mode_key)
+
             _save_settings({
                 "org_name": request.form.get("org_name", "").strip(),
                 "face_match_threshold": str(threshold_value),
-                "face_verification_required": "on" if request.form.get("face_verification_required") else "off",
                 "face_require_eyes": "on" if request.form.get("face_require_eyes") else "off",
                 "farm_latitude": "" if lat is None else str(lat),
                 "farm_longitude": "" if lon is None else str(lon),
@@ -1239,7 +1250,6 @@ def _register_routes(app: Flask) -> None:
                 "clip_recording_enabled": "on" if request.form.get("clip_recording_enabled") else "off",
                 "clip_seconds": request.form.get("clip_seconds", "6").strip() or "6",
                 "chart_refresh_seconds": (request.form.get("chart_refresh_seconds") or "0").strip(),
-                "barcode_enabled": "on" if request.form.get("barcode_enabled") else "off",
                 "barcode_source": (request.form.get("barcode_source") or "").strip()
                                   if (request.form.get("barcode_source") or "").strip()
                                      in barcode_engine.SOURCES
@@ -1248,9 +1258,21 @@ def _register_routes(app: Flask) -> None:
                                      if (request.form.get("barcode_symbology") or "").strip()
                                         in barcode_engine.SYMBOLOGIES
                                      else barcode_engine.DEFAULT_SYMBOLOGY,
-                "barcode_require_pin": "on" if request.form.get("barcode_require_pin") else "off",
                 "barcode_camera_scan": "on" if request.form.get("barcode_camera_scan") else "off",
+                # The three factor switches are written from the chosen mode,
+                # resolved above, rather than from three separate checkboxes.
+                **mode_settings,
             })
+            # A change of clock-in mode changes what the attendance record
+            # means, so it is named in the audit trail rather than buried in a
+            # generic "settings updated".
+            if mode_key != previous_mode:
+                _log_audit(
+                    "settings.clockin_mode",
+                    f"Clock-in verification changed from "
+                    f"{attendance_service.CLOCKIN_MODES[previous_mode]['short']} to "
+                    f"{attendance_service.CLOCKIN_MODES[mode_key]['short']}",
+                )
             _log_audit("settings.save", "System settings updated")
             flash("Settings saved.", "success")
             return redirect(url_for("settings"))
@@ -1260,6 +1282,8 @@ def _register_routes(app: Flask) -> None:
             settings={s.key: s.value for s in Setting.query.all()},
             engine=face_engine.engine_info(),
             periods=payroll_engine.PERIODS,
+            clockin_modes=attendance_service.CLOCKIN_MODES,
+            clockin_mode=attendance_service.clockin_mode(),
             card_sources=barcode_engine.SOURCES,
             card_symbologies=barcode_engine.SYMBOLOGIES,
             card_stats=barcode_engine.stats(),

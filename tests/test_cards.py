@@ -642,3 +642,159 @@ def test_the_layout_switch_keeps_the_selection(client, signed_in, setting, make_
     page = client.get(f"/workers/cards?id={chosen.id}").get_data(as_text=True)
 
     assert f"id={chosen.id}" in page
+
+
+# ---------------------------------------------------------------------------
+# Clock-in verification modes
+#
+# The three factor settings are the source of truth and nothing here changes
+# that. What is tested is the naming layer on top: that every combination has a
+# name, that choosing a name writes the right three settings, that the name is
+# derived back truthfully, and - most importantly - that a bad value cannot
+# quietly drop a check.
+# ---------------------------------------------------------------------------
+
+import attendance_service
+
+
+def test_every_mode_round_trips(app_context, setting):
+    """Choose a mode, read it back, get the same mode.
+
+    If this ever fails, the settings page would show a farm one thing while the
+    terminal did another, which is the worst possible failure for a screen whose
+    whole job is answering "what does this check?".
+    """
+    for key in attendance_service.CLOCKIN_MODES:
+        for name, value in attendance_service.settings_for_mode(key).items():
+            setting(name, value)
+        assert attendance_service.clockin_mode() == key
+
+
+def test_the_named_factors_match_the_settings(app_context):
+    """The chips on the settings page must not lie about what is enforced."""
+    for key, mode in attendance_service.CLOCKIN_MODES.items():
+        card, pin, face = mode["factors"]
+        written = attendance_service.settings_for_mode(key)
+        assert written["barcode_enabled"] == ("on" if card else "off")
+        assert written["barcode_require_pin"] == ("on" if pin else "off")
+        assert written["face_verification_required"] == ("on" if face else "off")
+
+
+def test_an_unknown_mode_is_rejected_loudly(app_context):
+    """A typo must raise, not fall through to a weaker combination."""
+    with pytest.raises(ValueError):
+        attendance_service.settings_for_mode("card_pin_fingerprint")
+    with pytest.raises(ValueError):
+        attendance_service.settings_for_mode("")
+
+
+def test_every_mode_is_labelled_for_strength(app_context):
+    """Weak combinations must be marked, and must say what they give up."""
+    for key, mode in attendance_service.CLOCKIN_MODES.items():
+        assert mode["strength"] in ("strong", "weak")
+        card, pin, face = mode["factors"]
+        # A mode without the face check cannot tell who is standing there, so
+        # it is weak whatever else it asks for.
+        if not face:
+            assert mode["strength"] == "weak", f"{key} has no face check but is not marked weak"
+        assert mode["note"].strip()
+
+
+def test_the_default_asks_for_pin_and_face(app_context):
+    """A fresh installation must not start in a weak mode."""
+    assert attendance_service.clockin_mode() == "pin_face"
+    assert attendance_service.CLOCKIN_MODES["pin_face"]["strength"] == "strong"
+
+
+# ---- the chooser on the settings page -------------------------------------
+
+def _save(client, mode, **extra):
+    data = {"clockin_mode": mode, "org_name": "Test Farm",
+            "face_match_threshold": "35", "geofence_radius_m": "500",
+            "payroll_period": "weekly"}
+    data.update(extra)
+    return client.post("/settings", data=data, follow_redirects=False)
+
+
+def test_choosing_a_mode_writes_all_three_settings(client, signed_in, app_context):
+    signed_in("admin")
+    _save(client, "card_pin_face")
+
+    assert attendance_service.clockin_mode() == "card_pin_face"
+    assert attendance_service._flag("barcode_enabled", "off") is True
+    assert attendance_service._flag("barcode_require_pin", "on") is True
+    assert attendance_service._flag("face_verification_required", "on") is True
+
+
+def test_choosing_a_weak_mode_actually_drops_the_check(client, signed_in, app_context):
+    """The warning is not decorative - the setting really changes."""
+    signed_in("admin")
+    _save(client, "card_pin")
+
+    assert attendance_service.clockin_mode() == "card_pin"
+    assert attendance_service._flag("face_verification_required", "on") is False
+
+
+def test_a_mangled_mode_leaves_the_current_one_alone(client, signed_in, app_context):
+    """Silently dropping a check because a form field was mangled would change
+    what every later attendance row means. It must be a no-op instead."""
+    signed_in("admin")
+    _save(client, "card_pin_face")
+    _save(client, "not-a-mode")
+
+    assert attendance_service.clockin_mode() == "card_pin_face"
+
+
+def test_a_missing_mode_field_leaves_the_current_one_alone(client, signed_in, app_context):
+    signed_in("admin")
+    _save(client, "card_face")
+    client.post("/settings", data={"org_name": "Test Farm", "face_match_threshold": "35",
+                                   "geofence_radius_m": "500", "payroll_period": "weekly"})
+
+    assert attendance_service.clockin_mode() == "card_face"
+
+
+def test_changing_the_mode_is_named_in_the_audit_log(client, signed_in, app_context):
+    """"Settings updated" is not enough for a change of this weight."""
+    from models import AuditLog
+
+    signed_in("admin")
+    _save(client, "card_pin_face")
+    _save(client, "pin_only")
+
+    entry = (AuditLog.query.filter_by(action="settings.clockin_mode")
+             .order_by(AuditLog.id.desc()).first())
+    assert entry is not None
+    assert "PIN only" in entry.details
+
+
+def test_saving_without_changing_the_mode_logs_nothing_extra(client, signed_in, app_context):
+    """An audit trail that records non-events is one nobody reads."""
+    from models import AuditLog
+
+    signed_in("admin")
+    _save(client, "card_face")
+    before = AuditLog.query.filter_by(action="settings.clockin_mode").count()
+    _save(client, "card_face")
+
+    assert AuditLog.query.filter_by(action="settings.clockin_mode").count() == before
+
+
+def test_the_settings_page_offers_every_mode(client, signed_in, app_context):
+    signed_in("admin")
+    page = client.get("/settings").get_data(as_text=True)
+
+    for key, mode in attendance_service.CLOCKIN_MODES.items():
+        assert f'value="{key}"' in page
+        assert mode["label"] in page
+
+
+def test_the_dashboard_flags_a_weak_mode(client, signed_in, app_context):
+    """A farm left in a demonstration setting should be told so."""
+    signed_in("admin")
+    _save(client, "pin_only")
+
+    page = client.get("/dashboard").get_data(as_text=True)
+
+    assert "PIN only" in page
+    assert "clockin-verification" in page       # links to where it is fixed

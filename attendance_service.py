@@ -35,6 +35,148 @@ def _flag(key: str, default: str = "on") -> bool:
     return (_setting(key, default) or default).strip().lower() in ("on", "1", "true", "yes")
 
 
+# ---------------------------------------------------------------------------
+# What a clock-in demands
+#
+# Three independent checks exist at the capture point:
+#
+#     CARD   something the worker HAS   barcode_enabled
+#     PIN    something the worker KNOWS barcode_require_pin
+#     FACE   something the worker IS    face_verification_required
+#
+# Those three settings remain the source of truth - everything downstream reads
+# them and nothing here changes that. What this section adds is a *name* for
+# each combination, because three switches in two different corners of the
+# settings page is a poor way to answer the only question that matters: what
+# does the terminal actually check?
+#
+# A farm office that cannot answer that question cannot know whether its
+# attendance record means anything, so the named mode is what the settings page
+# offers and what the clock-in screen displays.
+#
+# The weak modes are kept. A supervisor demonstrating the system on a laptop
+# with no working camera needs one, and removing them would only push people to
+# turn the camera check off somewhere less visible. They are labelled as weak
+# instead, and say plainly what they give up.
+# ---------------------------------------------------------------------------
+
+#: Ordered strongest first, which is also the order the settings page lists.
+#: `factors` is (card, pin, face).
+CLOCKIN_MODES = {
+    "card_pin_face": {
+        "label": "Card, PIN and face",
+        "short": "Card + PIN + Face",
+        "factors": (True, True, True),
+        "strength": "strong",
+        "summary": "The worker scans their card, types their PIN, and the camera "
+                   "checks their face. All three must agree.",
+        "note": "The strongest setting. Use it wherever the attendance record "
+                "feeds payroll without a supervisor watching the terminal.",
+    },
+    "pin_face": {
+        "label": "PIN and face",
+        "short": "PIN + Face",
+        "factors": (False, True, True),
+        "strength": "strong",
+        "summary": "The worker types their worker number and PIN, and the camera "
+                   "checks their face.",
+        "note": "The setting to use before cards have been printed. A shared PIN "
+                "still cannot record attendance, because the face must match.",
+    },
+    "card_face": {
+        "label": "Card and face",
+        "short": "Card + Face",
+        "factors": (True, False, True),
+        "strength": "strong",
+        "summary": "The worker scans their card and the camera checks their face. "
+                   "No PIN is asked for.",
+        "note": "Faster through a busy gate, and still safe: the card says who "
+                "is being claimed and the face decides whether to believe it.",
+    },
+    "card_pin": {
+        "label": "Card and PIN, no camera",
+        "short": "Card + PIN",
+        "factors": (True, True, False),
+        "strength": "weak",
+        "summary": "The worker scans their card and types their PIN. The camera "
+                   "does not check who is standing there.",
+        "note": "Both of these can be handed to a friend. One worker can clock "
+                "in for another and nothing in the record will show it.",
+    },
+    "pin_only": {
+        "label": "PIN only, no camera",
+        "short": "PIN only",
+        "factors": (False, True, False),
+        "strength": "weak",
+        "summary": "The worker types their worker number and PIN. Nothing checks "
+                   "who is standing there.",
+        "note": "This is a demonstration setting. A PIN gets typed in front of a "
+                "queue, and anybody who saw it can clock that worker in.",
+    },
+    "card_only": {
+        "label": "Card only",
+        "short": "Card only",
+        "factors": (True, False, False),
+        "strength": "weak",
+        "summary": "The worker scans their card and nothing else is checked.",
+        "note": "A barcode is not a secret - anyone who handles a card can copy "
+                "it with a phone. Whoever holds the card is recorded as present.",
+    },
+}
+
+DEFAULT_CLOCKIN_MODE = "pin_face"
+
+
+def clockin_mode() -> str:
+    """The named mode the three settings currently add up to.
+
+    Derived rather than stored, so a farm upgrading from an earlier release - or
+    an administrator who edited the settings table by hand - gets a truthful
+    answer rather than a stale label.
+    """
+    current = (_flag("barcode_enabled", "off"),
+               _flag("barcode_require_pin", "on") if _flag("barcode_enabled", "off") else True,
+               _flag("face_verification_required", "on"))
+
+    for key, mode in CLOCKIN_MODES.items():
+        if mode["factors"] == current:
+            return key
+
+    # Cards off and PIN off is not a combination the settings page can produce:
+    # without a card there is nothing else to identify the worker by, so the
+    # worker number and PIN are always asked for. Should the table ever hold it,
+    # report the safest mode that matches what is actually enforced.
+    return DEFAULT_CLOCKIN_MODE
+
+
+def clockin_mode_info() -> dict:
+    """The current mode as a dict the templates can render, plus its key."""
+    key = clockin_mode()
+    return {"key": key, **CLOCKIN_MODES[key]}
+
+
+def settings_for_mode(key: str) -> dict:
+    """The three settings a named mode implies. Raises on an unknown mode.
+
+    Raising rather than defaulting is deliberate. A typo that quietly selected a
+    weaker combination would change what the farm's attendance record means, and
+    it would do so silently.
+    """
+    key = (key or "").strip().lower()
+    if key not in CLOCKIN_MODES:
+        raise ValueError(f"unknown clock-in mode: {key}")
+
+    card, pin, face = CLOCKIN_MODES[key]["factors"]
+    return {
+        "barcode_enabled": "on" if card else "off",
+        # Only meaningful when cards are on. Written anyway, so that switching
+        # cards back on later restores the combination that was chosen rather
+        # than whatever was left behind.
+        "barcode_require_pin": "on" if pin else "off",
+        "face_verification_required": "on" if face else "off",
+    }
+
+
 def match_threshold() -> float:
     """The configured minimum match confidence, as a percentage.
 

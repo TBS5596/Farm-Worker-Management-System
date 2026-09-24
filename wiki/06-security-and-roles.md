@@ -59,10 +59,51 @@ decides whether the punch is recorded. What the card genuinely buys is that a
 worker cannot be claimed by somebody who merely overheard a four-digit PIN, and
 that the person at the terminal sees their own name on screen before continuing.
 
-The three factors are independently switchable, which means a farm can configure
-a weak combination — cards with the PIN step off, with face verification off,
-would accept anybody holding a card. The settings page says so at the point of
-switching each one off.
+### The combination is one setting, not three
+
+The three factors are independently switchable, which means a farm *can*
+configure a weak combination — cards with the PIN step off and face verification
+off would accept anybody holding a card.
+
+They used to be three switches in two different corners of the settings page.
+Each was clear on its own and the combination was not, which is a poor way to
+answer the only question that matters: *what does the terminal actually check?*
+
+`attendance_service` now names each combination:
+
+```python
+CLOCKIN_MODES = {
+    "card_pin_face": {"factors": (True,  True,  True),  "strength": "strong", ...},
+    "pin_face":      {"factors": (False, True,  True),  "strength": "strong", ...},
+    "card_face":     {"factors": (True,  False, True),  "strength": "strong", ...},
+    "card_pin":      {"factors": (True,  True,  False), "strength": "weak",   ...},
+    "pin_only":      {"factors": (False, True,  False), "strength": "weak",   ...},
+    "card_only":     {"factors": (True,  False, False), "strength": "weak",   ...},
+}
+```
+
+Four properties are worth knowing, because each is a deliberate choice:
+
+- **The three settings remain the source of truth.** `clockin_mode()` *derives*
+  the name from them rather than storing it, so a farm that edited the settings
+  table by hand, or upgraded from a release without modes, sees the truth rather
+  than a stale label.
+- **Every mode without the face check is `weak`**, and the settings page says in
+  plain words what that mode gives up. There is a test asserting this, so a mode
+  added later cannot quietly ship unlabelled.
+- **The weak modes are kept rather than removed.** A demonstration on a laptop
+  with no working camera needs one, and removing them would only push people to
+  switch the camera check off somewhere less visible. Visible and labelled beats
+  absent and worked around.
+- **A bad value is a no-op, not a downgrade.** `settings_for_mode()` raises on an
+  unknown key and the route falls back to the current mode, because silently
+  dropping a check because a form field was mangled would change the meaning of
+  every attendance row written afterwards.
+
+Two things then make a weak setting hard to leave in place by accident: the
+dashboard's readiness list shows the active mode, amber and linking back to the
+setting when it is weak; and a change of mode is written to the audit log **by
+name**, not as a generic "settings updated".
 
 ### The odd one out: `pin_fingerprint`
 
