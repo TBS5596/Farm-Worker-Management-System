@@ -1,0 +1,62 @@
+{% extends "portal_base.html" %}
+{% block title %}{{ org_name }} - My card{% endblock %}
+{% block content %}
+
+  <div class="p-card">
+    <h2>My card</h2>
+    {% if svg %}
+    <p class="p-note">
+      This is the card you scan when you clock in and out. If you have lost
+      yours, print this one and keep it with you.
+    </p>
+    {% endif %}
+  </div>
+
+  {% if svg %}
+  {# The printable card. Everything else on the page is hidden when printing,
+     so a worker gets the card alone on the paper rather than the whole page. #}
+  <div class="p-card card-print-area">
+    <div class="card-face">
+      <div class="card-farm">{{ org_name }}</div>
+      <div class="card-name">{{ me.name }}</div>
+      <div class="card-meta">
+        {{ me.worker_id }}{% if me.department %} &middot; {{ me.department }}{% endif %}
+      </div>
+      <div class="card-bars">{{ svg | safe }}</div>
+      {# Printed in readable type as well as in bars: if the scanner fails or
+         the card is creased, the supervisor can type this in and you are not
+         turned away. #}
+      <div class="card-code">{{ me.card_barcode }}</div>
+    </div>
+  </div>
+
+  <div class="p-card">
+    <button class="btn-solid w-100" type="button" onclick="window.print()">
+      <i class="bi bi-printer me-1"></i>Print my card
+    </button>
+    <p class="p-note mt-3 mb-0">
+      Set your printer to <strong>100% scale</strong>. If you let it shrink the
+      page to fit, the bars change size and the scanner will not read them.
+    </p>
+  </div>
+
+  {% elif voided %}
+  <div class="p-card">
+    <div class="p-empty">
+      <p><strong>Your card has been cancelled.</strong></p>
+      <p>This happens when a card is reported lost, so that nobody else can use
+         it. Ask your supervisor for a new one.</p>
+    </div>
+  </div>
+
+  {% else %}
+  <div class="p-card">
+    <div class="p-empty">
+      <p><strong>You do not have a card yet.</strong></p>
+      <p>Ask your supervisor to issue one. Until then, clock in with your worker
+         number as usual.</p>
+    </div>
+  </div>
+  {% endif %}
+
+{% endblock %}

@@ -1,0 +1,343 @@
+{% extends "base_admin.html" %}
+{% block title %}{{ org_name }} - Analytics{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/analytics.css') }}" />
+{% endblock %}
+
+{% block content %}
+{% set head = report.headline %}
+{% set risk = report.attendance_risk %}
+{% set cost = report.labour_cost %}
+{% set verify = report.verification %}
+{% set hours = report.hours %}
+
+<div class="analytics-page">
+
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <div>
+      <h5 class="mb-0"><i class="bi bi-graph-up-arrow me-2 text-success"></i>Analytics</h5>
+      <div class="text-muted small">
+        {{ risk.start.strftime('%d %b') }} to {{ risk.end.strftime('%d %b %Y') }}
+      </div>
+    </div>
+    {# Filters in one row above the charts: the period, and how often the page
+       refreshes itself. #}
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+    <div id="autoRefresh" class="auto-refresh"
+     data-default-seconds="{{ chart_refresh_seconds }}"></div>
+    <div class="btn-group btn-group-sm" role="group" aria-label="Reporting period">
+      {% for option in window_options %}
+      <a class="btn {% if days == option %}btn-success{% else %}btn-outline-secondary{% endif %}"
+         href="{{ url_for('analytics', days=option) }}">
+        {{ option }} days
+      </a>
+      {% endfor %}
+    </div>
+    </div>
+  </div>
+
+  {# --- Headline tiles. Four numbers, no chart: a single value is a number,
+         not a picture. ------------------------------------------------ #}
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+      <div class="stat-tile">
+        <div class="stat-label">Active workers</div>
+        <div class="stat-value">{{ head.active_workers }}</div>
+        <div class="stat-note">on the register today</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stat-tile">
+        <div class="stat-label">Hours worked</div>
+        <div class="stat-value">{{ '{:,.0f}'.format(head.hours) }}</div>
+        <div class="stat-note">across the period</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stat-tile">
+        <div class="stat-label">Wage bill</div>
+        <div class="stat-value">{{ '{:,.0f}'.format(head.gross) }}</div>
+        <div class="stat-note">ZMW gross{% if head.cost_per_hour %}, {{ '%.2f'|format(head.cost_per_hour) }}/hour{% endif %}</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stat-tile">
+        <div class="stat-label">Face-verified</div>
+        <div class="stat-value">{{ '%.0f'|format(head.verified_rate) }}%</div>
+        <div class="stat-note">of attendance records</div>
+      </div>
+    </div>
+  </div>
+
+  {# --- 1. Verification health. First, because if this is failing every other
+         number on the page is built on records nobody checked. ---------- #}
+  <div class="card shadow-sm mb-4">
+    <div class="card-body p-4">
+      <h6 class="report-title">
+        <i class="bi bi-shield-check me-2"></i>Is attendance still being verified?
+      </h6>
+
+      <div class="verdict verdict-{{ verify.tone }}">
+        {# Status is never colour alone: an icon and a sentence carry it too. #}
+        <i class="bi {% if verify.tone == 'good' %}bi-check-circle-fill
+                     {% elif verify.tone == 'warn' %}bi-exclamation-triangle-fill
+                     {% elif verify.tone == 'bad' %}bi-x-octagon-fill
+                     {% else %}bi-dash-circle{% endif %} me-2"></i>
+        {{ verify.verdict }}
+      </div>
+
+      <div class="row g-3 mt-1">
+        <div class="col-sm-4">
+          <div class="mini-stat">
+            <span class="mini-value">{{ verify.verified_days }}</span>
+            <span class="mini-label">verified by face</span>
+          </div>
+        </div>
+        <div class="col-sm-4">
+          <div class="mini-stat">
+            <span class="mini-value">{{ verify.manual_days }}</span>
+            <span class="mini-label">entered manually</span>
+          </div>
+        </div>
+        <div class="col-sm-4">
+          <div class="mini-stat">
+            <span class="mini-value">{{ verify.refusals }}</span>
+            <span class="mini-label">attempts refused</span>
+          </div>
+        </div>
+      </div>
+
+      {% if verify.refusal_reasons %}
+      <div class="mt-3">
+        <div class="small text-muted mb-2">Why attempts were refused</div>
+        <table class="table table-sm align-middle mb-0">
+          <tbody>
+            {% for reason, count in verify.refusal_reasons %}
+            <tr>
+              <td class="text-capitalize">{{ reason.replace('_', ' ') }}</td>
+              <td class="text-end fw-semibold" style="width: 4rem">{{ count }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+
+      {% if verify.struggling %}
+      <div class="alert alert-warning mt-3 mb-0">
+        <strong>{{ verify.struggling|length }} worker{{ '' if verify.struggling|length == 1 else 's' }}
+        being refused repeatedly.</strong>
+        <ul class="mb-0 mt-2 ps-3">
+          {% for row in verify.struggling %}
+          <li>
+            {{ row.worker.name }} ({{ row.worker.worker_id }}) —
+            refused {{ row.refusals }} of {{ row.attempts }} attempts.
+            {{ row.action }}
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# --- 2. Attendance risk --------------------------------------------- #}
+  <div class="card shadow-sm mb-4">
+    <div class="card-body p-4">
+      <h6 class="report-title">
+        <i class="bi bi-person-exclamation me-2"></i>Who is not coming to work?
+      </h6>
+      <p class="report-summary">{{ risk.summary }}</p>
+
+      {% if risk.systemic %}
+      {# The farm-level explanation goes above the individual list on purpose:
+         a supervisor should read it before having six separate conversations
+         that all have the same cause. #}
+      <div class="alert alert-info">
+        <i class="bi bi-lightbulb me-2"></i>{{ risk.systemic }}
+      </div>
+      {% endif %}
+
+      {% if risk.rows %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Worker</th>
+              <th>What was observed</th>
+              <th>What to do</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in risk.rows %}
+            <tr>
+              <td style="min-width: 10rem">
+                <span class="sev sev-{{ row.severity }}">
+                  {% if row.severity == 3 %}Urgent{% elif row.severity == 2 %}Look{% else %}Watch{% endif %}
+                </span>
+                <div class="fw-semibold mt-1">{{ row.worker.name }}</div>
+                <div class="text-muted small">{{ row.worker.worker_id }}{% if row.worker.department %} · {{ row.worker.department }}{% endif %}</div>
+              </td>
+              <td>
+                {% for note in row.notes %}<div>{{ note }}</div>{% endfor %}
+              </td>
+              <td class="text-muted">{{ row.action }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-note"><i class="bi bi-check-circle me-2"></i>Nothing to report.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# --- 3. Labour cost -------------------------------------------------- #}
+  <div class="card shadow-sm mb-4">
+    <div class="card-body p-4">
+      <h6 class="report-title">
+        <i class="bi bi-cash-coin me-2"></i>Where is the wage bill going?
+      </h6>
+      <p class="report-summary">{{ cost.summary }}</p>
+
+      {% if cost.notes %}
+      <ul class="insight-list">
+        {% for note in cost.notes %}<li>{{ note }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+
+      {% if cost.departments %}
+      <div class="row g-4">
+        <div class="col-lg-6">
+          <div class="chart-label">Cost by department (ZMW gross)</div>
+          <div class="chart-box"><canvas id="departmentChart"></canvas></div>
+        </div>
+        <div class="col-lg-6">
+          <div class="chart-label">Highest cost workers (ZMW gross)</div>
+          <div class="chart-box"><canvas id="workerCostChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="table-responsive mt-4">
+        <table class="table table-sm align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Worker</th><th>Department</th>
+              <th class="text-end">Hours</th>
+              <th class="text-end">Overtime hrs</th>
+              <th class="text-end">Gross (ZMW)</th>
+              <th class="text-end">Per hour</th>
+              <th class="text-end">Share</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in cost.rows %}
+            <tr>
+              <td>{{ row.worker.name }} <span class="text-muted small">{{ row.worker.worker_id }}</span></td>
+              <td>{{ row.department }}</td>
+              <td class="text-end">{{ '%.1f'|format(row.hours) }}</td>
+              <td class="text-end">{{ '%.1f'|format(row.overtime_hours) }}</td>
+              <td class="text-end fw-semibold">{{ '{:,.2f}'.format(row.gross) }}</td>
+              <td class="text-end">{{ '%.2f'|format(row.effective_rate) }}</td>
+              <td class="text-end text-muted">{{ '%.0f'|format(row.share) }}%</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-note"><i class="bi bi-info-circle me-2"></i>{{ cost.summary }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# --- 4. Hours and overtime ------------------------------------------ #}
+  <div class="card shadow-sm mb-4">
+    <div class="card-body p-4">
+      <h6 class="report-title">
+        <i class="bi bi-clock-history me-2"></i>When is the work happening?
+      </h6>
+      <p class="report-summary">{{ hours.summary }}</p>
+
+      {% if hours.weekdays %}
+      <div class="chart-label">Hours by day of the week</div>
+      <div class="chart-box tall"><canvas id="weekdayChart"></canvas></div>
+
+      {% if hours.departments %}
+      <div class="table-responsive mt-4">
+        <table class="table table-sm align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Department</th>
+              <th class="text-end">Shifts</th>
+              <th class="text-end">Hours</th>
+              <th class="text-end">Average day</th>
+              <th class="text-end">Overtime share</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in hours.departments %}
+            <tr>
+              <td>{{ row.name }}</td>
+              <td class="text-end">{{ row.shifts }}</td>
+              <td class="text-end">{{ '%.1f'|format(row.hours) }}</td>
+              <td class="text-end">{{ '%.1f'|format(row.average) }} h</td>
+              <td class="text-end {% if row.overtime_share >= 20 %}fw-semibold{% endif %}">
+                {{ '%.0f'|format(row.overtime_share) }}%
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+
+      {% if hours.outliers %}
+      <div class="mt-3">
+        <div class="small text-muted mb-2">Workers whose day length sits outside the rest</div>
+        <ul class="insight-list">
+          {% for row in hours.outliers %}
+          <li>
+            <strong>{{ row.worker.name }}</strong> — {{ row.note }}
+            {% if row.direction == 'longer' %}
+              Check this is intended rather than covering for an absence nobody recorded.
+            {% else %}
+              Check whether they are being given full shifts.
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+      {% else %}
+      <div class="empty-note"><i class="bi bi-info-circle me-2"></i>{{ hours.summary }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <p class="text-muted small">
+    Every figure here is computed from the attendance and payroll records, not estimated.
+    If a number disagrees with the
+    <a href="{{ url_for('attendance_page') }}">attendance register</a>, the register is right
+    and this is a bug worth reporting.
+  </p>
+</div>
+
+{# Chart data as JSON, so the script file holds no farm data of its own. #}
+<script id="reportData" type="application/json">
+{
+  "weekdays": {{ hours.weekdays | tojson }},
+  "departments": {{ cost.departments | tojson }},
+  "workers": {{ cost.rows | map(attribute='gross') | list | tojson }},
+  "workerNames": {{ cost.rows | map(attribute='worker') | map(attribute='name') | list | tojson }}
+}
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/analytics-page.js') }}"></script>
+<script src="{{ url_for('static', filename='js/auto-refresh.js') }}"></script>
+{% endblock %}

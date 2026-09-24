@@ -1,0 +1,234 @@
+{#
+  A printable sheet of worker identity cards.
+
+  Deliberately standalone rather than extending the admin layout: this page
+  exists to come out of a printer, so it carries no sidebar, no navigation and
+  no colour that would drain a farm office's ink. The on-screen toolbar is
+  hidden by the print stylesheet.
+
+  Cards are laid to 85.6 x 54 mm, the same footprint as a bank card, so a farm
+  can print onto card stock and cut, or print on paper and laminate into a
+  standard badge holder.
+#}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Worker cards - {{ org_name }}</title>
+  <style>
+    :root {
+      --ink: #14211b;
+      --muted: #5f6b76;
+      --line: #c9d2cc;
+      --green: #1a4731;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 18px;
+      background: #f4f6f9;
+      color: var(--ink);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .toolbar {
+      max-width: 1000px;
+      margin: 0 auto 18px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .toolbar h1 { font-size: 1.05rem; margin: 0; flex: 1 1 auto; }
+    .toolbar .count { color: var(--muted); font-size: .88rem; }
+    .btn {
+      display: inline-block;
+      padding: 8px 14px;
+      border-radius: 7px;
+      border: 1px solid var(--green);
+      background: var(--green);
+      color: #fff;
+      font-size: .88rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .btn.secondary { background: #fff; color: var(--green); }
+
+    .note {
+      max-width: 1000px;
+      margin: 0 auto 18px;
+      background: #fff8e6;
+      border: 1px solid #e8d9a8;
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: .88rem;
+      color: #6b5518;
+    }
+    .note ul { margin: 6px 0 0; padding-left: 20px; }
+
+    .sheet {
+      max-width: 1000px;
+      margin: 0 auto;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .card {
+      width: 85.6mm;
+      height: 54mm;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 3mm;
+      padding: 4mm 5mm;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .card .farm {
+      font-size: 2.6mm;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--green);
+      font-weight: 700;
+    }
+    .card .name {
+      font-size: 4.2mm;
+      font-weight: 700;
+      line-height: 1.15;
+      margin-top: 1mm;
+    }
+    .card .meta {
+      font-size: 2.9mm;
+      color: var(--muted);
+      margin-top: .6mm;
+    }
+    .card .code {
+      /* The value in readable type as well as in bars: when a scanner fails,
+         or a card is creased across the barcode, a supervisor can still type
+         it in and the worker is not turned away. */
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 3mm;
+      letter-spacing: .04em;
+      text-align: center;
+      color: var(--ink);
+      margin-top: .8mm;
+      word-break: break-all;
+    }
+    .card .bars {
+      text-align: center;
+      line-height: 0;
+    }
+    .card .bars svg {
+      max-width: 100%;
+      height: 13mm;
+    }
+
+    .missing {
+      max-width: 1000px;
+      margin: 20px auto 0;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px 16px;
+      font-size: .88rem;
+    }
+    .missing h2 { font-size: .95rem; margin: 0 0 8px; }
+    .missing li { margin-bottom: 3px; color: var(--muted); }
+
+    .empty {
+      max-width: 1000px;
+      margin: 0 auto;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 28px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    @media print {
+      body { background: #fff; padding: 0; }
+      .toolbar, .note, .missing { display: none !important; }
+      .sheet { max-width: none; gap: 4mm; }
+      .card { border: 1px dashed #9aa5ad; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <h1>Worker cards</h1>
+    <span class="count">
+      {{ cards|length }} card{{ '' if cards|length == 1 else 's' }} ready
+      {%- if missing %}, {{ missing|length }} not printable{% endif %}
+      &middot; {{ 'QR code' if symbology == 'qr' else 'Code 128' }}
+    </span>
+    <button class="btn" onclick="window.print()">Print</button>
+    <a class="btn secondary" href="{{ url_for('workers_page') }}">Back to workers</a>
+  </div>
+
+  {% if cards %}
+  <div class="note">
+    Before printing: load card stock or thick paper, and set your printer to
+    <strong>100% scale</strong> — "fit to page" resizes the bars and a resized
+    barcode will not scan.
+    <ul>
+      <li>Cut along the dashed edges. Each card is the size of a bank card.</li>
+      <li>The code is printed in text under the bars so a supervisor can type it
+          in if a card is creased or the scanner fails.</li>
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if cards %}
+  <div class="sheet">
+    {% for card in cards %}
+    <div class="card">
+      <div>
+        <div class="farm">{{ org_name }}</div>
+        <div class="name">{{ card.worker.name }}</div>
+        <div class="meta">
+          {{ card.worker.worker_id }}{% if card.worker.department %} &middot; {{ card.worker.department }}{% endif %}
+        </div>
+      </div>
+      <div>
+        <div class="bars">{{ card.svg | safe }}</div>
+        <div class="code">{{ card.value }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">
+    <p><strong>No cards to print.</strong></p>
+    <p>Issue cards to workers from the workers page first, then come back here.</p>
+  </div>
+  {% endif %}
+
+  {% if missing %}
+  <div class="missing">
+    <h2>Not printable ({{ missing|length }})</h2>
+    <p>These workers were selected but have no active card. Issue or reissue a
+       card for each, then print again.</p>
+    <ul>
+      {% for worker in missing %}
+      <li>
+        {{ worker.worker_id }} &middot; {{ worker.name }} —
+        {% if not worker.card_barcode %}no card issued{% else %}card voided{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+</body>
+</html>

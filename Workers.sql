@@ -4,7 +4,7 @@
 -- GENERATED FILE. Do not edit by hand.
 -- Source of truth: models.py
 -- Regenerate with: python tools/export_schema.py
--- Generated: 2026-08-28 10:02:43 UTC
+-- Generated: 2026-09-24 21:32:27 UTC
 -- Dialect: SQLite (the deployment target; Postgres or MySQL need type tweaks)
 -- ---------------------------------------------------------------------------
 
@@ -86,13 +86,18 @@ CREATE TABLE workers (
 	emergency_contact VARCHAR(120), 
 	department VARCHAR(80), 
 	hourly_rate FLOAT, 
+	payroll_period VARCHAR(20), 
+	card_barcode VARCHAR(64), 
+	card_issued_at DATETIME, 
+	card_status VARCHAR(20), 
 	face_enrolled_at DATETIME, 
 	enrollment_date DATETIME, 
 	status VARCHAR(20) NOT NULL, 
 	created_at DATETIME, 
 	PRIMARY KEY (id), 
 	UNIQUE (worker_id), 
-	UNIQUE (nrc_number)
+	UNIQUE (nrc_number), 
+	UNIQUE (card_barcode)
 );
 
 -- Table: attendance
@@ -188,6 +193,8 @@ CREATE TABLE payroll (
 	payroll_id INTEGER NOT NULL, 
 	worker_id INTEGER NOT NULL, 
 	week_ending DATE NOT NULL, 
+	period_start DATE, 
+	period_type VARCHAR(20), 
 	total_hours FLOAT, 
 	overtime_hours FLOAT, 
 	hourly_rate FLOAT, 

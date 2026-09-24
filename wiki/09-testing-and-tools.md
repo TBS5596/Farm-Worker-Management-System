@@ -11,18 +11,22 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-63 tests, about 15 seconds, seven modules.
+170 tests, about a minute, eleven modules.
 
 ```
-tests/test_attendance.py        ...........       [ 17%]
-tests/test_cctv_and_sync.py     .........         [ 31%]
-tests/test_face_engine.py       .........         [ 46%]
-tests/test_payroll.py           .......           [ 57%]
-tests/test_real_face.py         ....              [ 63%]
-tests/test_security_and_api.py  .................  [ 93%]
-tests/test_workers.py           ....              [100%]
+tests/test_attendance.py        11 tests
+tests/test_cards.py             30 tests
+tests/test_cctv_and_sync.py      9 tests
+tests/test_face_engine.py        9 tests
+tests/test_pay_periods.py       21 tests
+tests/test_payroll.py            7 tests
+tests/test_portal.py            29 tests
+tests/test_real_face.py          4 tests
+tests/test_reports.py           27 tests
+tests/test_security_and_api.py  19 tests
+tests/test_workers.py            4 tests
 
-63 passed in 13.34s
+170 passed
 ```
 
 Useful invocations:
@@ -122,6 +126,23 @@ Those four tests need `scikit-image` for the sample photograph and **skip
 automatically** without it, so the suite still passes on a machine that lacks it —
 it just proves less. `requirements-dev.txt` installs it.
 
+## Where the newer suites sit
+
+`test_cards.py` and `test_reports.py` were written alongside the features they
+cover, and both are worth reading as examples.
+
+`test_cards.py` (30) covers all three barcode sources, the rendering of both
+symbologies, the scan-normalisation cases a real scanner produces, the refusals
+`resolve()` distinguishes, and the HTTP routes behind issuing, voiding and
+printing. Two of its route tests monkeypatch `app_module.record_punch`, because
+the real route opens a camera and a test machine has none — the fixture is called
+`punches` and it is the pattern to copy if you add another.
+
+`test_reports.py` (27) drives every function in `reports_engine.py` against
+constructed summaries, including the systemic-lateness check: it builds a
+workforce where everybody is fifteen minutes late and asserts that the page
+blames the shift-start setting rather than the workers.
+
 ## Two defects the suite actually caught
 
 Worth knowing, because they show what the tests are for.
@@ -135,6 +156,13 @@ overtime to the hours available:
 ```python
 overtime_hours = round(min(max(0.0, float(overtime_hours or 0.0)), total_hours), 2)
 ```
+
+**An unknown barcode source failed silently.** A card test asked what happens
+when `barcode_source` holds a typo. The answer was `None` — the same answer
+`card_value()` gives for "this worker has no NRC", because the source was
+validated *after* the NRC was read. An operator would have gone looking for a
+data problem that did not exist. The validation moved to the top of the function
+and now raises.
 
 **A test asserted the wrong scenario.** A test presented a face while claiming a
 second worker who had not been enrolled, expecting `face_matched_another_worker`,
@@ -163,7 +191,7 @@ completely the wrong reason.
 ## The scripts in `tools/`
 
 
-Four scripts. None is part of the running application.
+Five scripts. None is part of the running application.
 
 ### `tools/seed_demo.py`
 
@@ -222,6 +250,18 @@ at every step.
 **This is where the default threshold of 35 comes from.** If you change anything
 in the matching path, re-run it — it is the only thing that can tell you whether
 you made accuracy better or worse.
+
+### `tools/report_figures.py`
+
+```bash
+python tools/report_figures.py
+```
+
+Regenerates every figure the project report uses, into `docs/figures/`.
+Structural diagrams are drawn with Graphviz, charts with matplotlib, one palette
+throughout so the report's diagrams and its screenshots read as one piece of
+work. Like `seed_demo.py`, anything it shows about people is fictional by
+construction — see the note above about screenshots ending up in reports.
 
 ### `tools/export_schema.py`
 

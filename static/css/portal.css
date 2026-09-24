@@ -263,3 +263,109 @@ body.portal-signin {
 
 .p-empty { text-align: center; color: var(--p-muted); padding: 2rem 1rem; }
 .p-empty i { font-size: 2rem; display: block; margin-bottom: .5rem; opacity: .5; }
+
+/* --- My card ------------------------------------------------------------
+   The card is laid to 85.6 x 54 mm, the footprint of a bank card, so a worker
+   who prints it at home can cut it out and it fits an ordinary badge holder.
+   Everything except the card itself is hidden when printing. */
+
+.btn-solid {
+  padding: .8rem;
+  border: 0;
+  border-radius: 10px;
+  background: var(--p-accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.card-face {
+  width: 85.6mm;
+  max-width: 100%;
+  min-height: 54mm;
+  margin: 0 auto;
+  padding: 4mm 5mm;
+  border: 1px solid var(--p-line);
+  border-radius: 3mm;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.card-farm {
+  font-size: .62rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--p-green);
+}
+.card-name { font-size: 1.05rem; font-weight: 700; line-height: 1.15; margin-top: .15rem; }
+.card-meta { font-size: .72rem; color: var(--p-muted); margin-top: .1rem; margin-bottom: auto; }
+.card-bars { text-align: center; line-height: 0; margin-top: .6rem; }
+.card-bars svg { max-width: 100%; height: 13mm; }
+.card-code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: .72rem;
+  letter-spacing: .04em;
+  text-align: center;
+  margin-top: .25rem;
+  word-break: break-all;
+}
+
+@media print {
+  .portal-head, .portal-tabs, .btn-solid, .p-note, .flash-messages { display: none !important; }
+  body, .portal-main { background: #fff; padding: 0; margin: 0; }
+  .p-card { border: 0; box-shadow: none; padding: 0; }
+  .p-card:not(.card-print-area) { display: none !important; }
+  .card-face { border: 1px dashed #9aa5ad; }
+}
+
+/* --- My record --------------------------------------------------------- */
+.r-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: .75rem;
+}
+.r-tile {
+  background: var(--p-page);
+  border: 1px solid var(--p-line);
+  border-radius: 10px;
+  padding: .7rem .8rem;
+  text-align: center;
+}
+.r-value { display: block; font-size: 1.4rem; font-weight: 700; color: var(--p-green); }
+.r-label { font-size: .74rem; color: var(--p-muted); }
+/* Fixed height, or Chart.js grows the canvas to fill the page. */
+.r-chart { position: relative; height: 220px; }
+
+@media (min-width: 520px) {
+  .r-tiles { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* Plain-sentence findings on the worker's home page. Sentences rather than
+   more tiles: a number without a meaning is another thing to interpret. */
+.p-facts { margin: .75rem 0 0; padding-left: 1.1rem; }
+.p-facts li { font-size: .86rem; color: var(--p-muted); margin-bottom: .35rem; }
+
+/* --- Auto refresh, phone shape -------------------------------------------
+   The admin stylesheet carries its own copy of these rules; the portal does
+   not load that file, so the control is restated here in the shape a handset
+   needs - full width, stacked, and quiet enough to read as a setting rather
+   than as data. */
+.p-refresh { text-align: center; }
+.p-refresh .auto-refresh {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .4rem;
+}
+.p-refresh .auto-refresh select {
+  width: 100%;
+  max-width: 18rem;
+  font-size: .9rem;
+}
+.p-refresh .auto-refresh-status {
+  font-size: .78rem;
+  color: #6c757d;
+}

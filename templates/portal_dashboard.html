@@ -34,6 +34,72 @@
     </div>
   </div>
 
+  {# A handful of figures a worker can read in a glance. Kept short on purpose:
+     a page with twenty numbers on it stops being read. #}
+  <div class="p-card">
+    <h2>This {{ extras.period_noun|lower }} so far</h2>
+    <div class="p-row">
+      <span class="k">{{ extras.period_start.strftime('%d %b') }} &ndash; {{ extras.period_end.strftime('%d %b') }}</span>
+      <span class="v">{{ '%.1f'|format(extras.period_hours) }} h</span>
+    </div>
+    <div class="p-row">
+      <span class="k">Earned so far, before deductions</span>
+      <span class="v p-money">ZMW {{ '%.2f'|format(extras.earned_so_far) }}</span>
+    </div>
+    {% if extras.on_course %}
+    <div class="p-row">
+      <span class="k">On course for, if the rest of the {{ extras.period_noun|lower }} is similar</span>
+      <span class="v p-money">ZMW {{ '%.2f'|format(extras.on_course) }}</span>
+    </div>
+    {% endif %}
+    <p class="p-note mb-0 mt-2">
+      Worked out from your hours at ZMW {{ '%.2f'|format(extras.rate) }} an hour. It is an
+      estimate until the period is closed and deductions are applied &mdash; the payslip is
+      the figure that counts.
+    </p>
+  </div>
+
+  <div class="p-card">
+    <h2>Last {{ extras.window_days }} days</h2>
+    <div class="p-stats">
+      <div class="p-stat"><div class="v">{{ '%.0f'|format(extras.hours) }}</div><div class="l">Hours</div></div>
+      <div class="p-stat"><div class="v">{{ extras.days_worked }}</div><div class="l">Days</div></div>
+      <div class="p-stat"><div class="v">{{ '%.0f'|format(extras.overtime) }}</div><div class="l">Overtime</div></div>
+      <div class="p-stat"><div class="v">{{ '%.0f'|format(extras.verified_rate) }}%</div><div class="l">Verified</div></div>
+    </div>
+    <ul class="p-facts">
+      {% if extras.change_pct is not none %}
+      <li>
+        {% if extras.change_pct > 0 %}
+          You worked {{ extras.change_pct }}% more hours than the {{ extras.window_days }} days before.
+        {% elif extras.change_pct < 0 %}
+          You worked {{ extras.change_pct|abs }}% fewer hours than the {{ extras.window_days }} days before.
+        {% else %}
+          Your hours match the {{ extras.window_days }} days before.
+        {% endif %}
+      </li>
+      {% endif %}
+      {% if extras.longest_day %}
+      <li>
+        Your longest day is usually <strong>{{ extras.longest_day.name }}</strong>,
+        averaging {{ extras.longest_day.average }} hours.
+      </li>
+      {% endif %}
+      {% if extras.unverified_days %}
+      <li>
+        {{ extras.unverified_days }} of your days
+        {{ 'was' if extras.unverified_days == 1 else 'were' }} entered by a supervisor
+        rather than verified by the camera. That is normal when a camera fails, but worth
+        checking the hours on those days.
+      </li>
+      {% else %}
+      <li>Every day on your record was verified by the camera.</li>
+      {% endif %}
+    </ul>
+    <a class="btn-ghost d-block text-center text-decoration-none mt-2"
+       href="{{ url_for('portal.reports') }}">See my full record</a>
+  </div>
+
   <div class="p-card">
     <h2>My details</h2>
     <div class="p-row"><span class="k">Worker ID</span><span class="v">{{ me.worker_id }}</span></div>
@@ -92,4 +158,18 @@
     {% endif %}
   </div>
 
+
+  {# A worker checks this on a phone between rows of a field, so the refresh
+     control sits at the bottom, out of the way of the numbers they came for.
+     Off by default on a handset: a reload on a metered connection costs them
+     money, not the farm. #}
+  <div class="p-card p-refresh">
+    <div id="autoRefresh" class="auto-refresh"
+         data-default-seconds="{{ chart_refresh_seconds }}"></div>
+  </div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/auto-refresh.js') }}"></script>
 {% endblock %}

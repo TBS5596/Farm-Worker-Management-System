@@ -42,8 +42,10 @@ from flask import (Blueprint, abort, current_app, flash, redirect,
                    render_template, request, send_file, session, url_for)
 
 import attendance_service
+import barcode_engine
 import face_engine
 import payroll_engine
+import reports_engine
 from database import db
 from models import (Attendance, AuditLog, DailyAttendanceSummary,
                     EventSnapshot, Payroll, Setting, Worker)
@@ -333,7 +335,10 @@ def logout():
 # ---------------------------------------------------------------------------
 
 def _shell(me: Worker, **extra) -> dict:
-    return dict(me=me, org_name=_setting("org_name", "FMS Farm"), **extra)
+    # cards_enabled reaches every portal page because the tab bar in
+    # portal_base.html shows the card tab only when the farm uses cards.
+    return dict(me=me, org_name=_setting("org_name", "FMS Farm"),
+                cards_enabled=_flag("barcode_enabled", "off"), **extra)
 
 
 @portal.route("/dashboard")
@@ -384,6 +389,7 @@ def dashboard():
         period_label=payroll_engine.period_label,
         my_period=payroll_engine.PERIODS[payroll_engine.worker_period(me)]["label"],
         samples=face_engine.sample_count_for(me.id),
+        extras=reports_engine.worker_dashboard_extras(me),
     ))
 
 
@@ -410,6 +416,53 @@ def attendance():
 
     return render_template("portal_attendance.html", **_shell(
         me, active="attendance", pagination=pagination, shots=shots,
+    ))
+
+
+@portal.route("/reports")
+@worker_required
+def reports():
+    """A worker's own trends.
+
+    Narrower than the farm-wide reports on purpose. A worker sees their own
+    hours, their own punctuality and their own earnings, and is never shown
+    where they stand against a colleague - the only comparison offered is
+    against their own recent average, because that is the only one that is
+    theirs to know. Ranking workers against each other here would turn a
+    record-keeping system into a performance one, which is exactly the drift
+    the design set out to avoid.
+    """
+    me = _me()
+    return render_template("portal_reports.html", **_shell(
+        me, active="reports", report=reports_engine.worker_report(me),
+    ))
+
+
+@portal.route("/card")
+@worker_required
+def card():
+    """The worker's own identity card, on screen and printable.
+
+    A worker can print a replacement themselves rather than queueing at the
+    office for one, which matters on a farm where the office is a walk away and
+    open for part of the day. What they cannot do is change it: the value comes
+    from their own record and this route only ever reads.
+
+    A voided card is shown as voided rather than hidden, so a worker who has
+    reported a card lost can see that the report was acted on.
+    """
+    me = _me()
+    if not _flag("barcode_enabled", "off"):
+        abort(404)
+
+    symbology = _setting("barcode_symbology", barcode_engine.DEFAULT_SYMBOLOGY)
+    svg = None
+    if me.card_barcode and (me.card_status or "active").lower() != "void":
+        svg = barcode_engine.render_svg(me.card_barcode, symbology)
+
+    return render_template("portal_card.html", **_shell(
+        me, active="card", svg=svg, symbology=symbology,
+        voided=(me.card_status or "active").lower() == "void",
     ))
 
 

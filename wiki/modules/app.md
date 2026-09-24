@@ -13,9 +13,9 @@ Four things, in this order:
 1. **The application factory** — `create_app()`
 2. **Seeding** — `_seed_defaults()`, `_ensure_default_cctv_entries()`
 3. **Helpers** — settings, audit, worker IDs, date parsing, streaming
-4. **`_register_routes(app)`** — all 49 routes, in one very long function
+4. **`_register_routes(app)`** — all 54 routes, in one very long function
 
-> **Yes, it is too long.** All 49 routes in one function is the main piece of
+> **Yes, it is too long.** All 54 routes in one function is the main piece of
 > technical debt in the project. Splitting into Flask blueprints — one per area —
 > would be a clean improvement and nothing depends on the current shape. It is
 > listed under "not deliberate" in
@@ -102,6 +102,7 @@ behaviour; a 500 error is not.
 | Route | Permission | Shows |
 | --- | --- | --- |
 | `/dashboard` | view | Counts, verification rate, trend chart |
+| `/analytics` | view | The four questions of [reports_engine](reports_engine.md), over 14/28/56/90 days |
 | `/workers` | view / worker.manage | The register |
 | `/attendance` | view | Sessions with snapshots, scores, distances |
 | `/payroll` | view / payroll.manage | Payroll rows |
@@ -118,6 +119,18 @@ behaviour; a 500 error is not.
 
 `/workers/add`, `/workers/<pk>/update`, `/workers/<pk>/reset-pin`,
 `/workers/<pk>/toggle`, `/workers/<pk>/face/enroll`, `/workers/<pk>/face/clear`
+
+### Worker cards
+
+| Route | Method | Notes |
+| --- | --- | --- |
+| `/workers/<pk>/card/issue` | POST | Issue, or reissue with a flag. Refuses to overwrite silently |
+| `/workers/<pk>/card/void` | POST | Retire a lost card. Keeps the value, sets the status |
+| `/workers/cards/issue-all` | POST | Every active worker who does not already have one |
+| `/workers/cards` | GET | The printable sheet, at true card size, outside the admin shell |
+
+All four delegate to [barcode_engine](barcode_engine.md); none of them contains
+card logic of its own.
 
 ### Camera, biometric device, payroll and sync actions
 
@@ -175,7 +188,7 @@ browser refresh re-submits the form and the action happens twice.
 
 Forty-nine routes, each rendering a page like this one:
 
-![The dashboard, one of the 49 routes registered by this module](../images/dashboard.png)
+![The dashboard, one of the 54 routes registered by this module](../images/dashboard.png)
 
 ## Gotchas
 

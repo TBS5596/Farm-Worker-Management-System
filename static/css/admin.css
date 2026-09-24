@@ -278,3 +278,22 @@ body.sidebar-open .sidebar-backdrop {
     transition: none;
   }
 }
+
+
+/* --- Auto refresh control ----------------------------------------------
+   Appears on every page that carries a chart. Deliberately quiet: it is a
+   preference, not a finding, and should not compete with the data. */
+.auto-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+}
+.auto-refresh select { min-width: 11rem; }
+.auto-refresh-status {
+  font-size: .78rem;
+  color: #6c757d;
+  white-space: nowrap;
+}
+@media (max-width: 575.98px) {
+  .auto-refresh-status { display: none; }
+}

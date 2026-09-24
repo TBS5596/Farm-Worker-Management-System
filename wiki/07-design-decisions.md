@@ -234,11 +234,44 @@ analysis, no continuous recording and no movement tracking.
 attendance are routinely extended into other monitoring. The defence is not a
 policy promise — it is not building the capability. There is no interface
 through which retained material could be repurposed into a performance ranking,
-and that claim is verifiable by inspecting the 49 routes and 15 endpoints.
+and that claim is verifiable by inspecting the 54 routes and 15 endpoints.
+
+**The Analytics page is the closest this comes to a line, and it stays on the
+right side of it deliberately.** It aggregates — cost by department, hours by
+weekday, who has stopped turning up — and it names individuals only where the
+finding is an *attendance* one that a supervisor has to act on. There is no
+score, no ranking by output, and nothing a worker does faster or slower is
+measured at all. The worker's own copy of the same figures
+(`reports_engine.worker_report()`) compares them against **their own** recent
+average and never against a colleague, because that is the only comparison that
+is theirs to know.
 
 **Treat this as a constraint on what you add.** A "worker productivity score"
 feature would be a straightforward afternoon's work and would break the promise
 the system makes to the people enrolled in it.
+
+---
+
+## 12b. The card default is what was asked for, not what is safest
+
+**Decision:** the card barcode carries the worker's NRC by default, with a salted
+hash and a meaningless generated number offered as alternatives.
+
+**Why:** this one is worth reading as an example of a decision that is not
+purely technical. The plain NRC is what supervisors ask for first — it is a
+number they already use, and a scanned card that reads back something familiar
+inspires confidence. It is also the option that puts a national identifier on a
+piece of plastic that leaves the farm in somebody's pocket every evening, which
+sits awkwardly beside the data-minimisation claim in decision 12.
+
+The code therefore implements all three and prefers none, the module docstring
+states the trade-off in full, and the operator manual repeats it at the point of
+choosing. `card_number` is the option to pick for a real deployment, and the
+documentation says so.
+
+**Worth knowing if you change it:** the two NRC-derived options are
+deterministic, so "reissuing" a card produces the same value. Only
+`card_number` can actually be retired and replaced.
 
 ---
 
@@ -274,8 +307,9 @@ down.
 
 Honest list — if you have time, these are worth improving:
 
-- **`app.py` is about 1,600 lines.** All 49 routes in one file. Blueprints would
-  split it sensibly. Nothing depends on it being one file.
+- **`app.py` is about 1,900 lines.** All 54 routes in one file. Blueprints would
+  split it sensibly — `portal.py` shows it works. Nothing depends on it being one
+  file.
 - **`pin_fingerprint` is badly named.** It is a uniqueness hash, nothing to do
   with fingerprints. Renaming it means an additive migration and a backfill.
 - **Primary keys are inconsistently named** (`Worker.id` but
@@ -285,6 +319,12 @@ Honest list — if you have time, these are worth improving:
   a scanner that was never bought.
 - **No CSRF tokens.** Would need adding before any deployment that is not an
   isolated LAN.
+- **`barcode_engine.resolve()` falls back to a full table scan** when the exact
+  match fails, to cope with values stored before normalisation existed. Fine for a
+  workforce in the hundreds; it would need an index at ten thousand.
+- **Auto-refresh reloads the whole page.** Deliberate — see
+  [modules/frontend.md](modules/frontend.md) — but a partial update would be
+  kinder on a metered connection if somebody wants to do it properly.
 
 ---
 

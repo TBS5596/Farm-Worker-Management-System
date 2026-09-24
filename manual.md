@@ -17,6 +17,11 @@ That single check is what makes the record trustworthy. A PIN can be shared or
 guessed; a face at the camera cannot be handed to a friend. This is why enrolment
 matters more than any other setup step.
 
+The farm can also issue each worker a printed card with a barcode on it. With
+cards switched on, a clock-in asks for all three: the card the worker **has**,
+the PIN they **know**, and the face they **are**. Section 4.5 explains how to set
+them up, and any of the three can be switched off if the farm does not want it.
+
 At the end of each pay period, payroll reads those recorded hours and works out
 the pay. Nobody types hours or amounts into a form. The farm chooses whether that
 period is a week, a fortnight, half a month or a month, and individual workers can
@@ -81,9 +86,11 @@ created or reset later.
 | Default hourly rate | Used for any worker without their own rate |
 | NAPSA and NHIMA rates | Deduction percentages. Confirm the current statutory rates before a real payroll run |
 | Shift start and end | Used to measure lateness and early departure |
-| **Pay cycle** | How often payroll runs for the whole farm: weekly, fortnightly, twice a month or monthly. Individual workers can differ - see section 8 |
+| **Pay cycle** | How often payroll runs for the whole farm: weekly, fortnightly, twice a month or monthly. Individual workers can differ - see section 9 |
 | Clip recording | Whether a short video is recorded at each punch, and how long |
-| **Worker portal** | Whether workers can sign in to see their own hours and payslips, and whether that sign-in needs a face match. Leave the face check **on** - see section 15 |
+| **Worker portal** | Whether workers can sign in to see their own hours and payslips, and whether that sign-in needs a face match. Leave the face check **on** - see section 16 |
+| **Worker cards** | Whether clocking in starts with a card scan, what the barcode carries, whether the PIN is still asked for afterwards, and whether the browser camera may be used as a scanner. See section 4.5 |
+| **Refresh charts every** | How often a page that shows charts reloads itself. Useful on an office screen left open all day. Anyone can override it for their own browser from the selector on the page |
 
 ### 4.2 The clock-in camera (CCTV page)
 
@@ -107,7 +114,7 @@ blank to use the default.
 **Pay cycle** works the same way: leave it on *Farm default* for almost
 everybody, and change it only for a worker paid on a different cycle from the
 rest of the farm. Casual labour weekly and permanent staff monthly is a common
-arrangement and is fully supported - see section 8.
+arrangement and is fully supported - see section 9.
 
 ### 4.4 Enrolment (the step that makes it work)
 
@@ -142,13 +149,77 @@ cannot clock in until re-enrolled.
 
 ---
 
+### 4.5 Worker cards (optional)
+
+A card is a piece of paper or plastic with the worker's name, Worker ID and a
+barcode on it. Scanning it at the terminal tells the system who is standing
+there, before any PIN is typed.
+
+**Switch them on.** Settings -> *Worker cards* -> **Card scanning: on**.
+
+**Choose what the barcode carries.** This is the one decision worth thinking
+about, because a card gets dropped, lent and left in pockets.
+
+| Option | What is printed | What it costs |
+| --- | --- | --- |
+| **The NRC itself** (default) | The worker's National Registration Number | Anyone who finds the card and scans it with a free phone app reads a national ID number. Simple, and what most supervisors expect |
+| **A one-way scramble of the NRC** | A code like `FMS-4A9C21-B0E7F3`, worked out from the NRC | The NRC cannot be read back out of it. But the code is fixed by the NRC, so a lost card cannot be given a different number |
+| **A generated card number** | A code like `FMS-K7P2-M4XQ`, meaning nothing outside this system | A found card reveals nothing. It is the only option where a lost card can be voided and a genuinely new one issued |
+
+If you are unsure, the generated card number is the safer choice. The default is
+the NRC only because that is what farms usually ask for first.
+
+**Choose the barcode shape.** *Code 128* is the striped barcode a laser scanner
+reads fastest. *QR* survives a creased or dirty card better and can be read by a
+phone. Either works with both scanner types.
+
+**Issue the cards.** Workers page:
+
+- **Issue card** on a single worker's row.
+- **Issue cards to everyone** issues one to every active worker who does not
+  already have one. It never overwrites a card already in somebody's pocket.
+- **Void** retires a lost card. The attendance already recorded against it is
+  untouched; the card simply stops working at the terminal.
+
+A worker with no NRC on record cannot be issued a card under either NRC option.
+The system says so by name rather than failing quietly. Add the NRC, or switch
+to generated card numbers.
+
+**Print them.** **Workers -> Print cards** lays the cards out on A4 at true
+bank-card size (85.6 x 54 mm). Tick the workers you want, or print the whole
+workforce. **Set the printer to 100% scale** - if it shrinks the page to fit, the
+bars change size and a scanner may refuse to read them.
+
+**Scanning at the terminal.** Two ways, and they can both be used at once:
+
+- **A USB scanner.** Plug it in. It behaves as a keyboard: it types the code into
+  the box and presses Enter for you. Nothing to install.
+- **The computer's camera.** Press *Scan with camera* on the clock-in screen and
+  hold the card up. This needs Chrome or Edge on a desktop; on browsers that
+  cannot do it the button does not appear at all.
+
+The code can always be typed by hand, which is what you do when a scanner fails
+at six in the morning.
+
+---
+
 ## 5. Daily use: clocking in and out
 
 The worker uses the home page - no login to the dashboard needed.
 
+**Without cards:**
+
 1. Enter Worker ID and PIN.
 2. Choose **Clock In** or **Clock Out**.
 3. Look at the camera and submit.
+
+**With cards switched on:**
+
+1. Scan the card, or type the code on it.
+2. The screen shows whose card it is, so the worker can see the system has the
+   right person before going any further.
+3. Enter the PIN (unless the PIN step has been switched off in Settings).
+4. Choose **Clock In** or **Clock Out**, look at the camera and submit.
 
 What the worker sees:
 
@@ -163,10 +234,22 @@ What the worker sees:
 | You are already clocked in | An open session exists | Clock out first |
 | No open check-in found | Clock-out with no clock-in | Clock in first |
 | You are ... m from the farm | Outside the radius, with enforcement on | Punch on site |
+| That card is not recognised | The card belongs to another farm, or the worker was never issued one | Issue a card on the Workers page |
+| That card has been voided | The card was reported lost | Print a replacement and issue it |
+| That card belongs to a worker who is not active | The worker was deactivated | Nothing, unless they have been reinstated |
 
 **Flow:**
 
 ```
+[Card scanned]  (only if cards are switched on)
+       |
+       v
+[Card known, active, worker still on the register?] -- no --> [Refused, nothing recorded]
+       |
+       v
+[Worker's name shown on screen]
+       |
+       v
 [Worker ID + PIN]
        |
        v
@@ -206,7 +289,51 @@ their phone to see their hours and payslips, without asking the office. Section
 
 ---
 
-## 7. Running payroll
+## 7. Analytics: what the records add up to
+
+**Dashboard -> Analytics.** The Attendance page tells you what happened; this
+page tells you what it means. Every figure on it is computed from the attendance
+and payroll records - nothing is estimated, and nothing is invented. If a number
+here disagrees with the attendance register, the register is right and that is a
+fault worth reporting.
+
+Pick the period at the top right: 14, 28, 56 or 90 days. Four questions follow.
+
+**Is attendance still being verified?** How many sessions were confirmed by the
+camera, how many were entered by hand, and how many attempts were refused - with
+the reasons ranked. A verified share that is falling usually means a camera is
+struggling, not that workers are cheating. It is the first thing to look at when
+the numbers elsewhere start looking odd.
+
+**Who is not coming to work?** A ranked list of workers whose attendance needs
+attention, each with what was observed and what to do about it. Three levels:
+*urgent* (no attendance at all, which is how a ghost worker starts), *look* (a
+clear pattern over several days) and *watch* (early days, not yet a problem).
+
+This section will also tell you when the fault is yours rather than theirs. If
+most of the workforce is flagged late by a similar small margin, the page says
+so plainly and suggests the shift start time in Settings is set earlier than work
+actually begins. Change the setting and the flags clear.
+
+**Where is the wage bill going?** The total wage bill for the period, split by
+department and by worker, with each worker's share. It notes when payroll rows
+are still pending, because pending figures can still change.
+
+**When is the work happening?** Hours by day of the week, split into ordinary
+hours and overtime, plus a per-department table of shifts, hours and average day
+length. Workers whose day length sits well outside the rest are listed
+underneath - usually a sign of short shifts or unclosed sessions rather than
+anything deliberate.
+
+**Keeping the page current.** The selector at the top can reload the page every
+30 seconds, minute, 5 minutes or 15 minutes. That choice is remembered for that
+browser only, so an office screen can refresh every minute while a manager's
+laptop does not refresh at all. The farm-wide starting value is set in Settings.
+The page does not reload while nobody is looking at the tab.
+
+---
+
+## 8. Running payroll
 
 **Payroll** page:
 
@@ -214,7 +341,7 @@ their phone to see their hours and payslips, without asking the office. Section
    runs one cycle you can leave it alone.
 2. Choose a **date in the period**. On weekly and fortnightly this is the last
    day of the period; on monthly and twice-a-month it can be any day inside it.
-   Section 8 explains why the two behave differently.
+   Section 9 explains why the two behave differently.
 3. Press **Generate Payroll**.
 
 For every active worker **on that cycle**, the system totals the recorded hours
@@ -226,7 +353,7 @@ Periods already marked **paid** are never overwritten, so re-running is safe.
 
 A worker whose days are already covered by a *different* paid period is skipped
 with a red message naming the clash. That is the system stopping a double
-payment, not an error - section 8 explains what to do about it.
+payment, not an error - section 9 explains what to do about it.
 
 To mark a week paid, press edit on the row, set status to *paid* and add the
 payment date.
@@ -239,13 +366,13 @@ calculated: you enter hours and a rate, never an amount.
 of its dates, so a spreadsheet covering a change of cycle still reads correctly.
 
 Once a period is marked paid, the workers on it can see their own payslip on
-their phone - see section 15.
+their phone - see section 16.
 
 ---
 
 ---
 
-## 8. Choosing how often payroll runs
+## 9. Choosing how often payroll runs
 
 The farm can be paid weekly, fortnightly, twice a month, or monthly — and
 individual workers can be on a different cycle from everybody else. Casual
@@ -296,7 +423,7 @@ old weeks correctly labelled as weeks.
 
 ---
 
-## 9. Cameras and recordings
+## 10. Cameras and recordings
 
 The CCTV page shows every active camera live, with green boxes on detected faces
 and orange boxes on movement.
@@ -311,7 +438,7 @@ and orange boxes on movement.
 
 ---
 
-## 10. Users and roles
+## 11. Users and roles
 
 **Users** page (administrators only).
 
@@ -330,7 +457,7 @@ recorded on the **Audit Log** page with the username, time and IP address.
 
 ---
 
-## 11. Cloud sync (optional)
+## 12. Cloud sync (optional)
 
 Without cloud sync the system is fully usable: everything is stored on the office
 machine. This is the normal state on a remote farm.
@@ -345,7 +472,7 @@ show what is waiting, uploaded and failed.
 
 ---
 
-## 12. Data Hub
+## 13. Data Hub
 
 **Data Hub** browses every table directly - useful for checking raw records or
 pulling figures for a report. Notable tables:
@@ -360,7 +487,7 @@ pulling figures for a report. Notable tables:
 
 ---
 
-## 13. Troubleshooting
+## 14. Troubleshooting
 
 | Symptom | Cause and fix |
 | --- | --- |
@@ -372,10 +499,15 @@ pulling figures for a report. Notable tables:
 | Payroll generates nothing | No recorded hours for that week, or summaries need rebuilding from the Attendance page |
 | Everyone signed out after a restart | `FMS_SECRET_KEY` is not set, so a new key is generated on each boot |
 | Clip button shows nothing | Clip recording is off in Settings, or the camera could not be reopened. Check Hardware Health |
+| The scanner types the code but nothing happens | The scanner is not set to send Enter at the end. Either configure it to (the manufacturer's sheet says how) or press Enter yourself |
+| A printed card will not scan | The printer shrank the page. Print again at 100% scale, and check the card is not creased across the bars |
+| "Scan with camera" button is missing | The browser cannot read barcodes. Use Chrome or Edge on a desktop, or a USB scanner, or type the code |
+| Analytics says almost everybody is late | The shift start time in Settings is earlier than work actually begins. The page says so itself; correct the setting |
+| Charts are out of date on the office screen | Auto refresh is off for that browser. Set it from the selector at the top of the page |
 
 ---
 
-## 14. Routine
+## 15. Routine
 
 **Every morning:** CCTV -> Health Check. Confirm the attendance camera is online.
 
@@ -390,15 +522,23 @@ releases the payslip to the worker's phone.
 **If the farm runs two cycles**, run each one separately. Generating the monthly
 period does not touch the weekly casuals, and vice versa.
 
-**When a worker joins:** add them on Workers, then enrol at least three face
-samples before their first shift.
+**Once a week:** open Analytics and read the four sections. It takes two minutes
+and it is where a ghost worker, a failing camera or a wrong shift-start setting
+shows up before anyone complains.
 
-**When a worker leaves:** deactivate them on Workers. Their records stay for the
-audit trail, but they can no longer clock in.
+**When a worker joins:** add them on Workers, enrol at least three face samples
+before their first shift, and issue a card if the farm uses them.
+
+**When a worker leaves:** deactivate them on Workers, and void their card if they
+had one. Their records stay for the audit trail, but they can no longer clock in.
+
+**When a card is lost:** void it on the Workers page first, then issue and print
+a replacement. Voiding is what stops the old card working; printing a new one on
+its own does not.
 
 ---
 
-## 15. For workers: checking your own hours and payslips
+## 16. For workers: checking your own hours and payslips
 
 Workers can look up their own records without asking anyone. This is separate
 from clocking in, and it does **not** give access to the office dashboard.
@@ -421,11 +561,30 @@ sign in here — ask a supervisor to enrol you on the Biometric page.
 **What a worker sees:**
 
 - **Home** — whether they are clocked in right now, hours and days this week and
-  this month, their own details, and their last payslip
+  this month, what they have earned so far in the current pay period and what
+  that is on course to become, their hours over the last four weeks compared with
+  the four before, their usual longest day, their own details, and their last
+  payslip
 - **Attendance** — every shift recorded for them, newest first, with the photo
   taken at clock-in
 - **Payslips** — each paid week, with hours, overtime, rate, gross pay, NAPSA,
   NHIMA and net pay all shown
+- **My record** — the last eight weeks as four figures (hours, days, punctuality,
+  earnings), a chart of hours per week, and what they were paid in each closed
+  period
+- **My card** — their own identity card on screen, with a **Print my card**
+  button, so a worker who has lost theirs can print a replacement without waiting
+  for the office. Only shown when cards are switched on
+
+**About the earnings figure on Home.** It is worked out from recorded hours at
+the worker's rate, before deductions, and it is labelled as an estimate on the
+page. The payslip is the figure that counts. It is shown anyway because "how much
+have I earned this week" is the question workers actually ask, and an honest
+estimate answers it better than silence does.
+
+**About punctuality.** If the farm's shift start time is set earlier than work
+really begins, the system marks almost everybody late. Where that is happening,
+the worker's own page says so rather than presenting the lateness as their fault.
 
 **What a worker cannot do.** Everything here is read-only. They cannot see any
 other worker, cannot reach any office page, and cannot change a single figure.

@@ -1,0 +1,103 @@
+{% extends "portal_base.html" %}
+{% block title %}{{ org_name }} - My record{% endblock %}
+{% block content %}
+
+  <div class="p-card">
+    <h2>My record</h2>
+    <p class="p-note">
+      The last {{ (report.window_days / 7) | round | int }} weeks, worked out from the
+      shifts recorded for you.
+    </p>
+  </div>
+
+  {% if report.weeks %}
+
+  {# --- The four numbers that answer "how am I doing" ------------------- #}
+  <div class="p-card">
+    <div class="r-tiles">
+      <div class="r-tile">
+        <span class="r-value">{{ '%.1f'|format(report.total_hours) }}</span>
+        <span class="r-label">Hours worked</span>
+      </div>
+      <div class="r-tile">
+        <span class="r-value">{{ report.total_days }}</span>
+        <span class="r-label">Days worked</span>
+      </div>
+      <div class="r-tile">
+        <span class="r-value">{{ '%.0f'|format(report.punctuality) }}%</span>
+        <span class="r-label">On time</span>
+      </div>
+      <div class="r-tile">
+        <span class="r-value">{{ '{:,.0f}'.format(report.total_earned) }}</span>
+        <span class="r-label">ZMW earned</span>
+      </div>
+    </div>
+    {% if report.trend_note %}
+    <p class="p-note mt-3 mb-0"><i class="bi bi-graph-up me-1"></i>{{ report.trend_note }}</p>
+    {% endif %}
+  </div>
+
+  {# --- Hours per week. One series, so no legend: the label above names it. #}
+  <div class="p-card">
+    <h2>Hours each week</h2>
+    <div class="r-chart"><canvas id="weeksChart"></canvas></div>
+    <p class="p-note mb-0">
+      Your average is {{ '%.1f'|format(report.average_week) }} hours a week.
+      {% if report.total_overtime %}
+      Of your total, {{ '%.1f'|format(report.total_overtime) }} hours were overtime.
+      {% endif %}
+    </p>
+  </div>
+
+  {% if report.lateness_note %}
+  <div class="p-card">
+    <h2>Punctuality</h2>
+    <p class="p-note mb-0">{{ report.lateness_note }}</p>
+  </div>
+  {% endif %}
+
+  {% if report.earnings %}
+  <div class="p-card">
+    <h2>What you were paid</h2>
+    {% for row in report.earnings | reverse %}
+    <div class="p-row">
+      <span class="k">{{ row.label }} &middot; {{ '%.1f'|format(row.hours) }} h</span>
+      <span class="v p-money">ZMW {{ '%.2f'|format(row.net) }}</span>
+    </div>
+    {% endfor %}
+    <p class="p-note mb-0 mt-2">
+      Only periods already paid are shown. Tap
+      <a href="{{ url_for('portal.payslips') }}">Payslips</a> to see how each figure was worked out.
+    </p>
+  </div>
+  {% endif %}
+
+  <script id="workerReportData" type="application/json">{{ report.weeks | tojson }}</script>
+
+  {% else %}
+  <div class="p-card">
+    <div class="p-empty">
+      <p><strong>Nothing to show yet.</strong></p>
+      <p>Once you have worked a few shifts, your hours and earnings will appear here.</p>
+    </div>
+  </div>
+  {% endif %}
+
+  {# A worker checks this on a phone between rows of a field, so the refresh
+     control sits at the bottom, out of the way of the numbers they came for.
+     Off by default on a handset: a reload on a metered connection costs them
+     money, not the farm. #}
+  <div class="p-card p-refresh">
+    <div id="autoRefresh" class="auto-refresh"
+         data-default-seconds="{{ chart_refresh_seconds }}"></div>
+  </div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/auto-refresh.js') }}"></script>
+{% if report.weeks %}
+<script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/portal-reports.js') }}"></script>
+{% endif %}
+{% endblock %}

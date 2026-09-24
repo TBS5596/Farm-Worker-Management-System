@@ -25,11 +25,13 @@ from flask import (
     send_from_directory, session, url_for,
 )
 
+import barcode_engine
 import cctv_engine
 import exports
 import face_engine
 import geofence
 import payroll_engine
+import reports_engine
 import sync_engine
 from api import api as api_blueprint
 from portal import portal as portal_blueprint
@@ -169,6 +171,36 @@ DEFAULT_SETTINGS = {
     "default_hourly_rate": "15",
     "shift_start_time": "07:00",
     "shift_end_time": "17:00",
+    # Identity card / barcode
+    # Turning this on adds a third factor at the capture point: the card is
+    # something the worker HAS, the PIN something they KNOW, the face
+    # something they ARE.
+    "barcode_enabled": "off",
+    # What the printed barcode actually contains. The three options trade
+    # convenience against exposure, and the farm chooses:
+    #   nrc_plain   the National Registration Number itself. This is what a
+    #               scan of a dropped card reveals, so it exposes a national
+    #               identifier to anyone who picks the card up.
+    #   nrc_hash    a one-way scramble of the NRC. Unique per person and tied
+    #               to the NRC, but the NRC cannot be recovered from it.
+    #   card_number a generated code meaning nothing outside this system, and
+    #               the only option under which a lost card can be voided and
+    #               reissued without changing the worker's identity.
+    "barcode_source": "nrc_plain",
+    # code128 prints as a classic striped barcode and suits a cheap laser
+    # scanner; qr survives a creased card better and is readable by a phone.
+    "barcode_symbology": "code128",
+    # Whether the PIN is still required once a card has been scanned. On by
+    # default, because the three-factor claim depends on it. A farm with a long
+    # queue at the gate can switch it off and fall back to card plus face.
+    "barcode_require_pin": "on",
+    # Allow a supervisor to read a card with the device camera instead of a
+    # dedicated scanner.
+    "barcode_camera_scan": "on",
+    # How often a page carrying charts reloads itself, in seconds. 0 is off.
+    # A farm office leaves the dashboard open all day, so a stale screen is the
+    # common failure; a viewer can override this for their own browser.
+    "chart_refresh_seconds": "0",
     # Recording
     "clip_recording_enabled": "on",
     "clip_seconds": "6",
@@ -538,6 +570,33 @@ def _register_routes(app: Flask) -> None:
 
     # ---- Login / Logout -------------------------------------------------- #
 
+    @app.context_processor
+    def _inject_chart_refresh():
+        """Available to every template, so no page can forget to pass it."""
+        try:
+            seconds = int(_get_setting("chart_refresh_seconds", "0") or 0)
+        except (TypeError, ValueError):
+            seconds = 0
+        return {"chart_refresh_seconds": max(0, seconds)}
+
+    def _clock_context() -> dict:
+        """Everything login.html needs to draw the capture point.
+
+        Gathered in one place because the route renders the page from four
+        different branches, and an omission in any of them would silently drop
+        the card field - the failure would look like the feature not working
+        rather than like a bug.
+        """
+        cards_on = _get_setting("barcode_enabled", "off") == "on"
+        return {
+            "org_name": _get_setting("org_name", "FMS Farm"),
+            "cards_enabled": cards_on,
+            "card_require_pin": (not cards_on)
+                                or _get_setting("barcode_require_pin", "on") == "on",
+            "card_camera": cards_on
+                           and _get_setting("barcode_camera_scan", "on") == "on",
+        }
+
     @app.route("/", methods=["GET", "POST"])
     def login():
         if request.method == "POST":
@@ -550,7 +609,7 @@ def _register_routes(app: Flask) -> None:
                 if user and user.check_password(password):
                     if not user.is_active:
                         flash("That account has been deactivated. Contact an administrator.", "danger")
-                        return render_template("login.html", org_name=_get_setting("org_name", "FMS Farm"))
+                        return render_template("login.html", **_clock_context())
                     session["admin_logged_in"] = True
                     session["admin_username"] = username
                     session["admin_user_id"] = user.id
@@ -571,29 +630,62 @@ def _register_routes(app: Flask) -> None:
             elif mode == "worker":
                 worker_code = request.form.get("worker_id", "").strip().upper()
                 pin = request.form.get("pin", "").strip()
+                card_code = request.form.get("card_code", "")
                 log_type = request.form.get("log_type", "IN")
                 lat, lon = geofence.normalize_coordinates(
                     request.form.get("latitude"), request.form.get("longitude")
                 )
 
-                worker = (Worker.query.filter_by(worker_id=worker_code)
-                          .filter(Worker.status == "active").first())
-                if not worker or not worker.check_pin(pin):
-                    flash("Worker ID or PIN is incorrect.", "danger")
-                    return render_template("login.html", org_name=_get_setting("org_name", "FMS Farm"))
+                cards_on = _get_setting("barcode_enabled", "off") == "on"
+                pin_required = (not cards_on) or _get_setting("barcode_require_pin", "on") == "on"
 
+                # --- Factor one: the card, something the worker HAS ---------
+                # A scanned card identifies the worker outright, so the worker
+                # number below becomes a fallback rather than the way in. The
+                # fallback is kept deliberately: a camera failure must not stop
+                # a worker being paid, and neither must a card left at home.
+                # Card-less punches are marked in the audit trail so a farm can
+                # see how often the third factor was actually skipped.
+                worker = None
+                via_card = False
+                if cards_on and barcode_engine.normalize_scan(card_code):
+                    worker, reason = barcode_engine.resolve(card_code)
+                    if worker is None:
+                        flash(barcode_engine.CARD_REASON_MESSAGES.get(
+                            reason, "That card could not be read."), "danger")
+                        _log_audit("attendance.rejected",
+                                   f"Card refused at capture point: {reason}")
+                        return render_template("login.html", **_clock_context())
+                    via_card = True
+                    # The card wins over anything typed in the worker field, so
+                    # a stale value left on a shared terminal cannot redirect a
+                    # scan to somebody else's record.
+                    worker_code = worker.worker_id
+
+                if worker is None:
+                    worker = (Worker.query.filter_by(worker_id=worker_code)
+                              .filter(Worker.status == "active").first())
+
+                # --- Factor two: the PIN, something the worker KNOWS --------
+                if worker is None or (pin_required and not worker.check_pin(pin)):
+                    flash("Worker ID or PIN is incorrect.", "danger")
+                    return render_template("login.html", **_clock_context())
+
+                # --- Factor three: the face, something the worker IS --------
+                # record_punch does the match, the geofence check and the write.
                 outcome = record_punch(app, worker, log_type, lat, lon)
                 flash(outcome["message"], outcome["category"])
                 if outcome["ok"]:
                     _log_audit("attendance.recorded",
                                f"{outcome['log_type']} for {worker_code} "
                                f"(attendance_id={outcome['attendance_id']}, "
-                               f"match={outcome['score']})")
+                               f"match={outcome['score']}, "
+                               f"card={'scanned' if via_card else 'not used'})")
                 else:
                     _log_audit("attendance.rejected",
                                f"{outcome['log_type']} refused for {worker_code}: {outcome['code']}")
 
-        return render_template("login.html", org_name=_get_setting("org_name", "FMS Farm"))
+        return render_template("login.html", **_clock_context())
 
     @app.route("/logout")
     def logout():
@@ -696,6 +788,9 @@ def _register_routes(app: Flask) -> None:
             default_rate=payroll_engine.rates()["default_hourly_rate"],
             periods=payroll_engine.PERIODS,
             farm_period=payroll_engine.farm_period(),
+            cards_enabled=_get_setting("barcode_enabled", "off") == "on",
+            card_source=_get_setting("barcode_source", barcode_engine.DEFAULT_SOURCE),
+            card_stats=barcode_engine.stats(),
             active_page="workers",
             org_name=_get_setting("org_name", "FMS Farm"),
         )
@@ -898,6 +993,100 @@ def _register_routes(app: Flask) -> None:
 
     # ---- Attendance -------------------------------------------------------- #
 
+    # ---- Identity cards --------------------------------------------------- #
+
+    @app.route("/workers/<int:worker_pk>/card/issue", methods=["POST"])
+    @permission_required(WORKER_MANAGE)
+    def issue_worker_card(worker_pk: int):
+        worker = Worker.query.get_or_404(worker_pk)
+        source = _get_setting("barcode_source", barcode_engine.DEFAULT_SOURCE)
+        reissue = request.form.get("reissue") == "1"
+        ok, message = barcode_engine.issue_card(db, worker, source, reissue=reissue)
+        flash(message, "success" if ok else "warning")
+        if ok:
+            _log_audit("card.issued",
+                       f"Card issued to {worker.worker_id} using source '{source}'"
+                       + (" (reissue)" if reissue else ""))
+        return redirect(request.referrer or url_for("workers_page"))
+
+    @app.route("/workers/<int:worker_pk>/card/void", methods=["POST"])
+    @permission_required(WORKER_MANAGE)
+    def void_worker_card(worker_pk: int):
+        worker = Worker.query.get_or_404(worker_pk)
+        ok, message = barcode_engine.void_card(db, worker)
+        flash(message, "success" if ok else "warning")
+        if ok:
+            _log_audit("card.voided", f"Card voided for {worker.worker_id}")
+        return redirect(request.referrer or url_for("workers_page"))
+
+    @app.route("/workers/cards/issue-all", methods=["POST"])
+    @permission_required(WORKER_MANAGE)
+    def issue_all_cards():
+        """Give a card to every active worker who does not have one.
+
+        Skips rather than fails on a worker the current setting cannot produce a
+        value for - typically one with no NRC while the barcode is NRC-derived -
+        and reports how many were skipped, so the operator knows to go and fix
+        those records rather than assuming the run succeeded for everyone.
+        """
+        source = _get_setting("barcode_source", barcode_engine.DEFAULT_SOURCE)
+        issued = skipped = 0
+        for worker in Worker.query.filter(Worker.status == "active").all():
+            if worker.card_barcode:
+                continue
+            ok, _ = barcode_engine.issue_card(db, worker, source)
+            issued += 1 if ok else 0
+            skipped += 0 if ok else 1
+        parts = [f"{issued} card{'s' if issued != 1 else ''} issued"]
+        if skipped:
+            parts.append(f"{skipped} skipped, most likely missing an NRC while the "
+                         f"card setting derives the barcode from it")
+        flash(". ".join(parts) + ".", "success" if issued else "warning")
+        _log_audit("card.issued.bulk", f"Bulk issue: {issued} issued, {skipped} skipped")
+        return redirect(url_for("workers_page"))
+
+    @app.route("/workers/cards")
+    @admin_required
+    def print_cards():
+        """A printable sheet of cards: one worker, a selected set, or everyone.
+
+        `who` is 'all', 'uncarded', or absent when specific worker ids are
+        passed. Cards are laid out to a standard credit-card footprint so a
+        farm can print onto card stock and cut, or print on paper and laminate.
+        """
+        who = request.args.get("who", "")
+        ids = [int(v) for v in request.args.getlist("id") if v.isdigit()]
+
+        query = Worker.query.filter(Worker.status == "active")
+        if ids:
+            query = query.filter(Worker.id.in_(ids))
+        elif who == "uncarded":
+            query = query.filter(Worker.card_barcode.is_(None))
+        workers = query.order_by(Worker.worker_id.asc()).all()
+
+        symbology = _get_setting("barcode_symbology", barcode_engine.DEFAULT_SYMBOLOGY)
+        cards, missing = [], []
+        for worker in workers:
+            if not worker.card_barcode:
+                missing.append(worker)
+                continue
+            if (worker.card_status or "active").lower() == "void":
+                missing.append(worker)
+                continue
+            cards.append({
+                "worker": worker,
+                "value": worker.card_barcode,
+                "svg": barcode_engine.render_svg(worker.card_barcode, symbology),
+            })
+
+        return render_template(
+            "cards_print.html",
+            cards=cards,
+            missing=missing,
+            symbology=symbology,
+            org_name=_get_setting("org_name", "FMS Farm"),
+        )
+
     @app.route("/attendance")
     @admin_required
     def attendance_page():
@@ -932,6 +1121,32 @@ def _register_routes(app: Flask) -> None:
         return redirect(request.referrer or url_for("attendance_page"))
 
     # ---- Settings ---------------------------------------------------------- #
+
+    # ---- Analytics -------------------------------------------------------- #
+
+    @app.route("/analytics")
+    @admin_required
+    def analytics():
+        """Trends across weeks, which the dashboard's "right now" view cannot show.
+
+        The window is a query parameter rather than a setting because a manager
+        asks different questions over different spans: a fortnight for "what is
+        happening", a quarter for "what is the pattern".
+        """
+        try:
+            days = int(request.args.get("days", reports_engine.DEFAULT_WINDOW_DAYS))
+        except (TypeError, ValueError):
+            days = reports_engine.DEFAULT_WINDOW_DAYS
+        days = max(7, min(days, 365))
+
+        return render_template(
+            "analytics.html",
+            report=reports_engine.full_report(days),
+            days=days,
+            window_options=[14, 28, 56, 90],
+            active_page="analytics",
+            org_name=_get_setting("org_name", "FMS Farm"),
+        )
 
     @app.route("/settings", methods=["GET", "POST"])
     @admin_required
@@ -977,6 +1192,18 @@ def _register_routes(app: Flask) -> None:
                 "shift_end_time": request.form.get("shift_end_time", "17:00").strip() or "17:00",
                 "clip_recording_enabled": "on" if request.form.get("clip_recording_enabled") else "off",
                 "clip_seconds": request.form.get("clip_seconds", "6").strip() or "6",
+                "chart_refresh_seconds": (request.form.get("chart_refresh_seconds") or "0").strip(),
+                "barcode_enabled": "on" if request.form.get("barcode_enabled") else "off",
+                "barcode_source": (request.form.get("barcode_source") or "").strip()
+                                  if (request.form.get("barcode_source") or "").strip()
+                                     in barcode_engine.SOURCES
+                                  else barcode_engine.DEFAULT_SOURCE,
+                "barcode_symbology": (request.form.get("barcode_symbology") or "").strip()
+                                     if (request.form.get("barcode_symbology") or "").strip()
+                                        in barcode_engine.SYMBOLOGIES
+                                     else barcode_engine.DEFAULT_SYMBOLOGY,
+                "barcode_require_pin": "on" if request.form.get("barcode_require_pin") else "off",
+                "barcode_camera_scan": "on" if request.form.get("barcode_camera_scan") else "off",
             })
             _log_audit("settings.save", "System settings updated")
             flash("Settings saved.", "success")
@@ -987,6 +1214,9 @@ def _register_routes(app: Flask) -> None:
             settings={s.key: s.value for s in Setting.query.all()},
             engine=face_engine.engine_info(),
             periods=payroll_engine.PERIODS,
+            card_sources=barcode_engine.SOURCES,
+            card_symbologies=barcode_engine.SYMBOLOGIES,
+            card_stats=barcode_engine.stats(),
             active_page="settings",
             org_name=_get_setting("org_name", "FMS Farm"),
         )

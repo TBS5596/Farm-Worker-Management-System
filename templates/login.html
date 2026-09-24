@@ -20,8 +20,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{{ org_name }} – Login</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap.min.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}" />
 </head>
 <body>
@@ -84,22 +84,72 @@
             <input type="hidden" name="mode" value="worker" />
             <input type="hidden" name="latitude" id="workerLatitude" />
             <input type="hidden" name="longitude" id="workerLongitude" />
+            {% if cards_enabled %}
+            {# The card is the first of the three factors: something the worker
+               HAS. A USB scanner behaves as a keyboard - it types the value and
+               presses Enter - so this is an ordinary text input, autofocused so
+               a scan lands here without anyone touching the screen. #}
             <div class="mb-3">
-              <label class="form-label fw-semibold">Worker ID</label>
+              <label class="form-label fw-semibold">
+                Scan your card
+                <span class="badge bg-dark ms-1">Step 1</span>
+              </label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
+                <input type="text" class="form-control form-control-lg" name="card_code"
+                       id="cardCode" autocomplete="off" autocapitalize="characters"
+                       placeholder="Scan the card, or type the code" autofocus />
+                {% if card_camera %}
+                <button class="btn btn-outline-secondary" type="button" id="scanWithCamera"
+                        title="Use the camera to read the card instead of a scanner">
+                  <i class="bi bi-camera"></i>
+                </button>
+                {% endif %}
+              </div>
+              {# Named the moment the card resolves, so the worker can see the
+                 terminal recognised the right person before going further. #}
+              <div class="form-text" id="cardWho">
+                No card? Leave this blank and use your worker number below.
+              </div>
+            </div>
+            {% if card_camera %}
+            <div class="mb-3 d-none" id="cardScanBox">
+              <video id="cardScanVideo" class="w-100 rounded border" muted playsinline></video>
+              <div class="form-text">
+                Hold the card steady in good light. Close this and type the code if it will not read.
+              </div>
+              <button class="btn btn-sm btn-outline-secondary mt-1" type="button" id="cardScanStop">
+                Stop camera
+              </button>
+            </div>
+            {% endif %}
+            {% endif %}
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold">
+                Worker ID
+                {% if cards_enabled %}<span class="badge bg-secondary ms-1">Filled by the card</span>{% endif %}
+              </label>
               <div class="input-group">
                 <span class="input-group-text"><i class="bi bi-person-fill"></i></span>
                 <input type="text" class="form-control form-control-lg" name="worker_id"
-                       placeholder="e.g. 0001" required autofocus />
+                       id="workerCode" placeholder="e.g. 0001" required
+                       {% if not cards_enabled %}autofocus{% endif %} />
               </div>
             </div>
+            {% if card_require_pin %}
             <div class="mb-3">
-              <label class="form-label fw-semibold">PIN</label>
+              <label class="form-label fw-semibold">
+                PIN
+                {% if cards_enabled %}<span class="badge bg-dark ms-1">Step 2</span>{% endif %}
+              </label>
               <div class="input-group">
                 <span class="input-group-text"><i class="bi bi-key-fill"></i></span>
                 <input type="password" class="form-control form-control-lg" name="pin"
-                       placeholder="Enter your PIN" minlength="4" required />
+                       id="workerPin" placeholder="Enter your PIN" minlength="4" required />
               </div>
             </div>
+            {% endif %}
             <div class="mb-4">
               <label class="form-label fw-semibold">Action</label>
               <div class="d-flex gap-3">
@@ -120,7 +170,8 @@
               </div>
             </div>
             <button class="btn btn-primary btn-lg w-100" type="submit">
-              <i class="bi bi-camera-fill me-2"></i>Verify Face &amp; Record
+              <i class="bi bi-camera-fill me-2"></i>
+              {% if cards_enabled %}Step 3: Verify Face &amp; Record{% else %}Verify Face &amp; Record{% endif %}
             </button>
           </form>
         </div>
@@ -165,7 +216,7 @@
   </div><!-- card -->
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{{ url_for('static', filename='vendor/bootstrap.bundle.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/login.js') }}"></script>
 </body>
 </html>

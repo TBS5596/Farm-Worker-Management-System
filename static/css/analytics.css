@@ -1,0 +1,112 @@
+/* analytics.css - Analytics.
+ *
+ * The page is read by a farm manager deciding what to do on Monday, not by an
+ * analyst. So: findings in sentences, numbers large enough to read across a
+ * desk, and status carried by an icon and a word as well as by colour.
+ */
+
+.analytics-page .report-title {
+  font-size: .95rem;
+  font-weight: 700;
+  color: #14211b;
+  margin-bottom: .75rem;
+}
+
+.analytics-page .report-summary {
+  font-size: .95rem;
+  color: #3d4a52;
+  margin-bottom: 1rem;
+}
+
+/* --- Headline tiles ---------------------------------------------------- */
+.stat-tile {
+  background: #fff;
+  border: 1px solid #e3e7ec;
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  height: 100%;
+}
+.stat-label {
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  font-weight: 700;
+  color: #5f6b76;
+}
+.stat-value {
+  font-size: 1.9rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #14211b;
+  margin-top: .2rem;
+}
+.stat-note { font-size: .78rem; color: #5f6b76; }
+
+.mini-stat {
+  border-left: 3px solid #e3e7ec;
+  padding-left: .75rem;
+}
+.mini-value { display: block; font-size: 1.35rem; font-weight: 700; color: #14211b; }
+.mini-label { font-size: .78rem; color: #5f6b76; }
+
+/* --- Verdict ----------------------------------------------------------- */
+/* Tone is one of four, and each pairs its colour with an icon and a sentence,
+   so the meaning survives a monochrome print and a colour-blind reader. */
+.verdict {
+  border-radius: 8px;
+  padding: .8rem 1rem;
+  font-size: .95rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+.verdict-good  { background: #e8f4ec; border-color: #b9dcc6; color: #1c5733; }
+.verdict-warn  { background: #fdf4e3; border-color: #e8d9a8; color: #6b5518; }
+.verdict-bad   { background: #fbeceb; border-color: #efc6c3; color: #7d2820; }
+.verdict-muted { background: #f4f6f9; border-color: #e3e7ec; color: #5f6b76; }
+
+/* --- Severity badges --------------------------------------------------- */
+.sev {
+  display: inline-block;
+  font-size: .68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  padding: .15rem .45rem;
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+.sev-3 { background: #fbeceb; border-color: #efc6c3; color: #7d2820; }
+.sev-2 { background: #fdf4e3; border-color: #e8d9a8; color: #6b5518; }
+.sev-1 { background: #f4f6f9; border-color: #dce2e8; color: #5f6b76; }
+
+.insight-list { padding-left: 1.1rem; margin-bottom: 1rem; }
+.insight-list li { margin-bottom: .4rem; color: #3d4a52; font-size: .92rem; }
+
+.empty-note {
+  background: #f4f6f9;
+  border: 1px solid #e3e7ec;
+  border-radius: 8px;
+  padding: 1rem;
+  color: #5f6b76;
+  font-size: .9rem;
+}
+
+/* --- Charts ------------------------------------------------------------ */
+/* A fixed height is not decoration: without one, Chart.js grows the canvas to
+   fill whatever space it is given, which on a long page produced a chart over
+   a thousand pixels tall. */
+.chart-label {
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  font-weight: 700;
+  color: #5f6b76;
+  margin-bottom: .5rem;
+}
+.chart-box { position: relative; height: 240px; }
+.chart-box.tall { height: 300px; }
+
+@media (max-width: 575.98px) {
+  .stat-value { font-size: 1.5rem; }
+  .chart-box { height: 220px; }
+}

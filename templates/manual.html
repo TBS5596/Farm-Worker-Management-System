@@ -47,8 +47,11 @@
     <li><strong>Biometric</strong> - enrol at least three face samples per worker.</li>
     <li>Have a worker clock in from the home page and check <strong>Attendance</strong>.</li>
     <li><strong>Payroll</strong> - pick the cycle and a date in the period, and generate.</li>
+    <li><em>Optional:</em> <strong>Settings &rarr; Worker cards</strong> to switch cards
+        on, then <strong>Workers &rarr; Issue cards</strong> and print the sheet
+        (section 4).</li>
     <li>Tell workers they can check their own hours and payslips at <code>/me</code>
-        on their phones (section 7).</li>
+        on their phones (section 9).</li>
   </ol>
 
   <h5 class="section-title">2) Worker Onboarding</h5>
@@ -102,14 +105,94 @@
     samples for that worker so you can start again.
   </p>
 
-  <h5 class="section-title">4) Verified Clock In and Out</h5>
+  <h5 class="section-title">4) Worker Cards</h5>
+  <p>
+    Optional. A card is paper or plastic carrying the worker's name, Worker ID and a
+    barcode. Scanning it says <em>who is standing here</em> before any PIN is typed, so a
+    clock-in can check all three things at once: the card the worker
+    <strong>has</strong>, the PIN they <strong>know</strong>, and the face they
+    <strong>are</strong>. Each of the three can be switched off in Settings.
+  </p>
+
+  <div class="example-box">
+    <p class="mb-1"><strong>The one decision worth thinking about</strong></p>
+    <p class="mb-0">
+      A card gets dropped, lent and left in pockets, so what is printed on it matters.
+      Settings offers three choices, and the default is the first only because it is what
+      farms usually ask for.
+    </p>
+  </div>
+
+  <div class="table-responsive mt-3">
+    <table class="table table-sm table-bordered align-middle">
+      <thead class="table-light">
+        <tr><th>Option</th><th>What is printed</th><th>What it costs</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>The NRC itself</strong> (default)</td>
+          <td>The worker's National Registration Number</td>
+          <td>Anyone who finds the card and scans it with a free phone app reads a
+              national ID number</td>
+        </tr>
+        <tr>
+          <td>A one-way scramble of the NRC</td>
+          <td>A code such as <code>FMS-4A9C21-B0E7F3</code></td>
+          <td>The NRC cannot be read back out of it, but the code is fixed by the NRC,
+              so a lost card cannot be given a genuinely new number</td>
+        </tr>
+        <tr>
+          <td>A generated card number</td>
+          <td>A code such as <code>FMS-K7P2-M4XQ</code></td>
+          <td>Means nothing outside this system. The only option where a lost card can be
+              voided and replaced cleanly</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    <strong>Issuing.</strong> On the Workers page, <em>Issue card</em> on one row, or
+    <em>Issue cards to everyone</em> for every active worker who does not already have
+    one - it never overwrites a card already in somebody's pocket. <em>Void</em> retires a
+    lost card without touching the attendance recorded against it. A worker with no NRC on
+    record cannot be issued a card under either NRC option; the system says so by name.
+  </p>
+
+  <p>
+    <strong>Printing.</strong> <strong>Workers &rarr; Print cards</strong> lays them out on
+    A4 at true bank-card size. <strong>Set the printer to 100% scale</strong> - if it
+    shrinks the page to fit, the bars change size and a scanner may refuse to read them.
+  </p>
+
+  <p>
+    <strong>Scanning.</strong> A USB scanner needs no driver: it behaves as a keyboard,
+    typing the code and pressing Enter. The computer's own camera can also be used with
+    <em>Scan with camera</em> on the clock-in screen, which needs Chrome or Edge on a
+    desktop - on browsers that cannot do it, the button does not appear at all. The code
+    can always be typed by hand, which is what you do when a scanner fails at six in the
+    morning.
+  </p>
+
+  <h5 class="section-title">5) Verified Clock In and Out</h5>
   <p>
     Workers use the home page - they never sign in to the dashboard. They enter their
-    Worker ID and PIN, choose Clock In or Clock Out, and look at the camera.
+    Worker ID and PIN, choose Clock In or Clock Out, and look at the camera. With cards
+    switched on, the card is scanned first and the screen shows whose card it is, so the
+    worker can see the system has the right person before going any further.
   </p>
 
   <h6 class="flow-title">Flowchart: Clock In</h6>
-  <pre class="flowchart-block">[Worker ID + PIN]
+  <pre class="flowchart-block">[Card scanned]  (only when cards are switched on)
+       |
+       v
+[Card known, active, worker still on the register?] --no--> [Refused, nothing recorded]
+       |
+       v
+[Worker's name shown on screen]
+       |
+       v
+[Worker ID + PIN]
        |
        v
 [Credentials checked] --fail--> [Error, nothing recorded]
@@ -174,11 +257,26 @@
           <td>Outside the clock-in radius, with enforcement on</td>
           <td>Punch on site</td>
         </tr>
+        <tr>
+          <td>That card is not recognised</td>
+          <td>The card belongs to another farm, or this worker was never issued one</td>
+          <td>Issue a card on the Workers page</td>
+        </tr>
+        <tr>
+          <td>That card has been voided</td>
+          <td>The card was reported lost</td>
+          <td>Print a replacement and issue it</td>
+        </tr>
+        <tr>
+          <td>That card belongs to a worker who is not active</td>
+          <td>The worker was deactivated</td>
+          <td>Nothing, unless they have been reinstated</td>
+        </tr>
       </tbody>
     </table>
   </div>
 
-  <h5 class="section-title">5) Attendance Records</h5>
+  <h5 class="section-title">6) Attendance Records</h5>
   <ul>
     <li><strong>Identity</strong> - a green badge with the match score means the face
         matched the enrolled template.</li>
@@ -189,7 +287,72 @@
     <li><strong>Export CSV</strong> - the whole table for a spreadsheet or report.</li>
   </ul>
 
-  <h5 class="section-title">6) Payroll</h5>
+  <h5 class="section-title">7) Analytics</h5>
+  <p>
+    <strong>Dashboard &rarr; Analytics.</strong> The Attendance page says what happened;
+    this page says what it means. Every figure is computed from the attendance and payroll
+    records - nothing is estimated. If a number here disagrees with the attendance
+    register, the register is right and that is a fault worth reporting. Choose the period
+    at the top right: 14, 28, 56 or 90 days.
+  </p>
+
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered align-middle">
+      <thead class="table-light">
+        <tr><th>The question</th><th>What it shows</th><th>What to do with it</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Is attendance still being verified?</td>
+          <td>Sessions confirmed by the camera, entered by hand, and refused - with the
+              reasons ranked</td>
+          <td>A falling verified share usually means a camera is struggling, not that
+              workers are cheating. Look here first when other numbers go odd</td>
+        </tr>
+        <tr>
+          <td>Who is not coming to work?</td>
+          <td>Workers ranked <em>urgent</em>, <em>look</em> or <em>watch</em>, each with
+              what was observed and a suggested action</td>
+          <td>A name on the register with no attendance behind it is how a ghost worker
+              starts. Ask about a pattern; ignore a bad week</td>
+        </tr>
+        <tr>
+          <td>Where is the wage bill going?</td>
+          <td>Total cost for the period, split by department and by worker, with each
+              worker's share</td>
+          <td>Watch for pending payroll rows - those figures can still change</td>
+        </tr>
+        <tr>
+          <td>When is the work happening?</td>
+          <td>Hours by day of the week split into ordinary and overtime, plus average day
+              length per department</td>
+          <td>A worker whose day length sits well outside the rest usually means short
+              shifts or unclosed sessions, not anything deliberate</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="example-box">
+    <p class="mb-1"><strong>When the fault is the setting, not the worker</strong></p>
+    <p class="mb-0">
+      If most of the workforce is flagged late by a similar small margin, the page says so
+      plainly and points at the shift start time in Settings rather than at the workers.
+      Correct the setting and the flags clear. The worker's own page carries the same note,
+      so nobody is accused of lateness that a setting invented.
+    </p>
+  </div>
+
+  <p class="mt-3">
+    <strong>Keeping it current.</strong> The selector at the top of the page can reload it
+    every 30 seconds, minute, 5 minutes or 15 minutes - useful on an office screen left
+    open all day. The choice is remembered for that browser only, so one screen can refresh
+    every minute while a manager's laptop does not refresh at all. The farm-wide starting
+    value is set in Settings, and the page does not reload while nobody is looking at the
+    tab.
+  </p>
+
+  <h5 class="section-title">8) Payroll</h5>
   <div class="example-box">
     <p class="mb-2"><strong>Example:</strong> pay the week ending Sunday 23 August.</p>
     <ol class="mb-0">
@@ -272,7 +435,7 @@
    +-- other paid period      --> skipped, reported in red
        covers these days          (stops a double payment)</pre>
 
-  <h5 class="section-title">7) For Workers: Your Own Hours and Payslips</h5>
+  <h5 class="section-title">9) For Workers: Your Own Hours and Payslips</h5>
   <p>
     Workers can look up their own records without asking anyone. This is separate from
     clocking in, and it gives <strong>no access to the office pages</strong>.
@@ -309,13 +472,24 @@
       <tbody>
         <tr><td><strong>Home</strong></td>
             <td>Whether they are clocked in right now, hours and days this week and this
-                month, their own details, their pay cycle, and their last payslip</td></tr>
+                month, what they have earned so far this pay period and what that is on
+                course to become, their hours over the last four weeks against the four
+                before, their usual longest day, their own details, their pay cycle, and
+                their last payslip</td></tr>
         <tr><td><strong>Attendance</strong></td>
             <td>Every shift recorded for them, newest first, with the photo taken at
                 clock-in</td></tr>
         <tr><td><strong>Payslips</strong></td>
             <td>Each <em>paid</em> period, with hours, overtime, rate, gross pay, NAPSA,
                 NHIMA and net pay</td></tr>
+        <tr><td><strong>My record</strong></td>
+            <td>The last eight weeks as four figures - hours, days, punctuality, earnings
+                - a chart of hours per week, and what they were paid in each closed
+                period</td></tr>
+        <tr><td><strong>My card</strong></td>
+            <td>Their own identity card on screen with a <em>Print my card</em> button, so
+                somebody who has lost theirs can print a replacement without waiting for
+                the office. Shown only when cards are switched on</td></tr>
       </tbody>
     </table>
   </div>
@@ -326,7 +500,19 @@
     by a supervisor on the dashboard.
   </p>
 
-  <p>
+  <div class="example-box">
+    <p class="mb-1"><strong>About the earnings figure on Home</strong></p>
+    <p class="mb-0">
+      It is worked out from recorded hours at the worker's rate, before deductions, and the
+      page labels it an estimate - the payslip is the figure that counts. It is shown
+      anyway because "how much have I earned this week" is the question workers actually
+      ask, and an honest estimate answers it better than silence does. Where the farm's
+      shift start time is set earlier than work really begins, the punctuality note on this
+      page says so rather than presenting the lateness as the worker's fault.
+    </p>
+  </div>
+
+  <p class="mt-3">
     <strong>Why the current period is missing.</strong> A period appears only once it has
     been marked paid. Until then the figure can still change when payroll is regenerated,
     and showing a number that later moves causes more disputes than it settles.
@@ -354,7 +540,8 @@
 [Face matches THIS worker?] --no--> [Refused, with the reason]
         |yes
         v
-[Signed in]  -->  Home / Attendance / Payslips  (their own records only)</pre>
+[Signed in]  -->  Home / Attendance / Payslips / My record / My card
+                 (their own records only)</pre>
 
   <p class="text-muted" style="font-size:.9rem;">
     Settings has two controls for this: one turns the portal off entirely, and one drops
@@ -362,7 +549,7 @@
     - it is what makes a PIN safe to use for wage history.
   </p>
 
-  <h5 class="section-title">8) Cameras and Clips</h5>
+  <h5 class="section-title">10) Cameras and Clips</h5>
   <ul>
     <li><strong>Health Check</strong> opens every registered camera and records the result
         under Hardware Health. Worth running each morning.</li>
@@ -373,7 +560,7 @@
         snapshots; the rest are surveillance.</li>
   </ul>
 
-  <h5 class="section-title">9) Users and Roles</h5>
+  <h5 class="section-title">11) Users and Roles</h5>
   <div class="table-responsive">
     <table class="table table-sm table-bordered align-middle">
       <thead class="table-light"><tr><th>Role</th><th>Can do</th></tr></thead>
@@ -393,7 +580,7 @@
     deactivated. Every action is recorded on the <strong>Audit Log</strong> page.
   </p>
 
-  <h5 class="section-title">10) Edit and Reset Operations</h5>
+  <h5 class="section-title">12) Edit and Reset Operations</h5>
   <div class="example-box">
     <ol class="mb-0">
       <li>Click the row's <i class="bi bi-pencil-square"></i> button.</li>
@@ -403,7 +590,7 @@
     </ol>
   </div>
 
-  <h5 class="section-title">11) Troubleshooting</h5>
+  <h5 class="section-title">13) Troubleshooting</h5>
   <div class="table-responsive">
     <table class="table table-sm table-bordered align-middle">
       <thead class="table-light"><tr><th>Symptom</th><th>Cause and fix</th></tr></thead>
@@ -438,13 +625,28 @@
         <tr><td>"Take a photo" does nothing on a phone</td>
             <td>Allow the browser access to the camera. The button opens the phone's own
                 camera app, so it works over plain http on the farm network.</td></tr>
+        <tr><td>The scanner types the code but nothing happens</td>
+            <td>The scanner is not set to send Enter at the end. Configure it to (the
+                manufacturer's sheet says how), or press Enter yourself</td></tr>
+        <tr><td>A printed card will not scan</td>
+            <td>The printer shrank the page. Print again at 100% scale, and check the card
+                is not creased across the bars</td></tr>
+        <tr><td>"Scan with camera" button is missing</td>
+            <td>The browser cannot read barcodes. Use Chrome or Edge on a desktop, a USB
+                scanner, or type the code</td></tr>
+        <tr><td>Analytics says almost everybody is late</td>
+            <td>The shift start time in Settings is earlier than work actually begins. The
+                page says so itself; correct the setting</td></tr>
+        <tr><td>Charts are out of date on the office screen</td>
+            <td>Auto refresh is off for that browser. Set it from the selector at the top
+                of the page</td></tr>
         <tr><td>Everyone signed out after a restart</td>
             <td>Set <code>FMS_SECRET_KEY</code> so the session key is stable</td></tr>
       </tbody>
     </table>
   </div>
 
-  <h5 class="section-title">12) Routine</h5>
+  <h5 class="section-title">14) Routine</h5>
   <ul class="mb-0">
     <li><strong>Each morning:</strong> CCTV &rarr; Health Check; confirm the attendance
         camera is online.</li>
@@ -454,10 +656,17 @@
         monthly one: Payroll &rarr; choose the cycle and a date &rarr; generate &rarr;
         export &rarr; mark paid. Marking paid also releases the payslip to the worker's
         phone. If the farm runs two cycles, run each one separately.</li>
-    <li><strong>New worker:</strong> add on Workers, then enrol at least three samples.
-        Without enrolment they can neither clock in nor use the worker portal.</li>
-    <li><strong>Worker leaves:</strong> deactivate on Workers. Records stay for the audit
-        trail; they can no longer clock in.</li>
+    <li><strong>Once a week:</strong> open Analytics and read the four sections. Two
+        minutes, and it is where a ghost worker, a failing camera or a wrong shift-start
+        setting shows up before anyone complains.</li>
+    <li><strong>New worker:</strong> add on Workers, then enrol at least three samples,
+        and issue a card if the farm uses them. Without enrolment they can neither clock
+        in nor use the worker portal.</li>
+    <li><strong>Worker leaves:</strong> deactivate on Workers and void their card. Records
+        stay for the audit trail; they can no longer clock in.</li>
+    <li><strong>Card lost:</strong> void it on the Workers page <em>first</em>, then issue
+        and print a replacement. Voiding is what stops the old card working; printing a new
+        one on its own does not.</li>
   </ul>
 </div>
 {% endblock %}

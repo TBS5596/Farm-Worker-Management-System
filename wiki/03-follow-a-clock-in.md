@@ -139,6 +139,38 @@ worker codes.
 is standing there. Anybody who knows Musonda's ID and PIN has got this far. The
 identity check is the next step, and it is the one that matters.
 
+### Step 2a — The card, when the farm uses one
+
+The walkthrough above is the two-factor path, which is what runs when
+`barcode_enabled` is off. Switch it on and one step appears *before* the PIN.
+
+```python
+worker, reason = barcode_engine.resolve(request.form.get("card_value"))
+if worker is None:
+    flash(barcode_engine.CARD_REASON_MESSAGES[reason], "danger")
+```
+
+The value arrives in an ordinary text field. A USB scanner is a keyboard as far
+as the browser is concerned — it types the code and presses Enter — so nothing
+special is needed to receive it. If the farm has enabled camera scanning,
+`static/js/login.js` uses the browser's own `BarcodeDetector` to read the card
+and fill the same field; the button removes itself on browsers that do not have
+that API, so the page never offers something it cannot do.
+
+`resolve()` returns a *reason* rather than a bare failure, because "that card is
+not recognised", "that card has been voided" and "that card belongs to a worker
+who is not active" are three different problems with three different remedies.
+See [modules/barcode_engine.md](modules/barcode_engine.md).
+
+Once the card resolves, the screen shows the worker's name. That is the point of
+the step for the person standing there: they can see the system has the right
+person before typing anything.
+
+With cards on, the transaction now checks all three factors — something the
+worker **has**, something they **know**, something they **are**. Each of the
+three has its own setting, so a farm can run cards at a busy gate with the PIN
+step off, or keep all three where it matters.
+
 ## Step 3 — Into the service layer
 
 ```python

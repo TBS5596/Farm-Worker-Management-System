@@ -24,7 +24,7 @@
 {% block title %}{{ org_name }} - Attendance{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="https://cdn.datatables.net/2.3.8/css/dataTables.dataTables.min.css" />
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/dataTables.dataTables.min.css') }}" />
 <link rel="stylesheet" href="{{ url_for('static', filename='css/datatables.css') }}" />
 <link rel="stylesheet" href="{{ url_for('static', filename='css/attendance.css') }}" />
 {% endblock %}
@@ -210,6 +210,6 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.datatables.net/2.3.8/js/dataTables.min.js"></script>
+<script src="{{ url_for('static', filename='vendor/dataTables.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/attendance.js') }}"></script>
 {% endblock %}

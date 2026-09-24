@@ -86,6 +86,8 @@ push it down into a function shaped like that if you possibly can.
 | [`geofence`](modules/geofence.md) | How far is this from the farm? | `evaluate()` |
 | [`security`](modules/security.md) | May this user do this thing? | `permission_required()` |
 | [`sync_engine`](modules/sync_engine.md) | Upload to the cloud, or queue it for later | `upload_or_queue()` |
+| [`barcode_engine`](modules/barcode_engine.md) | What goes on a worker's card, and whose card is this | `resolve()` |
+| [`reports_engine`](modules/reports_engine.md) | Turn recorded facts into four answers a manager can act on | `full_report()` |
 | [`exports`](modules/exports.md) | Turn tables into CSV | `EXPORTS` |
 
 ## Who calls whom

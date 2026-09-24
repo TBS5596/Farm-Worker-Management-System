@@ -32,6 +32,13 @@ numpy>=1.26.0,<3.0
 # --- Geofencing -----------------------------------------------------------
 geopy>=2.4.1,<3.0
 
+# --- Worker identity cards -------------------------------------------------
+# Both render SVG, so no image library is needed: an SVG barcode prints
+# crisply at any size on whatever printer the farm office has, and keeps the
+# install small. python-barcode draws Code 128, qrcode draws QR.
+python-barcode>=0.15.1,<1.0
+qrcode>=7.4,<9.0
+
 # --- Optional: cloud snapshot upload --------------------------------------
 # The application runs and records attendance without this. When the package
 # or the Firebase configuration is absent, snapshots are queued locally and

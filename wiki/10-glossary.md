@@ -39,6 +39,27 @@ it is a setting, not a constant.
 **Geofence** — the circle around the farm's registered coordinates. Distance is
 always recorded; refusing outside it is optional and off by default.
 
+**Card** — a printed identity card carrying a barcode, optionally issued to each
+worker. Scanning it says *who is standing here* before any PIN is typed.
+
+**Card value** — what is actually encoded in the barcode. Depends on the
+`barcode_source` setting: the NRC, a salted one-way hash of it, or a generated
+`FMS-XXXX-XXXX` code. See [modules/barcode_engine.md](modules/barcode_engine.md).
+
+**Void** — a card retired because it was lost. The status changes; the value
+stays, so attendance recorded against it remains explicable.
+
+**Keyboard wedge** — how a USB barcode scanner presents itself to a computer: as
+a keyboard. It types the scanned value and presses Enter, which is why reading a
+card needs no driver and no JavaScript.
+
+**Three factors** — something the worker **has** (the card), **knows** (the PIN)
+and **is** (the face). Each is independently switchable in Settings.
+
+**Systemic lateness** — the case where most of the workforce is flagged late by a
+similar small margin, which almost always means the configured shift start is
+wrong rather than the workers. The Analytics page detects it and says so.
+
 **Buddy punching** — one worker clocking in on behalf of an absent colleague.
 The specific fraud this system exists to prevent.
 
@@ -66,6 +87,7 @@ so should you.
 | **API** | Application Programming Interface — here, the JSON endpoints under `/api/v1` |
 | **CCTV** | Closed-Circuit Television |
 | **CSV** | Comma-Separated Values |
+| **Code 128** | The striped barcode symbology used by default. Reads fastest on a laser scanner |
 | **CVD** | Colour Vision Deficiency |
 | **ERD** | Entity Relationship Diagram |
 | **FAR** | False Acceptance Rate — how often an impostor is wrongly accepted |
@@ -80,6 +102,7 @@ so should you.
 | **NRC** | National Registration Card — the Zambian national ID |
 | **ORM** | Object Relational Mapper — here, SQLAlchemy: Python classes mapped to database tables |
 | **PIN** | Personal Identification Number — the worker's 4-digit code |
+| **QR** | Quick Response code — the square barcode. Survives a creased card better and can be read by a phone |
 | **RBAC** | Role-Based Access Control |
 | **RTSP** | Real Time Streaming Protocol — how IP cameras are addressed, `rtsp://…` |
 | **SQL** | Structured Query Language |

@@ -32,6 +32,9 @@ flowchart TD
     BASE --> AL["audit_log.html"]
     BASE --> TH["tables_hub.html + table_records.html"]
     BASE --> CS["cloud_sync.html"]
+    BASE --> AN["analytics.html"]
+
+    CARDS["cards_print.html<br/>its own print stylesheet"]
 
     SIDE["_admin_sidebar.html"] -.included by.-> BASE
     FLASH["_flash_messages.html"] -.included by.-> BASE
@@ -49,6 +52,11 @@ parent rather than pages of their own.
 > **Analogy: headed notepaper.** The letterhead, address and footer are printed
 > once. Each letter only supplies the words in the middle. Change the letterhead
 > and every letter changes with it.
+
+`cards_print.html` also stands outside the shell, and for a reason worth knowing:
+it lays cards out at true bank-card size (85.6 x 54 mm) for a printer, so a
+sidebar and a navigation bar would be actively in the way. It carries its own
+print stylesheet.
 
 `login.html`, `manual.html` and `force_password_change.html` stand outside the
 admin shell — they are seen by people who are not signed in, or not yet allowed
@@ -115,6 +123,7 @@ static/css/
   login.css        the sign-in and clock-in page
   dashboard.css    workers.css   attendance.css
   biometric.css    settings.css  manual.css   datatables.css
+  analytics.css    portal.css
 ```
 
 **`admin.css` is the theme. Everything else is page-specific.** Put shared
@@ -167,18 +176,53 @@ dashboard-page.js   workers.js        attendance.js
 payroll-page.js     cctv-page.js      biometric-page.js
 users-page.js       audit-log-page.js cloud-sync-page.js
 table-records-page.js  edit-modals.js  login.js
+analytics-page.js   portal-reports.js auto-refresh.js
 ```
 
 Plain browser JavaScript. No framework, no build step, no bundler. Each script
 is loaded only by the page that needs it, through `extra_js`.
 
-Libraries, all from CDN: Bootstrap, Bootstrap Icons, **DataTables** (sorting,
-searching, paging of record tables) and **Chart.js** (dashboard and attendance
-charts).
+Libraries — Bootstrap, Bootstrap Icons, **DataTables** (sorting, searching,
+paging of record tables) and **Chart.js** (dashboard and analytics charts) — are
+served from **`static/vendor/`**, not from a CDN. See the note below; it is about
+1.1 MB and it is the difference between a farm machine that has never had a
+connection rendering correctly and rendering as unstyled text.
 
-`login.js` is the one with real work to do — it requests the browser's
-geolocation and fills the hidden latitude and longitude fields before the clock-in
-form is submitted.
+`login.js` has the most real work to do. It requests the browser's geolocation
+and fills the hidden latitude and longitude fields before the clock-in form is
+submitted, and — where the farm has enabled it — drives the card scanner.
+
+### Reading a barcode with no library
+
+The camera scanner uses the browser's own `BarcodeDetector` API rather than a
+vendored JavaScript decoder:
+
+```javascript
+if (!('BarcodeDetector' in window)) { button.remove(); return; }
+const detector = new BarcodeDetector({ formats: ['code_128', 'qr_code'] });
+```
+
+Nothing to ship, nothing to keep up to date, and the decoding happens in native
+code rather than in a JavaScript loop over pixels. The cost is that the API does
+not exist in every browser — so the button **removes itself** rather than sitting
+there doing nothing. A USB scanner needs no JavaScript at all: it presents as a
+keyboard, types the value into the field and presses Enter.
+
+### `auto-refresh.js`
+
+Mounted by any page carrying charts. Three decisions in it are worth knowing:
+
+- It does a **full page reload**, not a partial update. Every charted page here is
+  server-rendered, so a reload is one line and cannot drift out of step with the
+  server the way a hand-written DOM patch can. The cost is a flicker every few
+  minutes, which is cheaper than a subtle inconsistency.
+- It **pauses while the tab is hidden**, and reloads immediately on return if the
+  interval already elapsed. Reloading a page nobody is looking at spends the farm
+  host's CPU and, on a metered link, its data.
+- The choice is stored in `localStorage` **per browser**, not per farm, with every
+  read and write wrapped in `try`/`catch`. One office screen may want thirty
+  seconds while a manager's laptop wants nothing at all; the farm setting supplies
+  only the starting value.
 
 ## The live camera view
 
@@ -199,9 +243,14 @@ browser. See [cctv_engine.md](cctv_engine.md).
 - **`{{ }}` escapes; `| safe` does not.** Never `| safe` on anything a user typed.
 - **The stream holds the camera open** while the page is open. Only one process
   can hold a webcam, so an open stream page can block enrolment.
-- **CDN assets need internet on first load.** They cache afterwards, but a farm
-  machine that has never had a connection will render unstyled. Consider
-  vendoring them for a truly offline install.
+- **Front-end libraries are vendored, and must stay that way.** They live in
+  `static/vendor/` and are referenced with `url_for('static', ...)`. The project
+  claims to work offline; a single `<script src="https://cdn...">` slipped into a
+  template quietly breaks that claim, and it breaks it only on the machine that
+  has never had a connection — which is the one machine nobody tests on. If you
+  add a library, vendor it.
+- **Bootstrap Icons needs its font files too.** `static/vendor/fonts/` holds the
+  `.woff` and `.woff2`; the vendored stylesheet's relative paths expect them there.
 
 ## Where to look next
 

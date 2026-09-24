@@ -24,7 +24,7 @@ Read these in order. Each one assumes the ones before it.
 | 06 | [Security and Roles](06-security-and-roles.md) | Who can do what, how it is enforced, and where the audit trail comes from |
 | 07 | [Design Decisions](07-design-decisions.md) | Why the odd-looking parts are the way they are |
 | 08 | [Making Your First Change](08-making-your-first-change.md) | Six worked recipes: add a field, a page, an endpoint, a setting, a refusal reason, a report |
-| 09 | [Testing and Tools](09-testing-and-tools.md) | The 63 tests, what they cover, and the scripts in `tools/` |
+| 09 | [Testing and Tools](09-testing-and-tools.md) | The 170 tests, what they cover, and the scripts in `tools/` |
 | 10 | [Glossary](10-glossary.md) | Every term and abbreviation this project uses |
 
 ## Module reference
@@ -33,12 +33,14 @@ One page per source file. See [modules/README.md](modules/README.md) for the ind
 
 | Module | One line |
 | --- | --- |
-| [app.py](modules/app.md) | The application factory and all 49 web routes |
+| [app.py](modules/app.md) | The application factory and all 54 web routes |
 | [models.py](modules/models.md) | The sixteen tables, defined once |
 | [face_engine.py](modules/face_engine.md) | Enrolment, matching, and the refusal reasons |
 | [attendance_service.py](modules/attendance_service.md) | The clock-in/clock-out transaction |
 | [cctv_engine.py](modules/cctv_engine.md) | Cameras, streaming, clips, health checks |
 | [payroll_engine.py](modules/payroll_engine.md) | Daily summaries and pay computation |
+| [barcode_engine.py](modules/barcode_engine.md) | Worker identity cards: the value, the barcode, the lookup |
+| [reports_engine.py](modules/reports_engine.md) | The four questions the Analytics page answers |
 | [geofence.py](modules/geofence.md) | Distance from the farm |
 | [security.py](modules/security.md) | Roles and permissions |
 | [sync_engine.py](modules/sync_engine.md) | Cloud upload with an offline queue |

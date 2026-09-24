@@ -19,6 +19,13 @@ template with OpenCV's LBPH recognizer, and a punch that does not match is
 refused. A PIN alone cannot record attendance, so one worker cannot clock in for
 another.
 
+**Three factors at the gate.** A worker can also be issued a printed identity
+card carrying a barcode. With cards switched on, clocking in asks for something
+the worker *has* (the card), something they *know* (the PIN) and something they
+*are* (the face). Each of the three can be turned off in Settings, so a farm can
+run cards alone at a busy gate or all three where it matters. The scan is read by
+a USB scanner or by the browser's own camera - no extra software.
+
 **Verified attendance.** Every session stores the match score, a clean snapshot,
 a short event clip, and how far the worker was from the farm when they punched.
 
@@ -45,8 +52,10 @@ queued and retried.
 | Payroll | Weekly, fortnightly, semi-monthly or monthly generation from attendance, set farm-wide and overridable per worker. Overtime, NAPSA and NHIMA at configurable rates. Paid periods protected, and an overlap guard that refuses to pay the same day twice |
 | CCTV | Multiple USB and RTSP feeds, live MJPEG views with face and motion overlays, event and manual clips, camera health checks |
 | Access control | Enforced roles (administrator, supervisor, viewer), forced password change on first login, full audit trail |
-| Reporting | Attendance trend chart, CSV exports for attendance, payroll, summaries, verification attempts and the audit log |
-| Worker portal | Self-service at `/me`: a worker signs in with their code, PIN and face to see their own details, attendance and paid payslips on their phone. Read-only, and scoped to one person |
+| Worker cards | A printed barcode card per worker, issued singly or for the whole workforce. The farm chooses what the barcode carries: the NRC, a one-way scramble of it, or a meaningless generated number. Cards print on an A4 sheet at true bank-card size, and a lost card is voided rather than deleted |
+| Analytics | A page that answers four questions in plain English - is attendance still being verified, who is not coming to work, where is the wage bill going, when is the work happening - with charts, ranked tables and a suggested action beside each finding |
+| Reporting | Attendance trend chart, CSV exports for attendance, payroll, summaries, verification attempts and the audit log. Every charted page can refresh itself on a chosen interval |
+| Worker portal | Self-service at `/me`: a worker signs in with their code, PIN and face to see their own details, attendance, paid payslips, their own hours-and-earnings record and their own card - on their phone. Read-only, and scoped to one person |
 | Integration | JSON API at `/api/v1` with an API key, for Postman testing or a future mobile client |
 | Cloud | Optional Firebase Storage upload with an offline retry queue and per-record sync state |
 
@@ -56,7 +65,10 @@ queued and retried.
 
 - Flask, Flask-SQLAlchemy, SQLite
 - OpenCV (`opencv-contrib-python>=4.10,<5.0` - contrib build required, 5.x breaks detection)
-- Bootstrap 5.3, Bootstrap Icons, DataTables, Chart.js
+- Bootstrap 5.3, Bootstrap Icons, DataTables, Chart.js - all served from
+  `static/vendor/`, not from a CDN, because a farm office is often offline
+- `python-barcode` and `qrcode` for the identity cards (both render SVG, so no
+  image library is needed)
 - Docker and Docker Compose for deployment
 - pytest for the test suite
 
@@ -201,6 +213,8 @@ understanding that a PIN alone is then enough again.
 6. Have a worker clock in from the home page and confirm the session appears on
    **Attendance** with a match score.
 7. **Payroll** - choose a week ending date and generate.
+8. *Optional:* **Settings -> Worker cards** - switch cards on, choose what the
+   barcode carries, then **Workers -> Issue cards** and print the sheet.
 
 ---
 
@@ -217,6 +231,8 @@ face_engine.py          Face enrolment, LBPH training, identity matching
 attendance_service.py   The clock in/out pipeline, shared by the web page and API
 cctv_engine.py          Camera sources, MJPEG streaming, clip recording, health
 payroll_engine.py       Daily summaries and computed payroll
+barcode_engine.py       Worker card values, rendering and scan lookup
+reports_engine.py       The figures behind the Analytics page and My record
 geofence.py             Distance checks against the farm centre
 sync_engine.py          Firebase upload with an offline retry queue
 security.py             Role-based access control
@@ -225,6 +241,8 @@ api.py                  JSON API blueprint (/api/v1)
 
 templates/              Jinja templates
 static/css/, static/js/ Page styles and scripts
+static/vendor/          Bootstrap, Bootstrap Icons, DataTables and Chart.js,
+                        vendored so the interface works with no internet
 tests/                  pytest suite
 tools/export_schema.py  Regenerates Workers.sql from models.py
 tools/seed_demo.py      Demo data
@@ -244,14 +262,23 @@ INSTALL.md              Installation guide for Windows, Linux, macOS and Docker
 
 ## How verification works
 
+Each step below can be switched off in Settings. What is shown is the full
+three-factor path, with cards enabled.
+
 ```
-Worker ID + PIN
+scan the card (something the worker HAS)
+      |
+      v
+card known, active, and the worker still on the register? --- no ---> refused
+      |
+      v
+PIN (something the worker KNOWS)
       |
       v
 credentials valid? ------ no ---> refused
       |
       v
-open camera once, grab ~8 frames
+open camera once, grab ~8 frames  (something the worker IS)
       |
       v
 detect largest face, check eyes visible, normalise to 200x200 grayscale
@@ -334,10 +361,11 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-63 tests covering worker ID generation and PIN uniqueness, face template storage
+170 tests covering worker ID generation and PIN uniqueness, face template storage
 and matching, the clock in/out session rules, geofence behaviour, payroll
-arithmetic and weekly generation, role enforcement, the API and CSV exports. The
-suite uses a temporary database and never touches `fms.db`.
+arithmetic and weekly generation, the worker portal, identity cards and the
+scan-to-worker lookup, the Analytics figures, role enforcement, the API and CSV
+exports. The suite uses a temporary database and never touches `fms.db`.
 
 Four of those tests use a real photograph - enrolling it through the actual HTTP
 endpoint, then checking that the same face is accepted for its own Worker ID and

@@ -28,7 +28,7 @@
 {% block title %}{{ org_name }} - Workers{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="https://cdn.datatables.net/2.3.8/css/dataTables.dataTables.min.css" />
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/dataTables.dataTables.min.css') }}" />
 <link rel="stylesheet" href="{{ url_for('static', filename='css/datatables.css') }}" />
 <link rel="stylesheet" href="{{ url_for('static', filename='css/workers.css') }}" />
 {% endblock %}
@@ -41,6 +41,52 @@
       <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('biometric_page') }}" title="Face enrolment centre">
         <i class="bi bi-person-badge me-1"></i>Enrolment Centre
       </a>
+      {% if cards_enabled %}
+      <div class="btn-group btn-group-sm">
+        <button class="btn btn-outline-dark dropdown-toggle" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false" title="Worker identity cards">
+          <i class="bi bi-upc-scan me-1"></i>Cards
+          <span class="badge bg-secondary ms-1">{{ card_stats.carded }}/{{ card_stats.active_workers }}</span>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><h6 class="dropdown-header">Print</h6></li>
+          <li>
+            <a class="dropdown-item" href="{{ url_for('print_cards', who='all') }}" target="_blank">
+              <i class="bi bi-printer me-2"></i>All active workers
+            </a>
+          </li>
+          <li>
+            <a class="dropdown-item" href="#" id="printSelectedCards">
+              <i class="bi bi-check2-square me-2"></i>Selected only
+              <span class="badge bg-secondary ms-1" id="selectedCardCount">0</span>
+            </a>
+          </li>
+          {% if can('worker.manage') %}
+          <li><hr class="dropdown-divider"></li>
+          <li><h6 class="dropdown-header">Issue</h6></li>
+          <li>
+            <form method="POST" action="{{ url_for('issue_all_cards') }}">
+              <button class="dropdown-item" type="submit">
+                <i class="bi bi-plus-square me-2"></i>Issue to everyone without a card
+                {% if card_stats.uncarded %}
+                <span class="badge bg-warning text-dark ms-1">{{ card_stats.uncarded }}</span>
+                {% endif %}
+              </button>
+            </form>
+          </li>
+          {% endif %}
+          {% if card_stats.without_nrc and card_source in ('nrc_plain', 'nrc_hash') %}
+          <li><hr class="dropdown-divider"></li>
+          <li><span class="dropdown-item-text small text-warning-emphasis">
+            {{ card_stats.without_nrc }} active worker{{ '' if card_stats.without_nrc == 1 else 's' }}
+            ha{{ 's' if card_stats.without_nrc == 1 else 've' }} no NRC, and the current card
+            setting builds the barcode from it. Those cannot be issued a card until an NRC is
+            added, or the setting is changed to a generated card number.
+          </span></li>
+          {% endif %}
+        </ul>
+      </div>
+      {% endif %}
       {% if can('worker.manage') %}
       <button class="btn btn-success btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#addWorkerModal">
         <i class="bi bi-plus-lg me-1"></i>Add Worker
@@ -69,13 +115,22 @@
             <th>Status</th>
             <th>Enrolled</th>
             <th>Registered</th>
+            {% if cards_enabled %}<th>Card</th>{% endif %}
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {% for worker in workers %}
           <tr>
-            <td><span class="badge bg-secondary">{{ worker.worker_id }}</span></td>
+            <td data-order="{{ worker.worker_id }}">
+              {% if cards_enabled %}
+              <input type="checkbox" class="form-check-input align-middle me-1 card-pick"
+                     value="{{ worker.id }}"
+                     {% if not worker.card_barcode or (worker.card_status or 'active') == 'void' %}disabled
+                     title="No active card to print"{% else %}title="Select for card printing"{% endif %}>
+              {% endif %}
+              <span class="badge bg-secondary">{{ worker.worker_id }}</span>
+            </td>
             <td>{{ worker.name }}</td>
             <td>{{ worker.nrc_number or '—' }}</td>
             <td>{{ worker.phone_number or '—' }}</td>
@@ -120,6 +175,27 @@
               {{ worker.enrollment_date.strftime('%d %b %Y') if worker.enrollment_date else '—' }}
             </td>
             <td data-order="{{ worker.created_at.strftime('%Y%m%d') }}">{{ worker.created_at.strftime('%d %b %Y') }}</td>
+            {% if cards_enabled %}
+            {# Sorted by state rather than by code, so an operator can sort the
+               column and see everyone still waiting for a card together. #}
+            <td data-order="{% if not worker.card_barcode %}0{% elif (worker.card_status or 'active') == 'void' %}1{% else %}2{% endif %}">
+              {% if not worker.card_barcode %}
+                <span class="badge bg-light text-secondary border" title="No card issued yet">
+                  <i class="bi bi-dash-circle me-1"></i>None
+                </span>
+              {% elif (worker.card_status or 'active') == 'void' %}
+                <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle"
+                      title="Voided card: {{ worker.card_barcode }}">
+                  <i class="bi bi-x-circle me-1"></i>Void
+                </span>
+              {% else %}
+                <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle font-monospace"
+                      title="Issued {{ worker.card_issued_at.strftime('%d %b %Y') if worker.card_issued_at else '' }}">
+                  {{ worker.card_barcode }}
+                </span>
+              {% endif %}
+            </td>
+            {% endif %}
             <td class="actions-cell">
               {% if can('worker.manage') %}
               <button class="btn btn-sm btn-outline-info edit-worker-btn"
@@ -155,6 +231,34 @@
                 <i class="bi bi-key-fill"></i>
               </button>
 
+              {% if cards_enabled %}
+              <form method="POST"
+                    action="{{ url_for('issue_worker_card', worker_pk=worker.id) }}"
+                    class="d-inline">
+                {% if worker.card_barcode %}<input type="hidden" name="reissue" value="1">{% endif %}
+                <button class="btn btn-sm btn-outline-dark" type="submit"
+                        title="{% if worker.card_barcode %}Reissue this worker's card{% else %}Issue a card to this worker{% endif %}">
+                  <i class="bi bi-upc"></i>
+                </button>
+              </form>
+              {% if worker.card_barcode and (worker.card_status or 'active') != 'void' %}
+              <a class="btn btn-sm btn-outline-secondary"
+                 href="{{ url_for('print_cards', id=worker.id) }}" target="_blank"
+                 title="Print this worker's card">
+                <i class="bi bi-printer"></i>
+              </a>
+              <form method="POST"
+                    action="{{ url_for('void_worker_card', worker_pk=worker.id) }}"
+                    class="d-inline"
+                    onsubmit="return confirm('Void this card? It will be refused at the capture point until a replacement is issued.');">
+                <button class="btn btn-sm btn-outline-danger" type="submit"
+                        title="Void a lost card">
+                  <i class="bi bi-x-octagon"></i>
+                </button>
+              </form>
+              {% endif %}
+              {% endif %}
+
               <form method="POST" action="{{ url_for('toggle_worker', worker_pk=worker.id) }}" class="d-inline">
                 <button class="btn btn-sm {% if (worker.status or 'active') == 'active' %}btn-outline-warning{% else %}btn-outline-success{% endif %}"
                         type="submit"
@@ -177,7 +281,7 @@
           </tr>
           {% else %}
           <tr>
-            <td colspan="13" class="text-center text-muted py-4">No workers onboarded yet.</td>
+            <td colspan="{{ 14 if cards_enabled else 13 }}" class="text-center text-muted py-4">No workers onboarded yet.</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -384,7 +488,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.datatables.net/2.3.8/js/dataTables.min.js"></script>
+<script src="{{ url_for('static', filename='vendor/dataTables.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/components.js') }}"></script>
 <script src="{{ url_for('static', filename='js/edit-modals.js') }}"></script>
 <script src="{{ url_for('static', filename='js/workers.js') }}"></script>

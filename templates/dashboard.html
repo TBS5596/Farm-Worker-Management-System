@@ -27,6 +27,13 @@
 {% endblock %}
 
 {% block content %}
+{# A farm office leaves this page open all day, so the refresh control sits at
+   the top where somebody setting up the screen will find it. #}
+<div class="d-flex justify-content-end mb-3">
+  <div id="autoRefresh" class="auto-refresh"
+       data-default-seconds="{{ chart_refresh_seconds }}"></div>
+</div>
+
 {# --- 1. Stat cards: the four numbers worth seeing first ---------------- #}
 <div class="row g-3 mb-4">
   <div class="col-6 col-md-3">
@@ -234,6 +241,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/auto-refresh.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/dashboard-page.js') }}"></script>
 {% endblock %}

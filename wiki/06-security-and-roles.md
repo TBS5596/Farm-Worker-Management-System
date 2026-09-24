@@ -46,6 +46,24 @@ class Worker(db.Model):
 Nothing readable is stored. A forgotten PIN is *reset*, never *retrieved* — a
 route exists for resetting, none exists for reading.
 
+### The third factor, when the farm uses cards
+
+With `barcode_enabled` on, the clock-in checks something the worker **has** as
+well as what they know and what they are. The card contributes exactly one thing:
+it establishes *which worker is being claimed*, before a PIN is typed.
+
+It is worth being precise about how much that adds. A card can be lent, dropped
+or copied — a barcode is not a secret, and any phone can read one. It is not a
+strong factor on its own, and it is not treated as one: the face check still
+decides whether the punch is recorded. What the card genuinely buys is that a
+worker cannot be claimed by somebody who merely overheard a four-digit PIN, and
+that the person at the terminal sees their own name on screen before continuing.
+
+The three factors are independently switchable, which means a farm can configure
+a weak combination — cards with the PIN step off, with face verification off,
+would accept anybody holding a card. The settings page says so at the point of
+switching each one off.
+
 ### The odd one out: `pin_fingerprint`
 
 ```python
@@ -292,9 +310,15 @@ Stated honestly, so nobody discovers them the hard way:
 - **No liveness detection.** A printed photograph passes the eye check. This
   matters least where a supervisor initiates every clock-in and most at an
   unattended terminal.
-- **No rate limiting** on PIN attempts. A 4-digit PIN has 10,000 combinations —
-  but note that a correct PIN alone still cannot record attendance without the
-  matching face.
+- **No rate limiting** on PIN attempts at the clock-in terminal. A 4-digit PIN has
+  10,000 combinations — but note that a correct PIN alone still cannot record
+  attendance without the matching face. (The worker portal *does* rate-limit: five
+  failures in fifteen minutes locks that worker code.)
+- **A barcode is not a secret.** Anyone who handles a worker's card can copy it
+  with a phone. The card narrows *who is being claimed*; it does not prove who is
+  standing there. Under the default `nrc_plain` setting it also discloses a
+  national identifier to anyone who finds a dropped card — see decision 12b in
+  [07 — Design Decisions](07-design-decisions.md).
 - **No CSRF tokens** on the forms. Mitigated by the deployment being a local
   network with no internet exposure; it would need adding before any public
   deployment.

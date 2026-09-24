@@ -109,10 +109,12 @@ data URL from the canvas.
 | --- | --- |
 | `GET /me/` | Sign-in |
 | `POST /me/login` | The three-factor check above |
-| `GET /me/dashboard` | Clocked in or not, this week and this month, own details, last payslip, five most recent shifts |
+| `GET /me/dashboard` | Clocked in or not, this week and this month, earnings so far this pay period and what that is on course to become, the last 28 days against the 28 before, own details, last payslip, five most recent shifts |
 | `GET /me/attendance` | Every shift, paginated, 15 per page, with the worker's own photo |
 | `GET /me/payslips` | **Paid weeks only**, paginated |
 | `GET /me/payslips/<id>` | One payslip, every component |
+| `GET /me/reports` | The worker's own eight-week record: hours, days, punctuality, earnings, a chart of hours per week |
+| `GET /me/card` | The worker's own identity card, printable. Returns 404 when cards are switched off |
 | `GET /me/snapshot/<id>` | One attendance photo, scoped to its owner |
 | `GET /me/logout` | Clears the session |
 
@@ -129,6 +131,33 @@ Hours, overtime, rate, basic, overtime pay, gross, each deduction with its rate,
 and net. Basic pay is computed in the template as gross minus overtime, so the
 four money rows visibly add up. That is the difference between a payslip a
 worker can check and one they have to take on trust.
+
+### What the worker's own reports deliberately leave out
+
+`reports_engine.worker_report()` is narrower than the farm-wide functions on
+purpose. A worker sees their own hours, their own punctuality and their own
+earnings, and is **never** shown where they stand against a colleague. The only
+comparison offered is against their own recent average, because that is the only
+one that is theirs to know.
+
+Ranking workers against each other here would turn a record-keeping system into a
+performance-management one, which is exactly the drift the design set out to
+avoid.
+
+The same page carries the systemic-lateness note from
+[reports_engine.md](reports_engine.md): where the farm's configured shift start
+is earlier than work actually begins, the worker's page says so rather than
+presenting the lateness as their fault.
+
+### `/me/card`, and why a worker may print their own
+
+A worker who has lost their card can print a replacement themselves rather than
+walking to an office that is a distance away and open for part of the day. The
+route only ever **reads**: the value comes from their own record and nothing on
+this page can change it.
+
+A voided card is shown *as voided* rather than hidden, so a worker who reported a
+card lost can see that the report was acted on.
 
 ## Two settings
 

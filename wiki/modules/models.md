@@ -75,6 +75,9 @@ Dashboard accounts. **Not workers.**
 | `payroll_period` | This worker's pay cycle. **Blank falls back to the farm default**, same convention as the rate |
 | `face_enrolled_at` | Set on first sample, cleared when wiped. No samples = cannot clock in |
 | `status` | `active` / `inactive` / `suspended`. Only `active` can clock in |
+| `card_barcode` | The value printed on the identity card. **Unique**, nullable. Its content depends on the `barcode_source` setting — see [barcode_engine](barcode_engine.md) |
+| `card_issued_at` | When the card was issued |
+| `card_status` | `active` or `void`. Voiding sets this and **keeps** `card_barcode`, so attendance recorded against a lost card stays explicable |
 
 Methods: `set_pin(pin)` and `check_pin(pin)`.
 

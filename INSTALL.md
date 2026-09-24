@@ -61,6 +61,13 @@ pip uninstall -y opencv-python opencv-python-headless
 pip install --force-reinstall "opencv-contrib-python>=4.10.0,<5.0"
 ```
 
+**A barcode scanner needs no driver.** If you use USB scanners for the worker
+cards, plug one in and it behaves as a keyboard: it types the card number and
+presses Enter. Nothing to install. If instead you want to scan with the
+computer's own camera, the browser must be Chrome or Edge on a desktop — the
+button that opens the camera scanner hides itself on browsers that cannot do it,
+and the PIN and face steps still work.
+
 **OpenCV must stay below version 5.** OpenCV 5 removed the Haar cascade XML
 files that used to ship inside the wheel, and the face and eye detectors are
 loaded from `cv2.data.haarcascades`. On OpenCV 5 that folder is empty, both
@@ -448,6 +455,10 @@ mkdir -p data && cp fms.db data/fms.db
 6. Have a worker clock in from the home page and confirm the session appears on
    **Attendance** with a match score and a snapshot.
 7. **Payroll** — choose a week ending date and generate.
+8. *Optional:* **Settings → Worker cards** — if you want workers to clock in
+   with a printed card, switch cards on there first, choose what the barcode
+   carries, then go to **Workers → Issue cards** and print the sheet. See
+   [the operator manual](manual.md) for what each barcode option means.
 
 ### Optional: demonstration data
 
@@ -466,7 +477,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-63 tests, about 15 seconds. All should pass.
+170 tests, about a minute. All should pass.
 
 ### Check the recognizer really loaded
 

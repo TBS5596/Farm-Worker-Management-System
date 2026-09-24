@@ -49,6 +49,8 @@ erDiagram
         float hourly_rate
         datetime face_enrolled_at
         string status
+        string card_barcode "unique, nullable"
+        string card_status "active or void"
     }
 
     ATTENDANCE {
@@ -117,6 +119,26 @@ off it.** If you ever get lost in the schema, start at a worker and follow the
 lines outwards.
 
 ## The tables, grouped by what they are for
+
+### The three columns added for worker cards
+
+`workers` gained three nullable columns when identity cards were added, all
+applied by the additive migration in `migrations.py`:
+
+| Column | Holds |
+| --- | --- |
+| `card_barcode` | The value printed on the card. `unique=True`, so the database itself prevents two workers sharing a card |
+| `card_issued_at` | When it was issued |
+| `card_status` | `active` or `void` |
+
+Voiding a card sets `card_status` and **does not clear `card_barcode`**. The
+attendance already recorded against that card has to stay explicable, and a row
+pointing at a value nobody holds any more is worse than a value marked retired.
+
+What `card_barcode` actually contains depends on the `barcode_source` setting —
+it may be the worker's NRC, a salted hash of it, or a generated code that means
+nothing outside this database. [modules/barcode_engine.md](modules/barcode_engine.md)
+sets out the trade-off, and it is worth reading before choosing for a real farm.
 
 ### The core five
 

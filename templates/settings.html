@@ -227,6 +227,135 @@
             Event clips are kept instead of continuous recording: a few seconds either side of a
             punch is what a supervisor actually reviews, and it will not fill the disk.
           </div>
+
+          <hr class="my-4">
+
+          <div class="row g-3 align-items-end">
+            <div class="col-md-5">
+              <label class="form-label">Refresh charts automatically</label>
+              <select class="form-select" name="chart_refresh_seconds">
+                {% set current = settings.get('chart_refresh_seconds', '0') %}
+                <option value="0"   {% if current == '0' %}selected{% endif %}>Off</option>
+                <option value="30"  {% if current == '30' %}selected{% endif %}>Every 30 seconds</option>
+                <option value="60"  {% if current == '60' %}selected{% endif %}>Every minute</option>
+                <option value="300" {% if current == '300' %}selected{% endif %}>Every 5 minutes</option>
+                <option value="900" {% if current == '900' %}selected{% endif %}>Every 15 minutes</option>
+              </select>
+            </div>
+            <div class="col-md-7">
+              <div class="form-text">
+                The starting value for every page that carries a chart — the dashboard, Analytics,
+                and the worker portal. Anyone can change it for their own browser from the control
+                on those pages; this is what they start from. A screen left on the office wall wants
+                a short interval, a laptop usually wants none.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body p-4">
+          <h6 class="text-muted text-uppercase fw-bold mb-3">Worker Identity Cards</h6>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="barcodeEnabled" name="barcode_enabled"
+                       {% if settings.get('barcode_enabled', 'off') == 'on' %}checked{% endif %} />
+                <label class="form-check-label" for="barcodeEnabled">
+                  Workers scan a card to clock in and out
+                </label>
+              </div>
+              <div class="form-text">
+                Adds a third check at the capture point. The card is something the worker
+                <em>has</em>, the PIN something they <em>know</em>, the face something they
+                <em>are</em>. A worker without a card can still clock in with their worker number,
+                and the audit log records when the card was not used.
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="barcodeRequirePin" name="barcode_require_pin"
+                       {% if settings.get('barcode_require_pin', 'on') == 'on' %}checked{% endif %} />
+                <label class="form-check-label" for="barcodeRequirePin">
+                  Still ask for the PIN after a card is scanned
+                </label>
+              </div>
+              <div class="form-text">
+                Leave this on to keep all three checks. Turning it off makes the queue faster but
+                drops to two: the card and the face.
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">What the barcode contains</label>
+              <select class="form-select" name="barcode_source">
+                {% for key, meta in card_sources.items() %}
+                <option value="{{ key }}"
+                        {% if settings.get('barcode_source', 'nrc_plain') == key %}selected{% endif %}>
+                  {{ meta.label }}
+                </option>
+                {% endfor %}
+              </select>
+              {# The trade-off is stated here rather than left to the manual,
+                 because this is the screen on which it is actually decided. #}
+              <div class="form-text">
+                <strong>This choice has a privacy consequence.</strong>
+                <ul class="mb-0 ps-3">
+                  <li><strong>The NRC itself</strong> — anyone who finds a dropped card and scans it
+                      with a free phone app reads that worker's national registration number.</li>
+                  <li><strong>A one-way scramble of the NRC</strong> — still unique to the person and
+                      still derived from their NRC, but the NRC cannot be read back out of it.
+                      A lost card cannot be given a different number.</li>
+                  <li><strong>A generated card number</strong> — means nothing outside this system,
+                      and is the only option under which a lost card can be voided and replaced
+                      cleanly.</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Barcode type</label>
+              <select class="form-select" name="barcode_symbology">
+                {% for key, label in card_symbologies.items() %}
+                <option value="{{ key }}"
+                        {% if settings.get('barcode_symbology', 'code128') == key %}selected{% endif %}>
+                  {{ label }}
+                </option>
+                {% endfor %}
+              </select>
+              <div class="form-text">
+                Changing this changes how new cards print. Cards already in workers' pockets keep
+                working — the value on them has not changed, only the way it is drawn.
+              </div>
+
+              <div class="form-check form-switch mt-3">
+                <input class="form-check-input" type="checkbox" role="switch" id="barcodeCamera" name="barcode_camera_scan"
+                       {% if settings.get('barcode_camera_scan', 'on') == 'on' %}checked{% endif %} />
+                <label class="form-check-label" for="barcodeCamera">
+                  Allow reading a card with the device camera
+                </label>
+              </div>
+              <div class="form-text">
+                For a supervisor with a phone and no scanner. Works in Chrome and on Android; the
+                button hides itself where the browser cannot do it.
+              </div>
+            </div>
+          </div>
+
+          <div class="alert alert-light border mt-3 mb-0 small">
+            <i class="bi bi-upc-scan me-1"></i>
+            <strong>{{ card_stats.carded }}</strong> of
+            <strong>{{ card_stats.active_workers }}</strong> active workers hold a card.
+            {% if card_stats.void %}{{ card_stats.void }} voided.{% endif %}
+            {% if card_stats.without_nrc %}
+              {{ card_stats.without_nrc }} ha{{ 's' if card_stats.without_nrc == 1 else 've' }}
+              no NRC on record, which matters only while the barcode is built from it.
+            {% endif %}
+            Issue and print cards from the <a href="{{ url_for('workers_page') }}">Workers</a> page.
+          </div>
         </div>
       </div>
 

@@ -46,6 +46,11 @@
       </a>
     </li>
     <li class="nav-item">
+      <a href="{{ url_for('analytics') }}" class="nav-link {% if active_page == 'analytics' %}active{% endif %}">
+        <i class="bi bi-graph-up-arrow me-2"></i>Analytics
+      </a>
+    </li>
+    <li class="nav-item">
       <a href="{{ url_for('workers_page') }}" class="nav-link {% if active_page == 'workers' %}active{% endif %}">
         <i class="bi bi-people-fill me-2"></i>Workers
       </a>

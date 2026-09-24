@@ -116,6 +116,8 @@ class Worker(db.Model):
                    are wiped. A worker with no samples cannot clock in.
       status       "active", "inactive" or "suspended". Only active workers can
                    clock in or appear in payroll generation.
+      card_barcode the value on the worker's scannable card. Its form depends
+                   on the barcode_source setting; see barcode_engine.
     """
     __tablename__ = "workers"
 
@@ -137,6 +139,23 @@ class Worker(db.Model):
     # casual labour weekly and permanent staff monthly, so this has to be
     # settable per person rather than only farm-wide.
     payroll_period = db.Column(db.String(20), nullable=True)
+
+    # --- Identity card ----------------------------------------------------
+    # card_barcode is the value printed on the worker's card and read by the
+    # scanner. What goes in it is a farm setting, not a fixed decision:
+    #   nrc_plain   the NRC itself, readable by anyone who scans the card
+    #   nrc_hash    a one-way scramble of the NRC; unique per person, but the
+    #               NRC cannot be read back from it
+    #   card_number a generated code that means nothing outside this system
+    # See barcode_engine.card_value(). Unique so two workers can never share a
+    # card, and nullable because a worker may not have been issued one yet.
+    card_barcode = db.Column(db.String(64), unique=True, nullable=True)
+    card_issued_at = db.Column(db.DateTime, nullable=True)
+    # "active" or "void". A void card is refused at the capture point even
+    # though the row survives, so a lost card can be retired without deleting
+    # the history that references it.
+    card_status = db.Column(db.String(20), default="active", nullable=True)
+
     face_enrolled_at = db.Column(db.DateTime, nullable=True)
     enrollment_date = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(20), default="active", nullable=False)
