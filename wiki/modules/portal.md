@@ -114,7 +114,8 @@ data URL from the canvas.
 | `GET /me/payslips` | **Paid weeks only**, paginated |
 | `GET /me/payslips/<id>` | One payslip, every component |
 | `GET /me/reports` | The worker's own eight-week record: hours, days, punctuality, earnings, a chart of hours per week |
-| `GET /me/card` | The worker's own identity card, printable. Returns 404 when cards are switched off |
+| `GET /me/card` | The worker's own identity card, both faces, printable. Returns 404 when cards are switched off |
+| `GET /me/photo` | The worker's own enrolment photograph, for that card. Takes no identifier |
 | `GET /me/snapshot/<id>` | One attendance photo, scoped to its owner |
 | `GET /me/logout` | Clears the session |
 
@@ -158,6 +159,30 @@ this page can change it.
 
 A voided card is shown *as voided* rather than hidden, so a worker who reported a
 card lost can see that the report was acted on.
+
+The card shows both faces on screen, labelled *Front* and *Back*, and both labels
+survive into the print stylesheet &mdash; somebody holding two cut-out rectangles
+needs to know which is which before gluing them together. The back carries the
+worker's own name, so they can check the barcode they are attaching is theirs.
+
+### `/me/photo` takes no identifier, deliberately
+
+`/captures/<path>` in app.py is administrator-only and stays that way. This route
+hands a worker exactly one image &mdash; their own &mdash; rather than relaxing
+that one.
+
+Note what it does **not** accept:
+
+```python
+@portal.route("/photo")       # not /photo/<worker_id>
+def photo():
+    me = _me()                # read from the session, not the URL
+```
+
+`/me/photo/<worker_id>` would have been shorter and would have let anybody signed
+in to the portal walk the register collecting photographs of their colleagues.
+Reading the worker from the session leaves nothing to tamper with: asking for
+somebody else's photograph is not refused, it is simply not expressible.
 
 ## Two settings
 

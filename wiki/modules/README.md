@@ -48,7 +48,7 @@ back up.
 | --- | --- | --- | --- |
 | [app.md](app.md) | `app.py` | ~1900 | Application factory, 54 routes, seeding, helpers |
 | [models.md](models.md) | `models.py` | ~520 | The sixteen tables |
-| [face_engine.md](face_engine.md) | `face_engine.py` | ~400 | Detection, enrolment, matching |
+| [face_engine.md](face_engine.md) | `face_engine.py` | ~450 | Detection, enrolment, matching, the card photograph |
 | [attendance_service.md](attendance_service.md) | `attendance_service.py` | ~270 | The clock-in transaction |
 | [cctv_engine.md](cctv_engine.md) | `cctv_engine.py` | ~470 | Cameras, streaming, clips, health |
 | [payroll_engine.md](payroll_engine.md) | `payroll_engine.py` | ~330 | Summaries and pay |
@@ -59,7 +59,7 @@ back up.
 | [sync_engine.md](sync_engine.md) | `sync_engine.py` | ~195 | Cloud upload and the offline queue |
 | [exports.md](exports.md) | `exports.py` | ~175 | CSV generation |
 | [api.md](api.md) | `api.py` | ~390 | The 15 JSON endpoints |
-| [portal.md](portal.md) | `portal.py` | ~530 | The worker self-service portal at `/me` |
+| [portal.md](portal.md) | `portal.py` | ~560 | The worker self-service portal at `/me` |
 | [frontend.md](frontend.md) | `templates/`, `static/` | — | HTML, CSS, JavaScript |
 | [support-modules.md](support-modules.md) | `database.py`, `paths.py`, `migrations.py` | ~100 | The small ones |
 

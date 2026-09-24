@@ -56,7 +56,22 @@ parent rather than pages of their own.
 `cards_print.html` also stands outside the shell, and for a reason worth knowing:
 it lays cards out at true bank-card size (85.6 x 54 mm) for a printer, so a
 sidebar and a navigation bar would be actively in the way. It carries its own
-print stylesheet.
+print stylesheet, and two layouts:
+
+- **fold** &mdash; a worker's front and back printed side by side inside one
+  outer border, with a dashed line down the middle. Cut the pair out as one
+  piece, fold, glue. A barcode physically cannot reach the wrong card.
+- **duplex** &mdash; fronts and backs on alternating pages, ten to a page. Within
+  each row the backs are reversed, because paper flipped on its long edge comes
+  back with its columns swapped; a short row is padded with `.face.blank` so a
+  lone card does not slide into the other column. The reversal is computed in
+  the route rather than in the template, because getting it wrong is what puts
+  one worker's barcode on another worker's card.
+
+Every back prints its owner's ID and name in small type. That is not decoration:
+it is what lets an operator hold a test sheet up to the light and see whether the
+printer paired the two sides correctly. The on-page instructions tell them to do
+exactly that before printing a batch.
 
 `login.html`, `manual.html` and `force_password_change.html` stand outside the
 admin shell — they are seen by people who are not signed in, or not yet allowed

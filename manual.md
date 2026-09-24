@@ -151,9 +151,22 @@ cannot clock in until re-enrolled.
 
 ### 4.5 Worker cards (optional)
 
-A card is a piece of paper or plastic with the worker's name, Worker ID and a
-barcode on it. Scanning it at the terminal tells the system who is standing
-there, before any PIN is typed.
+A card has two sides.
+
+**The front** carries the worker's photograph, name, Worker ID and department,
+so a supervisor can hold the card up and see whether it belongs to the person in
+front of them. The photograph is not a separate picture somebody has to take and
+upload &mdash; it is one of the face samples enrolled on the Biometric page, the
+very image the camera checks against at clock-in. A worker who has not been
+enrolled gets a grey outline where the photograph would be, and the cure is
+enrolment rather than anything on this page.
+
+**The back** carries the barcode, the code in readable type, and &mdash;
+deliberately &mdash; the worker's name and ID again in small print. Section 4.6
+explains why that small print matters more than it looks.
+
+Scanning the card at the terminal tells the system who is standing there, before
+any PIN is typed.
 
 **Switch them on.** Settings -> *Worker cards* -> **Card scanning: on**.
 
@@ -185,10 +198,8 @@ A worker with no NRC on record cannot be issued a card under either NRC option.
 The system says so by name rather than failing quietly. Add the NRC, or switch
 to generated card numbers.
 
-**Print them.** **Workers -> Print cards** lays the cards out on A4 at true
-bank-card size (85.6 x 54 mm). Tick the workers you want, or print the whole
-workforce. **Set the printer to 100% scale** - if it shrinks the page to fit, the
-bars change size and a scanner may refuse to read them.
+**Print them.** **Workers -> Print cards**. Section 4.6 covers this in full,
+because getting it wrong has a consequence worth understanding.
 
 **Scanning at the terminal.** Two ways, and they can both be used at once:
 
@@ -200,6 +211,75 @@ bars change size and a scanner may refuse to read them.
 
 The code can always be typed by hand, which is what you do when a scanner fails
 at six in the morning.
+
+---
+
+### 4.6 Printing the cards without mixing up the barcodes
+
+This is the part of the card system where a careless five minutes causes a
+problem that takes weeks to notice, so it is worth reading before you print
+anything.
+
+**What can go wrong.** A card has a photograph on one side and a barcode on the
+other. If those two ever get paired wrongly &mdash; Musonda's face on the front,
+Mwiza's barcode on the back &mdash; then every time Musonda clocks in, the hours
+are recorded against Mwiza. Nobody notices at the terminal, because the scan
+works perfectly. It surfaces weeks later as a payroll dispute, and by then the
+attendance record is wrong and there is nothing in it to say why.
+
+**What the system does about it.** Every card back is printed with the worker's
+ID and name on it in small type. A back that says whose back it is cannot be
+quietly attached to the wrong front &mdash; you can see the mismatch. That small
+print is the whole safeguard, so do not be tempted to remove it.
+
+**What you do about it.** Choose one of the two methods on the print page.
+
+#### Method 1: Fold (the safe one)
+
+Press **Fold** at the top of the print page. Each worker's two sides print next
+to each other on the same piece of paper.
+
+1. Load card stock or thick paper.
+2. In the print dialogue set **Scale** to **100%**. Not "Fit to page", not
+   "Shrink to fit" &mdash; a resized barcode will not scan.
+3. Set **Two-sided / Duplex** to **off**. Both sides are already on one face of
+   the paper.
+4. Print **one page first** and look at it before printing the rest.
+5. Cut around the **solid outer line**. Each card comes out as one wide piece.
+6. Fold along the **dashed centre line**, so the photograph and the barcode end
+   up back to back. Glue or laminate.
+
+**Why this is the safe method:** the two sides of a card are printed next to each
+other and cut out together. A barcode physically cannot end up on somebody else's
+card. If you are printing for the whole farm at once, use this.
+
+#### Method 2: Double-sided (a neater card, if your printer is reliable)
+
+Press **Double-sided**. Photographs print on one page, barcodes on the next, and
+the page comes out as a single-thickness card rather than a folded one.
+
+1. Load card stock or thick paper.
+2. Set **Scale** to **100%**, as above.
+3. Set **Two-sided** to **Flip on long edge**. Some printers call this
+   "Long-edge binding" or "Book". **Not short edge** &mdash; that turns the backs
+   upside down.
+4. **Print one sheet only first.** Set the page range to **1-2** and print just
+   that.
+5. Hold the sheet up to a window or a lamp. On every card, the small name and ID
+   on the back must be the **same person** as the photograph on the front. If any
+   card disagrees, stop. Your printer is flipping on the wrong edge or reversing
+   the page order &mdash; switch to **Fold**, which cannot go wrong that way.
+6. Only once a test sheet checks out, print the rest.
+7. Cut around the solid outline of each card.
+
+**Do not skip step 5.** It takes ten seconds and it is the only thing standing
+between a mis-feeding printer and a payroll dispute.
+
+#### Before you hand the cards out
+
+Fan through the finished cards and check a few at random: the face on the front
+and the name on the back should agree. It is a thirty-second check on a batch,
+and it is much cheaper than finding out from a payslip.
 
 ---
 
@@ -501,6 +581,8 @@ pulling figures for a report. Notable tables:
 | Clip button shows nothing | Clip recording is off in Settings, or the camera could not be reopened. Check Hardware Health |
 | The scanner types the code but nothing happens | The scanner is not set to send Enter at the end. Either configure it to (the manufacturer's sheet says how) or press Enter yourself |
 | A printed card will not scan | The printer shrank the page. Print again at 100% scale, and check the card is not creased across the bars |
+| The back of a card names a different worker from the front | The double-sided print went wrong. Destroy those cards, and reprint using **Fold** - see section 4.6. Check the attendance recorded since they were issued |
+| A card has a grey outline instead of a photograph | That worker's face is not enrolled. Enrol them on the Biometric page and reprint. The card still works |
 | "Scan with camera" button is missing | The browser cannot read barcodes. Use Chrome or Edge on a desktop, or a USB scanner, or type the code |
 | Analytics says almost everybody is late | The shift start time in Settings is earlier than work actually begins. The page says so itself; correct the setting |
 | Charts are out of date on the office screen | Auto refresh is off for that browser. Set it from the selector at the top of the page |
@@ -535,6 +617,9 @@ had one. Their records stay for the audit trail, but they can no longer clock in
 **When a card is lost:** void it on the Workers page first, then issue and print
 a replacement. Voiding is what stops the old card working; printing a new one on
 its own does not.
+
+**Whenever you print a batch of cards:** check a few at random that the face on
+the front and the name on the back agree - see section 4.6.
 
 ---
 

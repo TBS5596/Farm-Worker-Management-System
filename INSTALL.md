@@ -477,7 +477,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-170 tests, about a minute. All should pass.
+186 tests, about a minute. All should pass.
 
 ### Check the recognizer really loaded
 

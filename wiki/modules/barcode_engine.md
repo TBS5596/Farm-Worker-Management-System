@@ -16,6 +16,13 @@ This module owns four small jobs: deciding what value goes on a worker's card,
 drawing that value as a barcode, looking a scanned value back up, and counting
 how much of the workforce has been carded.
 
+The card itself has two sides. The **front** carries the worker's photograph,
+name, ID and department; the **back** carries the barcode. The photograph comes
+from [`face_engine.profile_photo_for()`](face_engine.md), not from here &mdash;
+and it is one of the crops the recogniser was trained on rather than a separate
+upload, so a supervisor comparing card to face is looking at exactly what the
+system compares against.
+
 | | |
 | --- | --- |
 | **Owns** | Card values, SVG rendering, scan normalisation, card lookup |
@@ -142,9 +149,34 @@ simpler — and rejected, because anyone on the farm network could then have
 enumerated cardholders by trying values. The worker's name is shown on the
 confirmation **after** the identity check has passed, not before it.
 
+## The failure this design is built around
+
+A card has a photograph on one side and a barcode on the other. Pair those two
+wrongly and one worker's clock-ins are recorded under another's name &mdash;
+silently, because the scan itself works perfectly. It surfaces weeks later as a
+payroll dispute, by which point the attendance table is wrong and contains
+nothing to say why.
+
+Three things guard against it, and only the first is in this module:
+
+1. **`resolve()` is the only way a scan becomes a worker.** There is no path
+   where a value is trusted because of where it was printed.
+2. **Every card back is printed with its owner's ID and name** (see
+   `templates/cards_print.html`). A back that names its owner cannot be quietly
+   attached to the wrong front. This is the safeguard; do not remove it to save
+   space.
+3. **The print sheet offers two layouts**, and the safe one is the default.
+   *Fold* prints both sides of a card next to each other to be cut out as one
+   piece, so a mis-pairing is physically impossible. *Duplex* prints fronts and
+   backs on alternating pages, with each row's backs reversed to survive a
+   long-edge flip, and a short row padded with a blank so a lone card does not
+   slide into the wrong column. An unrecognised `layout` parameter falls back to
+   *fold*, because that is the one that cannot go wrong.
+
 ## Related pages
 
 - [app.md](app.md) — the issuing, voiding, printing and clock-in routes
 - [portal.md](portal.md) — `/me/card`, where a worker prints their own replacement
+- [face_engine.md](face_engine.md) — where the card's photograph comes from
 - [models.md](models.md) — the three columns above
 - [../03-follow-a-clock-in.md](../03-follow-a-clock-in.md) — where the scan sits in the transaction

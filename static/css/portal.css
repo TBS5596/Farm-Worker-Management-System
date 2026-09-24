@@ -17,6 +17,7 @@
   --p-page: #f4f6f9;
   --p-line: #e3e7ec;
   --p-muted: #5f6b76;
+  --p-ink: #14211b;
 }
 
 body.portal {
@@ -302,6 +303,64 @@ body.portal-signin {
 }
 .card-name { font-size: 1.05rem; font-weight: 700; line-height: 1.15; margin-top: .15rem; }
 .card-meta { font-size: .72rem; color: var(--p-muted); margin-top: .1rem; margin-bottom: auto; }
+
+/* --- the front: photograph beside the details ------------------------- */
+.card-front {
+  flex-direction: row;
+  align-items: center;
+  gap: 4mm;
+  justify-content: flex-start;
+}
+.card-photo {
+  width: 24mm;
+  height: 30mm;
+  flex: 0 0 24mm;
+  border: 1px solid var(--p-line);
+  border-radius: 1.5mm;
+  background: #eef2f0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.card-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.card-photo svg { width: 60%; height: 60%; color: #9aa5ad; }
+.card-details { min-width: 0; }
+.card-wid {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: .95rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  margin-top: .3rem;
+}
+.card-dept { font-size: .72rem; color: var(--p-muted); margin-top: .15rem; }
+
+/* --- the back: who it belongs to, then the barcode -------------------- */
+.card-back { justify-content: space-between; align-items: center; }
+/* The owner named on the back as well. It is what lets a worker check, when
+   they cut the two faces out, that the barcode they are gluing on is theirs. */
+.card-owner {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: .5rem;
+  font-size: .66rem;
+  color: var(--p-muted);
+}
+.card-owner .who { font-weight: 700; color: var(--p-ink); }
+.card-found { width: 100%; text-align: center; font-size: .6rem; color: var(--p-muted); }
+
+.card-side-label {
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--p-muted);
+  margin: .9rem 0 .35rem;
+  text-align: center;
+}
+.card-side-label:first-child { margin-top: 0; }
+
 .card-bars { text-align: center; line-height: 0; margin-top: .6rem; }
 .card-bars svg { max-width: 100%; height: 13mm; }
 .card-code {
@@ -313,12 +372,26 @@ body.portal-signin {
   word-break: break-all;
 }
 
+/* Numbered printing steps under the print button. */
+.p-steps {
+  margin: .9rem 0 0;
+  padding-left: 1.1rem;
+  font-size: .82rem;
+  color: var(--p-muted);
+  line-height: 1.45;
+}
+.p-steps li { margin-bottom: .35rem; }
+.p-steps li:last-child { margin-bottom: 0; }
+
 @media print {
-  .portal-head, .portal-tabs, .btn-solid, .p-note, .flash-messages { display: none !important; }
+  .portal-head, .portal-tabs, .btn-solid, .p-note, .p-steps, .flash-messages { display: none !important; }
   body, .portal-main { background: #fff; padding: 0; margin: 0; }
   .p-card { border: 0; box-shadow: none; padding: 0; }
   .p-card:not(.card-print-area) { display: none !important; }
-  .card-face { border: 1px dashed #9aa5ad; }
+  .card-face { border: 1px dashed #9aa5ad; page-break-inside: avoid; break-inside: avoid; }
+  /* The side labels do print. Somebody holding two cut-out rectangles needs to
+     know which is which before gluing them together. */
+  .card-side-label { color: #5f6b76; }
 }
 
 /* --- My record --------------------------------------------------------- */

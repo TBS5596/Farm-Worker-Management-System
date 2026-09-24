@@ -49,9 +49,9 @@
     <li><strong>Payroll</strong> - pick the cycle and a date in the period, and generate.</li>
     <li><em>Optional:</em> <strong>Settings &rarr; Worker cards</strong> to switch cards
         on, then <strong>Workers &rarr; Issue cards</strong> and print the sheet
-        (section 4).</li>
+        (sections 4 and 5).</li>
     <li>Tell workers they can check their own hours and payslips at <code>/me</code>
-        on their phones (section 9).</li>
+        on their phones (section 10).</li>
   </ol>
 
   <h5 class="section-title">2) Worker Onboarding</h5>
@@ -107,12 +107,34 @@
 
   <h5 class="section-title">4) Worker Cards</h5>
   <p>
-    Optional. A card is paper or plastic carrying the worker's name, Worker ID and a
-    barcode. Scanning it says <em>who is standing here</em> before any PIN is typed, so a
-    clock-in can check all three things at once: the card the worker
+    Optional. Scanning a card says <em>who is standing here</em> before any PIN is typed,
+    so a clock-in can check all three things at once: the card the worker
     <strong>has</strong>, the PIN they <strong>know</strong>, and the face they
     <strong>are</strong>. Each of the three can be switched off in Settings.
   </p>
+
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered align-middle">
+      <thead class="table-light"><tr><th>Side</th><th>What is on it</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Front</strong></td>
+          <td>The worker's photograph, name, Worker ID and department, so a supervisor can
+              hold the card up and see whether it belongs to the person in front of them.
+              The photograph is <strong>not</strong> a separate upload &mdash; it is one of
+              the face samples enrolled on the Biometric page, the very image the camera
+              checks against at clock-in. A worker who is not enrolled gets a grey outline
+              instead, and the cure is enrolment.</td>
+        </tr>
+        <tr>
+          <td><strong>Back</strong></td>
+          <td>The barcode, the code in readable type, and &mdash; deliberately &mdash; the
+              worker's name and ID again in small print. Section 5 of this page explains
+              why that small print matters more than it looks.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 
   <div class="example-box">
     <p class="mb-1"><strong>The one decision worth thinking about</strong></p>
@@ -160,9 +182,8 @@
   </p>
 
   <p>
-    <strong>Printing.</strong> <strong>Workers &rarr; Print cards</strong> lays them out on
-    A4 at true bank-card size. <strong>Set the printer to 100% scale</strong> - if it
-    shrinks the page to fit, the bars change size and a scanner may refuse to read them.
+    <strong>Printing.</strong> <strong>Workers &rarr; Print cards</strong>, then read the
+    next section before you press Print.
   </p>
 
   <p>
@@ -174,7 +195,104 @@
     morning.
   </p>
 
-  <h5 class="section-title">5) Verified Clock In and Out</h5>
+  <h5 class="section-title">5) Printing Cards Without Mixing Up The Barcodes</h5>
+
+  <div class="example-box">
+    <p class="mb-1"><strong>What can go wrong, and why it is expensive</strong></p>
+    <p class="mb-0">
+      A card has a photograph on one side and a barcode on the other. If those two are
+      ever paired wrongly &mdash; Musonda's face on the front, Mwiza's barcode on the back
+      &mdash; then every time Musonda clocks in, <strong>the hours are recorded against
+      Mwiza</strong>. Nobody notices at the terminal, because the scan works perfectly. It
+      surfaces weeks later as a payroll dispute, by which point the attendance record is
+      wrong and contains nothing to say why.
+    </p>
+  </div>
+
+  <p class="mt-3">
+    <strong>What the system does about it.</strong> Every card back is printed with the
+    worker's ID and name on it in small type. A back that names its owner cannot be
+    quietly attached to the wrong front &mdash; you can see the mismatch. That small print
+    is the whole safeguard.
+  </p>
+
+  <h6 class="flow-title">Method 1: Fold &mdash; the safe one</h6>
+  <p>
+    Press <strong>Fold</strong> at the top of the print page. Each worker's two sides print
+    next to each other on one piece of paper.
+  </p>
+  <ol>
+    <li>Load card stock or thick paper.</li>
+    <li>Set <strong>Scale</strong> to <strong>100%</strong>. Not "Fit to page", not
+        "Shrink to fit" &mdash; a resized barcode will not scan.</li>
+    <li>Set <strong>Two-sided / Duplex</strong> to <strong>off</strong>. Both sides are
+        already on one face of the paper.</li>
+    <li>Print <strong>one page first</strong> and look at it before printing the rest.</li>
+    <li>Cut around the <strong>solid outer line</strong>. Each card comes out as one wide
+        piece.</li>
+    <li>Fold along the <strong>dashed centre line</strong>, so the photograph and the
+        barcode end up back to back. Glue or laminate.</li>
+  </ol>
+  <p>
+    <strong>Why this is the safe method:</strong> both sides of a card are printed next to
+    each other and cut out together, so a barcode physically cannot end up on somebody
+    else's card. If you are printing for the whole farm at once, use this.
+  </p>
+
+  <h6 class="flow-title">Method 2: Double-sided &mdash; neater, if your printer is reliable</h6>
+  <p>
+    Press <strong>Double-sided</strong>. Photographs print on one page, barcodes on the
+    next, and you get a single-thickness card rather than a folded one.
+  </p>
+  <ol>
+    <li>Load card stock or thick paper.</li>
+    <li>Set <strong>Scale</strong> to <strong>100%</strong>, as above.</li>
+    <li>Set <strong>Two-sided</strong> to <strong>Flip on long edge</strong> (some printers
+        call this "Long-edge binding" or "Book"). <strong>Not short edge</strong> &mdash;
+        that turns the backs upside down.</li>
+    <li><strong>Print one sheet only first.</strong> Set the page range to
+        <code>1-2</code>.</li>
+    <li>Hold that sheet up to a window or a lamp. On every card, the small name and ID on
+        the back must be the <strong>same person</strong> as the photograph on the front.
+        If any card disagrees, stop &mdash; your printer is flipping on the wrong edge or
+        reversing the page order. Switch to <strong>Fold</strong>, which cannot go wrong
+        that way.</li>
+    <li>Only once a test sheet checks out, print the rest.</li>
+    <li>Cut around the solid outline of each card.</li>
+  </ol>
+  <p><strong>Do not skip step 5.</strong> It takes ten seconds, and it is the only thing
+     standing between a mis-feeding printer and a payroll dispute.</p>
+
+  <h6 class="flow-title">Flowchart: choosing a method</h6>
+  <pre class="flowchart-block">[Printing cards]
+       |
+       v
+[Printing for the whole farm at once?] --yes--> [Use FOLD]
+       |no
+       v
+[Does your printer duplex reliably?] --no / not sure--> [Use FOLD]
+       |yes
+       v
+[Use DOUBLE-SIDED]
+       |
+       v
+[Print pages 1-2 only]
+       |
+       v
+[Hold to the light: does every back name the face on its front?]
+       |                                   \
+      yes                                   no
+       |                                     \
+       v                                      v
+[Print the rest]                        [Stop. Switch to FOLD.]</pre>
+
+  <p class="mt-3">
+    <strong>Before you hand them out.</strong> Fan through the finished cards and check a
+    few at random: the face on the front and the name on the back should agree. Thirty
+    seconds on a batch, and much cheaper than finding out from a payslip.
+  </p>
+
+  <h5 class="section-title">6) Verified Clock In and Out</h5>
   <p>
     Workers use the home page - they never sign in to the dashboard. They enter their
     Worker ID and PIN, choose Clock In or Clock Out, and look at the camera. With cards
@@ -276,7 +394,7 @@
     </table>
   </div>
 
-  <h5 class="section-title">6) Attendance Records</h5>
+  <h5 class="section-title">7) Attendance Records</h5>
   <ul>
     <li><strong>Identity</strong> - a green badge with the match score means the face
         matched the enrolled template.</li>
@@ -287,7 +405,7 @@
     <li><strong>Export CSV</strong> - the whole table for a spreadsheet or report.</li>
   </ul>
 
-  <h5 class="section-title">7) Analytics</h5>
+  <h5 class="section-title">8) Analytics</h5>
   <p>
     <strong>Dashboard &rarr; Analytics.</strong> The Attendance page says what happened;
     this page says what it means. Every figure is computed from the attendance and payroll
@@ -352,7 +470,7 @@
     tab.
   </p>
 
-  <h5 class="section-title">8) Payroll</h5>
+  <h5 class="section-title">9) Payroll</h5>
   <div class="example-box">
     <p class="mb-2"><strong>Example:</strong> pay the week ending Sunday 23 August.</p>
     <ol class="mb-0">
@@ -435,7 +553,7 @@
    +-- other paid period      --> skipped, reported in red
        covers these days          (stops a double payment)</pre>
 
-  <h5 class="section-title">9) For Workers: Your Own Hours and Payslips</h5>
+  <h5 class="section-title">10) For Workers: Your Own Hours and Payslips</h5>
   <p>
     Workers can look up their own records without asking anyone. This is separate from
     clocking in, and it gives <strong>no access to the office pages</strong>.
@@ -549,7 +667,7 @@
     - it is what makes a PIN safe to use for wage history.
   </p>
 
-  <h5 class="section-title">10) Cameras and Clips</h5>
+  <h5 class="section-title">11) Cameras and Clips</h5>
   <ul>
     <li><strong>Health Check</strong> opens every registered camera and records the result
         under Hardware Health. Worth running each morning.</li>
@@ -560,7 +678,7 @@
         snapshots; the rest are surveillance.</li>
   </ul>
 
-  <h5 class="section-title">11) Users and Roles</h5>
+  <h5 class="section-title">12) Users and Roles</h5>
   <div class="table-responsive">
     <table class="table table-sm table-bordered align-middle">
       <thead class="table-light"><tr><th>Role</th><th>Can do</th></tr></thead>
@@ -580,7 +698,7 @@
     deactivated. Every action is recorded on the <strong>Audit Log</strong> page.
   </p>
 
-  <h5 class="section-title">12) Edit and Reset Operations</h5>
+  <h5 class="section-title">13) Edit and Reset Operations</h5>
   <div class="example-box">
     <ol class="mb-0">
       <li>Click the row's <i class="bi bi-pencil-square"></i> button.</li>
@@ -590,7 +708,7 @@
     </ol>
   </div>
 
-  <h5 class="section-title">13) Troubleshooting</h5>
+  <h5 class="section-title">14) Troubleshooting</h5>
   <div class="table-responsive">
     <table class="table table-sm table-bordered align-middle">
       <thead class="table-light"><tr><th>Symptom</th><th>Cause and fix</th></tr></thead>
@@ -631,6 +749,13 @@
         <tr><td>A printed card will not scan</td>
             <td>The printer shrank the page. Print again at 100% scale, and check the card
                 is not creased across the bars</td></tr>
+        <tr><td>The back of a card names a different worker from the front</td>
+            <td>The double-sided print went wrong. Destroy those cards and reprint using
+                <strong>Fold</strong> (section 5). Check the attendance recorded since they
+                were issued &mdash; hours may have gone to the wrong person</td></tr>
+        <tr><td>A card shows a grey outline instead of a photograph</td>
+            <td>That worker's face is not enrolled. Enrol them on the Biometric page and
+                reprint. The card still works meanwhile</td></tr>
         <tr><td>"Scan with camera" button is missing</td>
             <td>The browser cannot read barcodes. Use Chrome or Edge on a desktop, a USB
                 scanner, or type the code</td></tr>
@@ -646,7 +771,7 @@
     </table>
   </div>
 
-  <h5 class="section-title">14) Routine</h5>
+  <h5 class="section-title">15) Routine</h5>
   <ul class="mb-0">
     <li><strong>Each morning:</strong> CCTV &rarr; Health Check; confirm the attendance
         camera is online.</li>
@@ -667,6 +792,8 @@
     <li><strong>Card lost:</strong> void it on the Workers page <em>first</em>, then issue
         and print a replacement. Voiding is what stops the old card working; printing a new
         one on its own does not.</li>
+    <li><strong>After printing a batch of cards:</strong> fan through them and check a few
+        at random that the face on the front and the name on the back agree (section 5).</li>
   </ul>
 </div>
 {% endblock %}

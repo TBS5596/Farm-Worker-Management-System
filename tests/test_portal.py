@@ -253,3 +253,72 @@ def test_signed_out_visitors_are_sent_to_the_portal_sign_in(client, portal_worke
         response = client.get(route)
         assert response.status_code == 302
         assert "/me/" in response.headers["Location"]
+
+
+# ---------------------------------------------------------------------------
+# The worker's own card, and the photograph on it
+#
+# `/captures/<path>` in app.py is administrator-only and stays that way. These
+# tests exist to prove that letting a worker see their own face did not quietly
+# open a door onto everybody else's.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture()
+def carded(portal_worker, setting):
+    import barcode_engine
+    setting("barcode_enabled", "on")
+    barcode_engine.issue_card(db, portal_worker, "card_number")
+    return portal_worker
+
+
+def test_the_card_page_shows_both_faces(client, carded):
+    _sign_in_worker(client, carded)
+    page = client.get("/me/card").get_data(as_text=True)
+
+    assert "card-front" in page
+    assert "card-back" in page
+    # The worker's own name on the back as well, so that when they cut the two
+    # pieces out they can see the barcode they are gluing on is theirs.
+    assert page.count(carded.name) >= 2
+
+
+def test_an_unenrolled_worker_gets_a_placeholder_not_a_broken_image(client, carded):
+    _sign_in_worker(client, carded)
+    page = client.get("/me/card").get_data(as_text=True)
+
+    assert "No photograph on file" in page
+    assert client.get("/me/photo").status_code == 404
+
+
+def test_the_photo_route_refuses_anyone_not_signed_in(client, carded):
+    assert client.get("/me/photo").status_code in (302, 401, 403, 404)
+
+
+def test_the_photo_route_takes_no_worker_identifier(client, carded, make_worker):
+    """There is nothing in the URL to tamper with, by design.
+
+    A route like `/me/photo/<worker_id>` would have been shorter and would have
+    let anybody signed in to the portal walk the register collecting
+    photographs of their colleagues. The worker is read from the session
+    instead, so asking for somebody else's is not refused - it is simply not
+    expressible.
+    """
+    import face_engine
+    other = make_worker(name="Somebody Else")
+    _sign_in_worker(client, carded)
+
+    # There is no path variant carrying an identifier.
+    assert client.get(f"/me/photo/{other.id}").status_code == 404
+
+    # And a query parameter is ignored rather than honoured: both of these
+    # return the signed-in worker's own result, whatever it is.
+    plain = client.get("/me/photo")
+    spoofed = client.get(f"/me/photo?worker_id={other.worker_id}")
+    assert plain.status_code == spoofed.status_code
+    assert plain.get_data() == spoofed.get_data()
+
+
+def test_the_card_page_is_hidden_when_cards_are_switched_off(client, portal_worker, setting):
+    setting("barcode_enabled", "off")
+    _sign_in_worker(client, portal_worker)
+    assert client.get("/me/card").status_code == 404
