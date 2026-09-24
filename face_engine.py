@@ -25,6 +25,7 @@ import numpy as np
 
 from database import db
 from models import FaceTemplate, Worker
+from paths import BASE_DIR, FACES_DIR
 
 # Every enrolled sample and every probe is normalised to this size, so the
 # recognizer always compares like with like.
@@ -154,6 +155,49 @@ def sample_counts() -> dict[int, int]:
 
 def sample_count_for(worker_pk: int) -> int:
     return int(FaceTemplate.query.filter_by(worker_id=worker_pk).count())
+
+
+def profile_photo_for(worker: Worker) -> str | None:
+    """The enrolment crop that best represents this worker, or None.
+
+    The card's photograph is not a second, separately uploaded picture. It is
+    one of the very crops the recognizer was trained on, which is the point: a
+    supervisor comparing the card to the face in front of them is looking at
+    exactly what the system compares against. A separate "profile picture"
+    could drift away from the enrolled template and quietly stop meaning
+    anything.
+
+    Of a worker's samples, the sharpest is chosen - quality_score is the
+    Laplacian variance of the crop, so the highest is the least blurred, and a
+    blurred face on a card helps nobody.
+
+    Returns a path relative to the project root, such as
+    ``captures/faces/enroll_0001_03.jpg``, so callers can hand it to the
+    captures route or read it from disk.
+    """
+    rows = (FaceTemplate.query
+            .filter_by(worker_id=worker.id)
+            .order_by(FaceTemplate.quality_score.desc().nullslast(),
+                      FaceTemplate.sample_index.asc())
+            .all())
+
+    for row in rows:
+        stored = (row.reference_image_path or "").strip()
+        if stored and os.path.exists(os.path.join(BASE_DIR, stored)):
+            return stored.replace(os.sep, "/")
+
+    # Fall back to the naming convention. A database restored without its
+    # reference paths, or upgraded from a release that did not record them,
+    # still has the files on disk under a predictable name - and a card with a
+    # photograph on it is worth one directory listing to recover.
+    try:
+        prefix = f"enroll_{worker.worker_id}_"
+        names = sorted(n for n in os.listdir(FACES_DIR)
+                       if n.startswith(prefix) and n.lower().endswith((".jpg", ".jpeg", ".png")))
+    except OSError:
+        return None
+
+    return f"captures/faces/{names[0]}" if names else None
 
 
 def enroll_frame(worker: Worker, frame, reference_dir: str, require_eyes: bool = True) -> dict:

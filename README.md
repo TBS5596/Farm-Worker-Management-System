@@ -52,7 +52,7 @@ queued and retried.
 | Payroll | Weekly, fortnightly, semi-monthly or monthly generation from attendance, set farm-wide and overridable per worker. Overtime, NAPSA and NHIMA at configurable rates. Paid periods protected, and an overlap guard that refuses to pay the same day twice |
 | CCTV | Multiple USB and RTSP feeds, live MJPEG views with face and motion overlays, event and manual clips, camera health checks |
 | Access control | Enforced roles (administrator, supervisor, viewer), forced password change on first login, full audit trail |
-| Worker cards | A printed barcode card per worker, issued singly or for the whole workforce. The farm chooses what the barcode carries: the NRC, a one-way scramble of it, or a meaningless generated number. Cards print on an A4 sheet at true bank-card size, and a lost card is voided rather than deleted |
+| Worker cards | A two-sided printed card per worker: photograph, name, ID and department on the front, barcode on the back. The photograph is the enrolled face sample, so the card shows exactly what the camera checks against. The farm chooses what the barcode carries: the NRC, a one-way scramble of it, or a meaningless generated number. Two print layouts (fold, or double-sided), every back printed with its owner's name so a mis-collated sheet cannot go unnoticed, and a lost card is voided rather than deleted |
 | Analytics | A page that answers four questions in plain English - is attendance still being verified, who is not coming to work, where is the wage bill going, when is the work happening - with charts, ranked tables and a suggested action beside each finding |
 | Reporting | Attendance trend chart, CSV exports for attendance, payroll, summaries, verification attempts and the audit log. Every charted page can refresh itself on a chosen interval |
 | Worker portal | Self-service at `/me`: a worker signs in with their code, PIN and face to see their own details, attendance, paid payslips, their own hours-and-earnings record and their own card - on their phone. Read-only, and scoped to one person |
@@ -214,7 +214,10 @@ understanding that a PIN alone is then enough again.
    **Attendance** with a match score.
 7. **Payroll** - choose a week ending date and generate.
 8. *Optional:* **Settings -> Worker cards** - switch cards on, choose what the
-   barcode carries, then **Workers -> Issue cards** and print the sheet.
+   barcode carries, then **Workers -> Issue cards** and print the sheet. Read
+   the printing section of [manual.md](manual.md) first: a card whose barcode
+   belongs to a different worker records that worker's hours against the wrong
+   person, and the print page's two layouts exist to prevent it.
 
 ---
 
@@ -361,11 +364,12 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-170 tests covering worker ID generation and PIN uniqueness, face template storage
+186 tests covering worker ID generation and PIN uniqueness, face template storage
 and matching, the clock in/out session rules, geofence behaviour, payroll
 arithmetic and weekly generation, the worker portal, identity cards and the
-scan-to-worker lookup, the Analytics figures, role enforcement, the API and CSV
-exports. The suite uses a temporary database and never touches `fms.db`.
+scan-to-worker lookup, both card print layouts and the mirroring that keeps a
+double-sided sheet aligned, the Analytics figures, role enforcement, the API and
+CSV exports. The suite uses a temporary database and never touches `fms.db`.
 
 Four of those tests use a real photograph - enrolling it through the actual HTTP
 endpoint, then checking that the same face is accepted for its own Worker ID and

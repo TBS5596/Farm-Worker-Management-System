@@ -11,22 +11,22 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-170 tests, about a minute, eleven modules.
+186 tests, about a minute, eleven modules.
 
 ```
 tests/test_attendance.py        11 tests
-tests/test_cards.py             30 tests
+tests/test_cards.py             41 tests
 tests/test_cctv_and_sync.py      9 tests
 tests/test_face_engine.py        9 tests
 tests/test_pay_periods.py       21 tests
 tests/test_payroll.py            7 tests
-tests/test_portal.py            29 tests
+tests/test_portal.py            34 tests
 tests/test_real_face.py          4 tests
 tests/test_reports.py           27 tests
 tests/test_security_and_api.py  19 tests
 tests/test_workers.py            4 tests
 
-170 passed
+186 passed
 ```
 
 Useful invocations:
@@ -51,6 +51,13 @@ os.environ["FMS_SECRET_KEY"] = "test-secret-key"
 
 import app as app_module
 ```
+
+`conftest.py` redirects the **captures directory** the same way, for the same
+reason. Identity cards read a worker's enrolment photograph off disk, and the
+fallback that recovers one from its filename would otherwise pick up whatever is
+in the developer's own `captures/faces/` — which makes a card test pass or fail
+depending on who is running it and what they last demonstrated. It cost a
+confusing failure before it was fixed.
 
 The import order is the whole trick. `create_app()` reads `FMS_DATABASE_URI` at
 import time, so setting it first is what redirects the whole application at a
@@ -131,10 +138,14 @@ it just proves less. `requirements-dev.txt` installs it.
 `test_cards.py` and `test_reports.py` were written alongside the features they
 cover, and both are worth reading as examples.
 
-`test_cards.py` (30) covers all three barcode sources, the rendering of both
+`test_cards.py` (41) covers all three barcode sources, the rendering of both
 symbologies, the scan-normalisation cases a real scanner produces, the refusals
-`resolve()` distinguishes, and the HTTP routes behind issuing, voiding and
-printing. Two of its route tests monkeypatch `app_module.record_punch`, because
+`resolve()` distinguishes, the HTTP routes behind issuing, voiding and printing,
+and the card photograph &mdash; including both fallbacks, and the check that one
+worker's enrolment files are never offered on another's card. A group of tests
+covers the two print layouts: that fold is the default, that an unrecognised
+layout falls back to it, that every back names its owner, and that the duplex
+rows reverse and pad so a flipped sheet still lines up. Two of its route tests monkeypatch `app_module.record_punch`, because
 the real route opens a camera and a test machine has none — the fixture is called
 `punches` and it is the pattern to copy if you add another.
 
@@ -156,6 +167,14 @@ overtime to the hours available:
 ```python
 overtime_hours = round(min(max(0.0, float(overtime_hours or 0.0)), total_hours), 2)
 ```
+
+**A card test depended on the developer's own demo data.** A test asserting that
+an unenrolled worker gets a placeholder rather than a photograph passed on a
+clean checkout and failed on a machine where the demo seeder had been run —
+because the filename fallback found `enroll_0001_01.jpg` sitting in the real
+captures directory and the test worker happened to be `0001`. The test was right;
+the fixtures were not isolating the filesystem. `conftest.py` now redirects the
+captures directory as well as the database.
 
 **An unknown barcode source failed silently.** A card test asked what happens
 when `barcode_source` holds a typo. The answer was `None` — the same answer

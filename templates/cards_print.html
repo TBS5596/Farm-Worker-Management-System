@@ -1,14 +1,34 @@
 {#
-  A printable sheet of worker identity cards.
+  A printable sheet of two-sided worker identity cards.
 
   Deliberately standalone rather than extending the admin layout: this page
   exists to come out of a printer, so it carries no sidebar, no navigation and
-  no colour that would drain a farm office's ink. The on-screen toolbar is
-  hidden by the print stylesheet.
+  no colour that would drain a farm office's ink. The on-screen toolbar and the
+  instructions are hidden by the print stylesheet.
 
   Cards are laid to 85.6 x 54 mm, the same footprint as a bank card, so a farm
   can print onto card stock and cut, or print on paper and laminate into a
   standard badge holder.
+
+  FRONT   the worker's photograph, name, worker ID and department
+  BACK    the barcode, the code in readable type, and - deliberately - the
+          worker's ID and name again in small print
+
+  That last detail is the safeguard against the one mistake that matters here.
+  A sheet of anonymous barcodes can be cut or collated wrongly and nobody
+  notices until a worker is refused at the gate, or worse, until one worker's
+  attendance is recorded against another's name. A back that says whose back it
+  is cannot be silently attached to the wrong front.
+
+  Two layouts, because the two ways of printing a two-sided card fail
+  differently:
+
+    fold    front and back side by side. Cut the pair out as one piece, fold
+            down the middle. Any printer, no alignment to get wrong.
+    duplex  fronts on one page, backs on the next, with the backs mirrored so
+            they land behind the right fronts when the paper is flipped on its
+            long edge. A proper single-thickness card, but it depends on the
+            printer feeding straight.
 #}
 <!doctype html>
 <html lang="en">
@@ -31,10 +51,10 @@
       color: var(--ink);
       font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     }
+    .wrap { max-width: 1000px; margin: 0 auto; }
 
+    /* --- on-screen furniture, none of which prints --------------------- */
     .toolbar {
-      max-width: 1000px;
-      margin: 0 auto 18px;
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
@@ -43,6 +63,7 @@
       border: 1px solid var(--line);
       border-radius: 10px;
       padding: 14px 16px;
+      margin-bottom: 18px;
     }
     .toolbar h1 { font-size: 1.05rem; margin: 0; flex: 1 1 auto; }
     .toolbar .count { color: var(--muted); font-size: .88rem; }
@@ -60,58 +81,160 @@
     }
     .btn.secondary { background: #fff; color: var(--green); }
 
-    .note {
-      max-width: 1000px;
-      margin: 0 auto 18px;
+    .layouts {
+      display: flex;
+      gap: 0;
+      border: 1px solid var(--green);
+      border-radius: 7px;
+      overflow: hidden;
+    }
+    .layouts a {
+      padding: 8px 14px;
+      font-size: .88rem;
+      font-weight: 600;
+      text-decoration: none;
+      color: var(--green);
+      background: #fff;
+    }
+    .layouts a.on { background: var(--green); color: #fff; }
+
+    .steps {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--green);
+      border-radius: 10px;
+      padding: 16px 18px;
+      margin-bottom: 18px;
+      font-size: .9rem;
+      line-height: 1.5;
+    }
+    .steps h2 { font-size: .98rem; margin: 0 0 10px; }
+    .steps ol { margin: 0; padding-left: 20px; }
+    .steps li { margin-bottom: 7px; }
+    .steps li:last-child { margin-bottom: 0; }
+    .steps .why {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+    }
+    .steps code {
+      background: #eef2f0;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: .86em;
+    }
+
+    .warn {
       background: #fff8e6;
       border: 1px solid #e8d9a8;
       border-radius: 10px;
-      padding: 12px 16px;
-      font-size: .88rem;
+      padding: 14px 18px;
+      margin-bottom: 18px;
+      font-size: .9rem;
+      line-height: 1.5;
       color: #6b5518;
     }
-    .note ul { margin: 6px 0 0; padding-left: 20px; }
+    .warn strong { color: #5a4512; }
 
-    .sheet {
-      max-width: 1000px;
-      margin: 0 auto;
+    /* --- the cards themselves ------------------------------------------ */
+    .sheet { display: flex; flex-wrap: wrap; gap: 12px; }
+
+    .pair {
       display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+      border: 1px solid var(--line);
+      border-radius: 3mm;
+      background: #fff;
+      overflow: hidden;
     }
+    /* The fold line. Dashed rather than solid so nobody cuts along it. */
+    .pair .face + .face { border-left: 1px dashed #9aa5ad; }
 
-    .card {
+    .face {
       width: 85.6mm;
       height: 54mm;
       background: #fff;
-      border: 1px solid var(--line);
-      border-radius: 3mm;
       padding: 4mm 5mm;
       display: flex;
       flex-direction: column;
-      justify-content: space-between;
       page-break-inside: avoid;
       break-inside: avoid;
     }
-    .card .farm {
+    .sheet > .face {
+      border: 1px solid var(--line);
+      border-radius: 3mm;
+    }
+
+    /* --- front --------------------------------------------------------- */
+    .front { flex-direction: row; gap: 4mm; align-items: stretch; }
+    .front .photo {
+      width: 24mm;
+      flex: 0 0 24mm;
+      border-radius: 1.5mm;
+      overflow: hidden;
+      background: #eef2f0;
+      border: .3mm solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      align-self: center;
+      height: 30mm;
+    }
+    .front .photo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .front .photo svg { width: 60%; height: 60%; color: #9aa5ad; }
+    .front .details {
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-width: 0;
+    }
+    .farm {
       font-size: 2.6mm;
       letter-spacing: .08em;
       text-transform: uppercase;
       color: var(--green);
       font-weight: 700;
     }
-    .card .name {
+    .name {
       font-size: 4.2mm;
       font-weight: 700;
       line-height: 1.15;
-      margin-top: 1mm;
+      margin-top: 1.2mm;
+      word-break: break-word;
     }
-    .card .meta {
-      font-size: 2.9mm;
+    .wid {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 3.6mm;
+      font-weight: 700;
+      letter-spacing: .06em;
+      margin-top: 1.4mm;
+    }
+    .dept { font-size: 2.9mm; color: var(--muted); margin-top: .8mm; }
+
+    /* --- back ---------------------------------------------------------- */
+    .back { justify-content: space-between; align-items: center; }
+    /* The owner, restated. This is what stops a back reaching the wrong
+       front without anybody noticing. */
+    .back .owner {
+      width: 100%;
+      font-size: 2.7mm;
       color: var(--muted);
-      margin-top: .6mm;
+      display: flex;
+      justify-content: space-between;
+      gap: 2mm;
     }
-    .card .code {
+    .back .owner .who { font-weight: 700; color: var(--ink); }
+    .back .bars { text-align: center; line-height: 0; width: 100%; }
+    .back .bars svg { max-width: 100%; height: 13mm; }
+    .back .code {
       /* The value in readable type as well as in bars: when a scanner fails,
          or a card is creased across the barcode, a supervisor can still type
          it in and the worker is not turned away. */
@@ -119,94 +242,229 @@
       font-size: 3mm;
       letter-spacing: .04em;
       text-align: center;
-      color: var(--ink);
       margin-top: .8mm;
       word-break: break-all;
     }
-    .card .bars {
+    .back .found {
+      width: 100%;
+      font-size: 2.4mm;
+      color: var(--muted);
       text-align: center;
-      line-height: 0;
-    }
-    .card .bars svg {
-      max-width: 100%;
-      height: 13mm;
     }
 
-    .missing {
-      max-width: 1000px;
-      margin: 20px auto 0;
+    /* --- duplex pages --------------------------------------------------- */
+    .page { page-break-after: always; break-after: page; }
+    .page:last-child { page-break-after: auto; break-after: auto; }
+    .page-label {
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 0 0 8px;
+    }
+    .duplex-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+    /* Holds the column open where a short row has no card, so the mirrored
+       back still lands behind the right front. */
+    .face.blank { border: 0 !important; background: none; }
+
+    /* --- everything else ------------------------------------------------ */
+    .missing, .empty {
       background: #fff;
       border: 1px solid var(--line);
       border-radius: 10px;
       padding: 14px 16px;
       font-size: .88rem;
+      margin-top: 20px;
     }
     .missing h2 { font-size: .95rem; margin: 0 0 8px; }
     .missing li { margin-bottom: 3px; color: var(--muted); }
-
-    .empty {
-      max-width: 1000px;
-      margin: 0 auto;
-      background: #fff;
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 28px;
-      text-align: center;
-      color: var(--muted);
-    }
+    .empty { text-align: center; color: var(--muted); padding: 28px; }
 
     @media print {
       body { background: #fff; padding: 0; }
-      .toolbar, .note, .missing { display: none !important; }
-      .sheet { max-width: none; gap: 4mm; }
-      .card { border: 1px dashed #9aa5ad; }
+      .wrap { max-width: none; }
+      .toolbar, .steps, .warn, .missing, .page-label { display: none !important; }
+      .sheet, .duplex-row { gap: 4mm; }
+      .pair, .sheet > .face { border: 1px solid #9aa5ad; }
+      @page { margin: 8mm; }
     }
   </style>
 </head>
 <body>
+<div class="wrap">
 
   <div class="toolbar">
     <h1>Worker cards</h1>
     <span class="count">
       {{ cards|length }} card{{ '' if cards|length == 1 else 's' }} ready
+      {%- if photos_enrolled < cards|length %},
+        {{ cards|length - photos_enrolled }} without a photo{% endif %}
       {%- if missing %}, {{ missing|length }} not printable{% endif %}
       &middot; {{ 'QR code' if symbology == 'qr' else 'Code 128' }}
     </span>
+    {% if cards %}
+    <span class="layouts">
+      <a class="{{ 'on' if layout == 'fold' }}" href="{{ fold_url }}">Fold</a>
+      <a class="{{ 'on' if layout == 'duplex' }}" href="{{ duplex_url }}">Double-sided</a>
+    </span>
     <button class="btn" onclick="window.print()">Print</button>
+    {% endif %}
     <a class="btn secondary" href="{{ url_for('workers_page') }}">Back to workers</a>
   </div>
 
   {% if cards %}
-  <div class="note">
-    Before printing: load card stock or thick paper, and set your printer to
-    <strong>100% scale</strong> — "fit to page" resizes the bars and a resized
-    barcode will not scan.
-    <ul>
-      <li>Cut along the dashed edges. Each card is the size of a bank card.</li>
-      <li>The code is printed in text under the bars so a supervisor can type it
-          in if a card is creased or the scanner fails.</li>
-    </ul>
+
+  {# ------------------------------------------------------------------ #}
+  {# How to print. This is the part that stops barcodes reaching the     #}
+  {# wrong person, so it sits above the cards rather than below them.    #}
+  {# ------------------------------------------------------------------ #}
+  {% if layout == 'fold' %}
+  <div class="steps">
+    <h2>How to print these &mdash; fold method</h2>
+    <ol>
+      <li>Load card stock or thick paper.</li>
+      <li>In the print dialogue set <strong>Scale</strong> to <code>100%</code>.
+          Not "Fit to page", not "Shrink to fit" &mdash; a resized barcode will
+          not scan.</li>
+      <li>Set <strong>Two-sided / Duplex</strong> to <strong>off</strong>. These
+          cards carry both sides on one face of the paper.</li>
+      <li>Print <strong>one page first</strong> and check it before printing the
+          rest.</li>
+      <li>Cut around the <strong>solid outer line</strong> of each card. Each
+          card comes out as one wide piece.</li>
+      <li>Fold along the <strong>dashed centre line</strong> so the photograph
+          and the barcode end up back to back, then glue or laminate.</li>
+    </ol>
+    <div class="why">
+      <strong>Why this method is the safe one.</strong> Both faces of a card are
+      printed next to each other and cut out together, so a barcode physically
+      cannot end up on somebody else's card. If you are printing for the whole
+      farm at once, this is the method to use.
+    </div>
+  </div>
+  {% else %}
+  <div class="warn">
+    <strong>Read this before printing double-sided.</strong> This layout puts
+    the photographs on one page and the barcodes on the next. If your printer
+    pulls the paper through even slightly out of order, a worker's card ends up
+    carrying <em>somebody else's barcode</em> &mdash; and their clock-ins would
+    then be recorded against the wrong person. Every back is printed with the
+    worker's ID and name on it precisely so you can catch that, but you have to
+    look. If you are not sure about your printer, use <strong>Fold</strong>
+    instead.
+  </div>
+  <div class="steps">
+    <h2>How to print these &mdash; double-sided method</h2>
+    <ol>
+      <li>Load card stock or thick paper.</li>
+      <li>In the print dialogue set <strong>Scale</strong> to <code>100%</code>.
+          Not "Fit to page" &mdash; a resized barcode will not scan.</li>
+      <li>Set <strong>Two-sided</strong> to
+          <strong>Flip on long edge</strong> (some printers call this
+          "Long-edge binding" or "Book"). <strong>Not</strong> short edge, which
+          turns the backs upside down.</li>
+      <li><strong>Print one sheet only first.</strong> Set the page range to
+          <code>1-2</code> and print that before anything else.</li>
+      <li>Hold that sheet up to a window or a lamp. On every card the small name
+          and ID printed on the back must be the <strong>same person</strong> as
+          the photograph on the front. If any card disagrees, stop: your printer
+          is flipping on the wrong edge, or reversing the page order. Switch to
+          <strong>Fold</strong>, which cannot go wrong that way.</li>
+      <li>Only once a test sheet checks out, print the rest.</li>
+      <li>Cut around the solid outline of each card.</li>
+    </ol>
+    <div class="why">
+      Every back carries the worker's ID and name in small print at the top. It
+      is there for step 5 &mdash; a back that names its owner cannot be quietly
+      attached to the wrong front.
+    </div>
   </div>
   {% endif %}
 
-  {% if cards %}
-  <div class="sheet">
-    {% for card in cards %}
-    <div class="card">
-      <div>
+  {# ------------------------------------------------------------------ #}
+  {# The cards                                                           #}
+  {# ------------------------------------------------------------------ #}
+  {% macro front(card) %}
+    <div class="face front">
+      <div class="photo">
+        {% if card.photo %}
+          <img src="{{ url_for('captured_image', filename=card.photo) }}"
+               alt="Photograph of {{ card.worker.name }}">
+        {% else %}
+          {# No enrolled face, so no photograph. A drawn placeholder rather
+             than an empty box, so the card still reads as an ID card and the
+             gap is obviously a gap. #}
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-label="No photograph on file">
+            <circle cx="12" cy="8" r="4"/>
+            <path d="M12 14c-4.4 0-8 2.6-8 5.8V22h16v-2.2c0-3.2-3.6-5.8-8-5.8z"/>
+          </svg>
+        {% endif %}
+      </div>
+      <div class="details">
         <div class="farm">{{ org_name }}</div>
         <div class="name">{{ card.worker.name }}</div>
-        <div class="meta">
-          {{ card.worker.worker_id }}{% if card.worker.department %} &middot; {{ card.worker.department }}{% endif %}
-        </div>
+        <div class="wid">{{ card.worker.worker_id }}</div>
+        {% if card.worker.department %}
+        <div class="dept">{{ card.worker.department }}</div>
+        {% endif %}
+      </div>
+    </div>
+  {% endmacro %}
+
+  {% macro back(card) %}
+    <div class="face back">
+      <div class="owner">
+        <span class="who">{{ card.worker.worker_id }} &middot; {{ card.worker.name }}</span>
+        <span>{{ org_name }}</span>
       </div>
       <div>
         <div class="bars">{{ card.svg | safe }}</div>
         <div class="code">{{ card.value }}</div>
       </div>
+      <div class="found">If found, please return to {{ org_name }}.</div>
+    </div>
+  {% endmacro %}
+
+  {% if layout == 'fold' %}
+  <div class="sheet">
+    {% for card in cards %}
+    <div class="pair">
+      {{ front(card) }}
+      {{ back(card) }}
     </div>
     {% endfor %}
   </div>
+
+  {% else %}
+  {# Fronts and backs on alternating pages, ten cards to a page. Within each
+     row the backs are reversed, because a sheet flipped on its long edge comes
+     back with its columns swapped. A short row carries a blank so the reversal
+     still lines up. #}
+  {% for rows in duplex_pages %}
+  <section class="page">
+    <p class="page-label">Sheet {{ loop.index }} of {{ duplex_pages|length }} &mdash; fronts</p>
+    {% for row in rows %}
+    <div class="duplex-row">
+      {% for card in row.fronts %}
+        {% if card %}{{ front(card) }}{% else %}<div class="face blank"></div>{% endif %}
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </section>
+  <section class="page">
+    <p class="page-label">Sheet {{ loop.index }} of {{ duplex_pages|length }} &mdash; backs</p>
+    {% for row in rows %}
+    <div class="duplex-row">
+      {% for card in row.backs %}
+        {% if card %}{{ back(card) }}{% else %}<div class="face blank"></div>{% endif %}
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </section>
+  {% endfor %}
+  {% endif %}
+
   {% else %}
   <div class="empty">
     <p><strong>No cards to print.</strong></p>
@@ -222,7 +480,7 @@
     <ul>
       {% for worker in missing %}
       <li>
-        {{ worker.worker_id }} &middot; {{ worker.name }} —
+        {{ worker.worker_id }} &middot; {{ worker.name }} &mdash;
         {% if not worker.card_barcode %}no card issued{% else %}card voided{% endif %}
       </li>
       {% endfor %}
@@ -230,5 +488,6 @@
   </div>
   {% endif %}
 
+</div>
 </body>
 </html>

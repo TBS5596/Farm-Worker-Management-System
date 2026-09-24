@@ -39,8 +39,17 @@ it is a setting, not a constant.
 **Geofence** — the circle around the farm's registered coordinates. Distance is
 always recorded; refusing outside it is optional and off by default.
 
-**Card** — a printed identity card carrying a barcode, optionally issued to each
-worker. Scanning it says *who is standing here* before any PIN is typed.
+**Card** — a printed identity card, optionally issued to each worker. Two sides:
+the **front** carries the worker's photograph, name, ID and department; the
+**back** carries the barcode, the code in readable type, and the owner's name
+again in small print. Scanning it says *who is standing here* before any PIN is
+typed.
+
+**Fold / duplex** — the two ways the print sheet lays a two-sided card out.
+*Fold* prints both sides side by side to be cut out as one piece and folded, and
+cannot pair a barcode with the wrong photograph. *Duplex* prints fronts and backs
+on alternating pages for a double-sided printer, and can, which is why every back
+names its owner and the instructions tell you to check a test sheet.
 
 **Card value** — what is actually encoded in the barcode. Depends on the
 `barcode_source` setting: the NRC, a salted one-way hash of it, or a generated

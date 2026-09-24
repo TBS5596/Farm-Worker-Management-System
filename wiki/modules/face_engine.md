@@ -234,6 +234,37 @@ Returns:
 One-to-many: *who is this?* Used by the JSON API only. **Deliberately not on the
 attendance path** — see [07 — Design Decisions](../07-design-decisions.md#1-verification-not-identification).
 
+### `profile_photo_for(worker)`
+
+The photograph printed on a worker's identity card, as a path relative to the
+project root, or `None`.
+
+It is worth being clear about what this is **not**. It is not a separate profile
+picture somebody uploads. It is one of the very enrolment crops the recogniser
+was trained on &mdash; which is the point: a supervisor holding a card up against
+a face is then looking at exactly what the system compares against. A separately
+uploaded picture could drift away from the enrolled template and quietly stop
+meaning anything, while still looking authoritative on a printed card.
+
+Of a worker's samples it picks the **sharpest**. `quality_score` is the Laplacian
+variance of the crop, so the highest value is the least blurred, and a blurred
+face on a card helps nobody.
+
+Two fallbacks, in order, and both exist for reasons that have actually happened:
+
+1. A row whose `reference_image_path` points at a file that is **no longer on
+   disk** is skipped rather than returned. Backups get restored without the
+   `captures/` directory; trusting the row blindly would print a broken image and
+   leave the operator with no idea why.
+2. If no row carries a usable path, the filenames are searched by convention
+   (`enroll_<worker_id>_NN.jpg`). An installation upgraded from a release that
+   did not record the paths still has the files under a predictable name, and a
+   card with a photograph on it is worth one directory listing to recover.
+
+Returns `None` when there is nothing, and the templates draw a grey outline
+rather than a broken image. The cure for an empty card photograph is enrolment,
+not anything on the card page.
+
 ### `accuracy_snapshot()`
 
 Reads `biometric_transactions` and returns attempts, accepted, rejected,
@@ -256,10 +287,19 @@ the outcome of every call to `verify_worker()` in the table below:
 - **`require_eyes` is not liveness detection.** A printed photograph has visible
   eyes.
 - **Never log a template.** It is biometric personal data.
+- **`profile_photo_for()`'s convention fallback is keyed on the worker code.**
+  Worker codes are generated and never reused, so this is safe &mdash; but if you
+  ever add a way to reassign a code, this lookup would start handing one worker
+  the other's photograph.
+- **Tests must not read the real `captures/faces/`.** `tests/conftest.py` points
+  `BASE_DIR` and `FACES_DIR` at a temporary tree for exactly this reason:
+  otherwise a card test passes or fails depending on what the developer last
+  demonstrated.
 
 ## Where to look next
 
 - [attendance_service.md](attendance_service.md) — the caller
 - [05 — Face Recognition Explained](../05-face-recognition-explained.md) — the algorithm
+- [barcode_engine.md](barcode_engine.md) — the card the photograph is printed on
 - `tests/test_face_engine.py` — nine tests
 - `tools/accuracy_experiment.py` — where the threshold comes from

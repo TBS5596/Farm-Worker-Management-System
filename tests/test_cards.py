@@ -424,3 +424,221 @@ def test_stats_count_the_workforce(app_context, make_worker):
     assert stats["active_workers"] == 2
     assert stats["carded"] == 1
     assert stats["uncarded"] == 1
+
+
+# ---------------------------------------------------------------------------
+# The photograph on the front
+#
+# The card's picture is not a separate upload - it is one of the crops the
+# recogniser was trained on. That is the whole point: a supervisor comparing
+# the card to the face in front of them is looking at exactly what the system
+# compares against. These tests pin that down, and pin down the fallbacks,
+# because a card with the wrong person's photograph on it is worse than a card
+# with none.
+# ---------------------------------------------------------------------------
+
+def _write_reference(tmp_path, worker, index, quality, monkeypatch=None):
+    """Create a reference file on disk and the template row that points at it."""
+    import os
+    from models import FaceTemplate
+
+    faces = tmp_path / "captures" / "faces"
+    faces.mkdir(parents=True, exist_ok=True)
+    name = f"enroll_{worker.worker_id}_{index:02d}.jpg"
+    (faces / name).write_bytes(b"not-a-real-jpeg-but-a-real-file")
+    db.session.add(FaceTemplate(
+        worker_id=worker.id,
+        face_embedding=b"\x00" * 10,
+        sample_index=index,
+        reference_image_path=os.path.join("captures", "faces", name),
+        quality_score=quality,
+    ))
+    db.session.commit()
+    return f"captures/faces/{name}"
+
+
+@pytest.fixture()
+def rooted(tmp_path, monkeypatch):
+    """Point face_engine's filesystem lookups at a temporary tree."""
+    import face_engine
+    monkeypatch.setattr(face_engine, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr(face_engine, "FACES_DIR",
+                        str(tmp_path / "captures" / "faces"))
+    return tmp_path
+
+
+def test_no_enrolment_means_no_photograph(app_context, make_worker, rooted):
+    """An unenrolled worker gets the placeholder, not a broken image."""
+    import face_engine
+    worker = make_worker(name="Never Enrolled")
+    assert face_engine.profile_photo_for(worker) is None
+
+
+def test_the_sharpest_sample_is_chosen(app_context, make_worker, rooted):
+    """quality_score is a blur measure, so the highest is the least blurred."""
+    import face_engine
+    worker = make_worker(name="Three Samples")
+    _write_reference(rooted, worker, 1, quality=40.0)
+    best = _write_reference(rooted, worker, 2, quality=310.0)
+    _write_reference(rooted, worker, 3, quality=150.0)
+
+    assert face_engine.profile_photo_for(worker) == best
+
+
+def test_a_missing_file_is_skipped_for_one_that_exists(app_context, make_worker, rooted):
+    """A database row pointing at a deleted file must not win.
+
+    Backups get restored without the captures directory. Trusting the row
+    blindly would put a broken image on the card and the operator would have no
+    idea why.
+    """
+    import os
+    import face_engine
+    from models import FaceTemplate
+
+    worker = make_worker(name="Half Restored")
+    db.session.add(FaceTemplate(
+        worker_id=worker.id, face_embedding=b"\x00" * 10, sample_index=1,
+        reference_image_path=os.path.join("captures", "faces", "gone.jpg"),
+        quality_score=999.0,
+    ))
+    db.session.commit()
+    survivor = _write_reference(rooted, worker, 2, quality=100.0)
+
+    assert face_engine.profile_photo_for(worker) == survivor
+
+
+def test_the_naming_convention_is_the_last_resort(app_context, make_worker, rooted):
+    """Reference paths lost from the database, files still on disk.
+
+    An installation upgraded from a release that did not record the paths still
+    has the files under a predictable name. A card with a photograph on it is
+    worth one directory listing to recover.
+    """
+    import face_engine
+    from models import FaceTemplate
+
+    worker = make_worker(name="Paths Lost")
+    db.session.add(FaceTemplate(
+        worker_id=worker.id, face_embedding=b"\x00" * 10,
+        sample_index=1, reference_image_path=None, quality_score=200.0,
+    ))
+    db.session.commit()
+
+    faces = rooted / "captures" / "faces"
+    faces.mkdir(parents=True, exist_ok=True)
+    (faces / f"enroll_{worker.worker_id}_01.jpg").write_bytes(b"file")
+
+    assert face_engine.profile_photo_for(worker) == \
+        f"captures/faces/enroll_{worker.worker_id}_01.jpg"
+
+
+def test_one_workers_files_are_never_offered_to_another(app_context, make_worker, rooted):
+    """The convention fallback matches on the worker's own code only."""
+    import face_engine
+    from models import FaceTemplate
+
+    mine = make_worker(name="Mine")
+    theirs = make_worker(name="Theirs")
+    db.session.add(FaceTemplate(worker_id=mine.id, face_embedding=b"\x00" * 10,
+                                sample_index=1, quality_score=100.0))
+    db.session.commit()
+
+    faces = rooted / "captures" / "faces"
+    faces.mkdir(parents=True, exist_ok=True)
+    (faces / f"enroll_{theirs.worker_id}_01.jpg").write_bytes(b"file")
+
+    assert face_engine.profile_photo_for(mine) is None
+
+
+# ---------------------------------------------------------------------------
+# The two print layouts
+#
+# The failure being guarded against is specific: a barcode printed onto the
+# wrong worker's card, whose clock-ins would then be recorded against somebody
+# else. The mirroring below is what prevents it on a duplex printer, and the
+# name on every back is what lets an operator catch it if it happens anyway.
+# ---------------------------------------------------------------------------
+
+def test_fold_is_the_default_layout(client, signed_in, setting, make_worker):
+    setting("barcode_enabled", "on")
+    signed_in("admin")
+    barcode_engine.issue_card(db, make_worker(name="Folded"), "card_number")
+
+    page = client.get("/workers/cards?who=all").get_data(as_text=True)
+
+    assert 'class="pair"' in page
+    assert "fold method" in page
+
+
+def test_an_unknown_layout_falls_back_to_fold(client, signed_in, setting, make_worker):
+    """Fold cannot mis-pair a card, so it is the safe thing to fall back to."""
+    setting("barcode_enabled", "on")
+    signed_in("admin")
+    barcode_engine.issue_card(db, make_worker(name="Folded"), "card_number")
+
+    page = client.get("/workers/cards?who=all&layout=sideways").get_data(as_text=True)
+
+    assert 'class="pair"' in page
+
+
+def test_every_back_names_its_owner(client, signed_in, setting, make_worker):
+    """The safeguard against a back reaching the wrong front.
+
+    If this assertion ever fails, the print sheet has become a page of
+    anonymous barcodes and a collating mistake becomes undetectable.
+    """
+    setting("barcode_enabled", "on")
+    signed_in("admin")
+    worker = make_worker(name="Named Back")
+    barcode_engine.issue_card(db, worker, "card_number")
+
+    page = client.get("/workers/cards?who=all&layout=duplex").get_data(as_text=True)
+
+    assert page.count("Named Back") >= 2      # once on the front, once on the back
+    assert page.count(worker.worker_id) >= 2
+
+
+def test_duplex_reverses_each_row_so_the_flip_lines_up(client, signed_in, setting, make_worker):
+    """Paper flipped on its long edge comes back with its columns swapped."""
+    setting("barcode_enabled", "on")
+    signed_in("admin")
+    first = make_worker(name="Aaa First")
+    second = make_worker(name="Bbb Second")
+    barcode_engine.issue_card(db, first, "card_number")
+    barcode_engine.issue_card(db, second, "card_number")
+
+    page = client.get("/workers/cards?who=all&layout=duplex").get_data(as_text=True)
+    fronts, backs = page.split("&mdash; backs", 1)
+
+    # Fronts run left to right; the backs of the same row run right to left.
+    assert fronts.index("Aaa First") < fronts.index("Bbb Second")
+    assert backs.index("Bbb Second") < backs.index("Aaa First")
+
+
+def test_a_short_duplex_row_is_padded_not_shifted(client, signed_in, setting, make_worker):
+    """One card alone on a row must not slide into the other column.
+
+    Without the blank, a single card would print in the left column on both
+    pages - and after the flip its barcode would land behind nothing at all.
+    """
+    setting("barcode_enabled", "on")
+    signed_in("admin")
+    barcode_engine.issue_card(db, make_worker(name="Only One"), "card_number")
+
+    page = client.get("/workers/cards?who=all&layout=duplex").get_data(as_text=True)
+
+    assert 'class="face blank"' in page
+
+
+def test_the_layout_switch_keeps_the_selection(client, signed_in, setting, make_worker):
+    """Switching layout must not quietly change who is being printed."""
+    setting("barcode_enabled", "on")
+    signed_in("admin")
+    chosen = make_worker(name="Chosen One")
+    make_worker(name="Not Chosen")
+    barcode_engine.issue_card(db, chosen, "card_number")
+
+    page = client.get(f"/workers/cards?id={chosen.id}").get_data(as_text=True)
+
+    assert f"id={chosen.id}" in page

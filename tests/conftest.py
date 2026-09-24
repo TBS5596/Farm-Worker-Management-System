@@ -2,6 +2,12 @@
 
 The database URI is set before `app` is imported, so the suite never touches the
 real `fms.db`.
+
+The same care is taken with the captures directory. Identity cards read a
+worker's enrolment photograph off disk, and the fallback that recovers one from
+its filename would otherwise pick up whatever happens to be in the developer's
+own `captures/faces/` - which makes a test pass or fail depending on who is
+running it and what they last demonstrated.
 """
 
 import os
@@ -26,6 +32,23 @@ from models import Setting, User, Worker  # noqa: E402
 flask_app = app_module.app
 
 
+# One temporary tree for the whole session, emptied between tests by the
+# fixture below.
+_CAPTURES_DIR = tempfile.mkdtemp(prefix="fms-test-captures-")
+_FACES_DIR = os.path.join(_CAPTURES_DIR, "faces")
+os.makedirs(_FACES_DIR, exist_ok=True)
+face_engine.BASE_DIR = _CAPTURES_DIR
+face_engine.FACES_DIR = _FACES_DIR
+
+
+def _reset_captures() -> None:
+    for name in os.listdir(_FACES_DIR):
+        try:
+            os.remove(os.path.join(_FACES_DIR, name))
+        except OSError:
+            pass
+
+
 def _reset_database() -> None:
     db.drop_all()
     db.create_all()
@@ -37,6 +60,7 @@ def _reset_database() -> None:
 def app_context():
     with flask_app.app_context():
         _reset_database()
+        _reset_captures()
         yield flask_app
 
 

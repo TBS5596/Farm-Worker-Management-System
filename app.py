@@ -1057,6 +1057,15 @@ def _register_routes(app: Flask) -> None:
         who = request.args.get("who", "")
         ids = [int(v) for v in request.args.getlist("id") if v.isdigit()]
 
+        # Two ways to get a two-sided card out of a printer, and they fail
+        # differently. "fold" prints the two faces side by side to be cut as one
+        # piece and folded, which any printer can do. "duplex" prints fronts and
+        # backs on separate pages for double-sided printing, which gives a
+        # single-thickness card but depends on the printer feeding straight.
+        layout = request.args.get("layout", "fold").strip().lower()
+        if layout not in ("fold", "duplex"):
+            layout = "fold"
+
         query = Worker.query.filter(Worker.status == "active")
         if ids:
             query = query.filter(Worker.id.in_(ids))
@@ -1073,17 +1082,54 @@ def _register_routes(app: Flask) -> None:
             if (worker.card_status or "active").lower() == "void":
                 missing.append(worker)
                 continue
+            photo = face_engine.profile_photo_for(worker)
             cards.append({
                 "worker": worker,
                 "value": worker.card_barcode,
                 "svg": barcode_engine.render_svg(worker.card_barcode, symbology),
+                # The captures route serves paths relative to the captures
+                # directory, so the prefix is stripped once here rather than in
+                # the template.
+                "photo": photo[len("captures/"):] if photo else None,
             })
+
+        # Duplex needs the backs laid out in the mirror of the fronts: a sheet
+        # flipped on its long edge arrives with its columns reversed. Getting
+        # that wrong is exactly the failure that puts one worker's barcode on
+        # another worker's card, so it is computed here, once, rather than left
+        # to the template.
+        #
+        # A short final row is padded with blanks *before* reversing. Without
+        # the padding, a row holding a single card would put that card in the
+        # left column of both pages - and after the flip it would land behind
+        # nothing at all.
+        duplex_pages = []
+        if layout == "duplex":
+            per_row, rows_per_page = 2, 5
+            per_page = per_row * rows_per_page
+            for start in range(0, len(cards), per_page):
+                chunk = cards[start:start + per_page]
+                rows = []
+                for i in range(0, len(chunk), per_row):
+                    row = chunk[i:i + per_row]
+                    row = row + [None] * (per_row - len(row))
+                    rows.append({"fronts": row, "backs": list(reversed(row))})
+                duplex_pages.append(rows)
+
+        # The two layout links keep whatever selection the page was opened
+        # with, so switching layout never silently changes which workers print.
+        switch_args = {k: v for k, v in request.args.lists() if k != "layout"}
 
         return render_template(
             "cards_print.html",
             cards=cards,
+            duplex_pages=duplex_pages,
+            layout=layout,
+            fold_url=url_for("print_cards", layout="fold", **switch_args),
+            duplex_url=url_for("print_cards", layout="duplex", **switch_args),
             missing=missing,
             symbology=symbology,
+            photos_enrolled=sum(1 for c in cards if c["photo"]),
             org_name=_get_setting("org_name", "FMS Farm"),
         )
 

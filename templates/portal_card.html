@@ -13,20 +13,48 @@
   </div>
 
   {% if svg %}
-  {# The printable card. Everything else on the page is hidden when printing,
-     so a worker gets the card alone on the paper rather than the whole page. #}
+  {# The printable card, both faces. Everything else on the page is hidden
+     when printing, so a worker gets the two faces alone on the paper rather
+     than the whole page. #}
   <div class="p-card card-print-area">
-    <div class="card-face">
-      <div class="card-farm">{{ org_name }}</div>
-      <div class="card-name">{{ me.name }}</div>
-      <div class="card-meta">
-        {{ me.worker_id }}{% if me.department %} &middot; {{ me.department }}{% endif %}
+
+    <p class="card-side-label">Front</p>
+    <div class="card-face card-front">
+      <div class="card-photo">
+        {% if has_photo %}
+          <img src="{{ url_for('portal.photo') }}" alt="Your photograph">
+        {% else %}
+          {# Nothing enrolled, so nothing to show. A drawn placeholder rather
+             than an empty box, so the card still reads as an ID card. #}
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-label="No photograph on file">
+            <circle cx="12" cy="8" r="4"/>
+            <path d="M12 14c-4.4 0-8 2.6-8 5.8V22h16v-2.2c0-3.2-3.6-5.8-8-5.8z"/>
+          </svg>
+        {% endif %}
+      </div>
+      <div class="card-details">
+        <div class="card-farm">{{ org_name }}</div>
+        <div class="card-name">{{ me.name }}</div>
+        <div class="card-wid">{{ me.worker_id }}</div>
+        {% if me.department %}<div class="card-dept">{{ me.department }}</div>{% endif %}
+      </div>
+    </div>
+
+    <p class="card-side-label">Back</p>
+    <div class="card-face card-back">
+      {# Your own name and number on the back too. It is what lets you check,
+         when you cut the two faces out, that the barcode you are gluing on is
+         actually yours. #}
+      <div class="card-owner">
+        <span class="who">{{ me.worker_id }} &middot; {{ me.name }}</span>
+        <span>{{ org_name }}</span>
       </div>
       <div class="card-bars">{{ svg | safe }}</div>
       {# Printed in readable type as well as in bars: if the scanner fails or
          the card is creased, the supervisor can type this in and you are not
          turned away. #}
       <div class="card-code">{{ me.card_barcode }}</div>
+      <div class="card-found">If found, please return to {{ org_name }}.</div>
     </div>
   </div>
 
@@ -34,11 +62,26 @@
     <button class="btn-solid w-100" type="button" onclick="window.print()">
       <i class="bi bi-printer me-1"></i>Print my card
     </button>
-    <p class="p-note mt-3 mb-0">
-      Set your printer to <strong>100% scale</strong>. If you let it shrink the
-      page to fit, the bars change size and the scanner will not read them.
+    <ol class="p-steps">
+      <li>Set the printer to <strong>100% scale</strong>. If you let it shrink
+          the page to fit, the bars change size and the scanner will not read
+          them.</li>
+      <li>Cut out both pieces.</li>
+      <li>Check the small name on the back is <strong>yours</strong>, then glue
+          the two back to back.</li>
+    </ol>
+  </div>
+
+  {% if not has_photo %}
+  <div class="p-card">
+    <p class="p-note mb-0">
+      <i class="bi bi-person-bounding-box me-1"></i>
+      Your card has no photograph because your face is not enrolled yet. Ask
+      your supervisor to enrol you &mdash; the same photograph is what the
+      camera checks you against when you clock in.
     </p>
   </div>
+  {% endif %}
 
   {% elif voided %}
   <div class="p-card">

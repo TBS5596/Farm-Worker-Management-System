@@ -462,6 +462,7 @@ def card():
 
     return render_template("portal_card.html", **_shell(
         me, active="card", svg=svg, symbology=symbology,
+        has_photo=face_engine.profile_photo_for(me) is not None,
         voided=(me.card_status or "active").lower() == "void",
     ))
 
@@ -502,6 +503,31 @@ def payslip(payroll_id: int):
         me, active="payslips", row=row,
         period_label=payroll_engine.period_label,
     ))
+
+
+@portal.route("/photo")
+@worker_required
+def photo():
+    """The signed-in worker's own enrolment photograph, for their card.
+
+    Same reasoning as `/me/snapshot/<id>` below: `/captures/<path>` in app.py
+    stays administrator-only, and this route hands a worker exactly one image -
+    their own - rather than relaxing that one.
+
+    It takes no identifier at all. A route like `/me/photo/<worker_id>` would
+    have been shorter and would have let anybody signed in to the portal walk
+    the register collecting photographs of their colleagues. The worker is read
+    from the session instead, so there is nothing to tamper with.
+    """
+    me = _me()
+    relative = face_engine.profile_photo_for(me)
+    if not relative:
+        abort(404)
+
+    full = os.path.normpath(os.path.join(BASE_DIR, relative))
+    if not full.startswith(BASE_DIR) or not os.path.exists(full):
+        abort(404)
+    return send_file(full)
 
 
 @portal.route("/snapshot/<int:snapshot_id>")

@@ -14,6 +14,7 @@ import random
 import sys
 from datetime import date, datetime, time, timedelta
 
+import cv2
 import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -22,6 +23,7 @@ import face_engine  # noqa: E402
 import payroll_engine  # noqa: E402
 from app import _generate_worker_id, _pin_fingerprint, app  # noqa: E402
 from database import db  # noqa: E402
+from paths import FACES_DIR  # noqa: E402
 from models import (  # noqa: E402
     Attendance,
     BiometricTransaction,
@@ -50,11 +52,50 @@ WORKERS = [
 
 
 def _synthetic_face(seed: int):
+    """An abstract portrait: a drawn head and shoulders, not a photograph.
+
+    Two requirements pull against each other here. The recognizer needs each
+    worker's samples to be distinguishable from every other worker's, or the
+    demonstration data proves nothing. And the images end up on printed cards
+    and in screenshots, which end up in reports - so under no circumstances may
+    a real person's face be used, however convenient a stock photograph would
+    be.
+
+    A drawn head, varied per worker in tone, head size and shoulder width,
+    satisfies both. It reads as a placeholder portrait at card size, it is
+    obviously nobody, and it still gives LBPH enough texture to separate one
+    seeded worker from another.
+    """
+    height, width = face_engine.FACE_SIZE
     rng = np.random.default_rng(seed)
-    base = rng.integers(0, 60, size=face_engine.FACE_SIZE, dtype=np.uint8)
-    gradient = np.linspace(40 + (seed % 6) * 20, 200 - (seed % 4) * 10,
-                           face_engine.FACE_SIZE[0], dtype=np.uint8)
-    return np.clip(base + gradient[None, :], 0, 255).astype(np.uint8)
+
+    backdrop = 200 - (seed % 5) * 18
+    skin = 90 + (seed % 7) * 16
+    canvas = np.full((height, width), backdrop, dtype=np.uint8)
+
+    centre_x = width // 2
+    head_r = int(width * (0.20 + (seed % 4) * 0.012))
+    head_y = int(height * 0.38)
+
+    cv2.circle(canvas, (centre_x, head_y), head_r, int(skin), -1)
+
+    shoulder_w = int(width * (0.36 + (seed % 5) * 0.02))
+    cv2.ellipse(canvas, (centre_x, int(height * 1.06)),
+                (shoulder_w, int(height * 0.42)), 0, 180, 360, int(skin), -1)
+
+    # A little structure where a face has structure, so the texture histogram
+    # LBPH builds is not uniform. Deliberately crude - these are not features
+    # of anybody.
+    eye_dx, eye_y = int(head_r * 0.42), head_y - int(head_r * 0.18)
+    for dx in (-eye_dx, eye_dx):
+        cv2.circle(canvas, (centre_x + dx, eye_y), max(2, head_r // 9),
+                   int(max(0, skin - 55)), -1)
+    # Eyes only, no mouth. A drawn smile on an employee identity card looks
+    # like a joke, and these images end up in screenshots.
+
+    # A whisper of grain, so two workers with similar tones still differ.
+    grain = rng.integers(0, 14, size=(height, width), dtype=np.uint8)
+    return np.clip(canvas.astype(np.int16) + grain - 7, 0, 255).astype(np.uint8)
 
 
 def _set(key: str, value: str) -> None:
@@ -113,11 +154,26 @@ def main(force: bool) -> None:
             if index >= 6:
                 continue  # leave two unenrolled so the dashboard shows the gap
             for sample in range(3):
+                crop = _synthetic_face(index * 10 + sample)
+                # Write the crop to disk as well as into the template. The
+                # identity card shows the enrolment reference, so a demo
+                # without these files puts a placeholder on every card and the
+                # screenshots stop representing what a farm would actually
+                # print.
+                reference_path = None
+                try:
+                    os.makedirs(FACES_DIR, exist_ok=True)
+                    filename = f"enroll_{worker.worker_id}_{sample + 1:02d}.jpg"
+                    cv2.imwrite(os.path.join(FACES_DIR, filename), crop)
+                    reference_path = f"captures/faces/{filename}"
+                except Exception:
+                    reference_path = None
                 db.session.add(FaceTemplate(
                     worker_id=worker.id,
-                    face_embedding=face_engine._encode(_synthetic_face(index * 10 + sample)),
+                    face_embedding=face_engine._encode(crop),
                     algorithm="LBPH",
                     sample_index=sample + 1,
+                    reference_image_path=reference_path,
                     quality_score=round(random.uniform(90, 260), 1),
                 ))
             worker.face_enrolled_at = datetime.utcnow() - timedelta(days=30 - index)
