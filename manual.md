@@ -81,6 +81,7 @@ created or reset later.
 | Farm latitude and longitude | Needed before any distance can be measured |
 | Clock-in radius | How far from the farm centre a punch is still "on site" |
 | Refuse clock-ins outside the radius | Leave **off** at first, so you can see real readings before enforcing them |
+| **Clock-in verification** | The one setting that decides what a worker must present to clock in: the card they *have*, the PIN they *know*, the face they *are*. See section 4.1.1 |
 | Match threshold | How strict face matching is. Start at 35 |
 | Standard day, overtime multiplier | Where overtime begins and what it pays |
 | Default hourly rate | Used for any worker without their own rate |
@@ -89,8 +90,52 @@ created or reset later.
 | **Pay cycle** | How often payroll runs for the whole farm: weekly, fortnightly, twice a month or monthly. Individual workers can differ - see section 9 |
 | Clip recording | Whether a short video is recorded at each punch, and how long |
 | **Worker portal** | Whether workers can sign in to see their own hours and payslips, and whether that sign-in needs a face match. Leave the face check **on** - see section 16 |
-| **Worker cards** | Whether clocking in starts with a card scan, what the barcode carries, whether the PIN is still asked for afterwards, and whether the browser camera may be used as a scanner. See section 4.5 |
+| **Worker cards** | What the barcode carries, and whether the browser camera may be used as a scanner. Whether cards are scanned at all is part of Clock-in verification - see section 4.1.1 |
 | **Refresh charts every** | How often a page that shows charts reloads itself. Useful on an office screen left open all day. Anyone can override it for their own browser from the selector on the page |
+
+#### 4.1.1 Choosing what a clock-in checks
+
+**Settings -> Clock-in verification.** This is the setting that decides what your
+attendance record is worth, so it is worth a minute.
+
+Three checks are available:
+
+| The check | What it is | Why it counts |
+| --- | --- | --- |
+| **Card** | Something the worker **has** | Says who is being claimed, before anything is typed |
+| **PIN** | Something the worker **knows** | Four digits, typed in front of a queue |
+| **Face** | Something the worker **is** | The only one that cannot be handed to a friend |
+
+Pick the combination from the list. Each option shows which of the three it uses,
+what a worker will be asked for, and what it gives up.
+
+| Setting | Use it when |
+| --- | --- |
+| **Card, PIN and face** | The strongest. Use it wherever attendance feeds payroll without a supervisor standing at the terminal |
+| **PIN and face** | Before cards have been printed. A shared PIN still records nothing, because the face must match |
+| **Card and face** | A busy gate. Faster, and still safe - the card says who is claimed, the face decides whether to believe it |
+| **Card and PIN, no camera** | *Weak.* Both can be handed to a friend |
+| **PIN only, no camera** | *Weak.* A demonstration setting |
+| **Card only** | *Weak.* Whoever holds the card is recorded as present |
+
+**About the three weak settings.** They are offered because a demonstration on a
+laptop with no working camera needs one. They are marked *Weak* and they say
+plainly what they give up, because a farm that quietly leaves the system in one
+of them has an attendance record that no longer means what everybody assumes it
+means. If you switch to one for a demonstration, **switch it back afterwards.**
+
+Two things make that hard to forget:
+
+- The **Dashboard** shows what the terminal is checking in its System Readiness
+  list. A weak setting appears there as an amber warning that links straight back
+  to this page.
+- Every change of this setting is written to the **Audit Log** by name, so it is
+  always possible to see who changed it and when.
+
+**A card method needs cards.** Choosing one of the card options does not issue
+anybody a card - do that on the Workers page (section 4.5). A worker who has not
+been issued one yet can still clock in with their worker number, and the audit log
+records that the card was not used.
 
 ### 4.2 The clock-in camera (CCTV page)
 
@@ -285,7 +330,9 @@ and it is much cheaper than finding out from a payslip.
 
 ## 5. Daily use: clocking in and out
 
-The worker uses the home page - no login to the dashboard needed.
+The worker uses the home page - no login to the dashboard needed. What they are
+asked for depends on the Clock-in verification setting (section 4.1.1); the two
+common cases are below.
 
 **Without cards:**
 
@@ -574,6 +621,8 @@ pulling figures for a report. Notable tables:
 | Page will not open at all | Wrong port, or the app is not running. Use 8010; check `docker compose ps` |
 | Blank camera feed | Wrong source, another app is using the camera, or the USB device is not passed into Docker |
 | Everyone is rejected at clock-in | Camera not working, or no samples enrolled. Check the Biometric page |
+| Nobody is asked for a card, or for a PIN, or for their face | That check is switched off. Settings -> Clock-in verification (section 4.1.1). The Dashboard also shows what is currently being checked |
+| Attendance looks wrong and nobody can explain it | Check Settings -> Clock-in verification first. If the farm has been left in a weak setting, one worker may have been clocking in for another. The Audit Log shows when the setting was last changed |
 | One genuine worker keeps being rejected | Too few samples or poor light. Add samples in the conditions they actually clock in under |
 | "Recognizer: correlation-fallback" warning | `opencv-contrib-python` is missing, or plain `opencv-python` is installed alongside it and shadowing it. Reinstall from `requirements.txt` |
 | Payroll generates nothing | No recorded hours for that week, or summaries need rebuilding from the Attendance page |
@@ -592,6 +641,8 @@ pulling figures for a report. Notable tables:
 ## 15. Routine
 
 **Every morning:** CCTV -> Health Check. Confirm the attendance camera is online.
+While you are on the Dashboard, glance at **Clock-in checks** in System Readiness:
+it should be green. Amber means a check has been switched off.
 
 **During the day:** watch the Attendance page. Refused attempts appear on the
 Biometric page with the reason.

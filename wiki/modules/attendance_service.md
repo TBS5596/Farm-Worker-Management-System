@@ -39,6 +39,46 @@ def match_threshold():          ...      # the threshold, clamped to 0-100
 `match_threshold()` clamps and falls back to 35 on nonsense, so a bad settings
 value cannot disable verification by making the threshold negative.
 
+## What a clock-in demands: `CLOCKIN_MODES`
+
+Three independent checks exist at the capture point, each with its own setting:
+
+| Factor | Setting | The worker… |
+| --- | --- | --- |
+| Card | `barcode_enabled` | **has** it |
+| PIN | `barcode_require_pin` | **knows** it |
+| Face | `face_verification_required` | **is** it |
+
+Those three settings are the source of truth and nothing in this section changes
+that. What it adds is a **name** for each combination, because three switches in
+two different corners of the settings page is a poor way to answer the only
+question that matters: what does the terminal actually check?
+
+```python
+clockin_mode()        # -> "card_pin_face", derived from the three settings
+clockin_mode_info()   # -> the same, plus label, factors, strength and notes
+settings_for_mode(k)  # -> the three settings a named mode implies; raises on a typo
+```
+
+**Derived, never stored.** `clockin_mode()` reads the three settings and finds
+the matching combination. A farm that edited the settings table by hand, or
+upgraded from a release that had no modes, therefore sees what is actually
+enforced rather than a label that has drifted.
+
+**`settings_for_mode()` raises rather than defaults.** A typo that quietly
+selected a weaker combination would change what the farm's attendance record
+means, and would do so silently. The settings route catches the unknown value and
+leaves the current mode alone.
+
+**Every mode without the face check is marked `weak`,** with a note saying in
+plain words what it gives up. They are kept rather than removed — a demonstration
+on a laptop with no working camera needs one, and removing them would push people
+to switch the camera check off somewhere less visible. `tests/test_cards.py`
+asserts the labelling, so a mode added later cannot ship unlabelled.
+
+See [06 — Security and Roles](../06-security-and-roles.md) for how the weak modes
+are surfaced on the dashboard and in the audit log.
+
 ## `log_transaction(...)`
 
 Writes one row to `biometric_transactions`: worker, type, success, score,
@@ -195,9 +235,14 @@ the match score and the distance from the farm all attached to it:
   is a slightly odd name for "we have visual evidence".
 - **The summary rebuild is wrapped in `try/except` with a rollback**, so a
   summary failure cannot poison the committed attendance transaction.
+- **Adding a factor means adding modes, not just a setting.** `CLOCKIN_MODES` is
+  keyed on the `(card, pin, face)` tuple; a fourth check needs the tuple widened
+  and every combination that makes sense named, or `clockin_mode()` will fall
+  through to the default and the settings page will show the wrong thing.
 
 ## Where to look next
 
 - [03 — Follow a Clock-In](../03-follow-a-clock-in.md) — the narrative version
 - [face_engine.md](face_engine.md) — the identity decision
 - `tests/test_attendance.py` — eleven tests
+- `tests/test_cards.py` — the mode round-trip and audit tests

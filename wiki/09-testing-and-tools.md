@@ -11,11 +11,11 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-186 tests, about a minute, eleven modules.
+195 tests, about a minute, eleven modules.
 
 ```
 tests/test_attendance.py        11 tests
-tests/test_cards.py             41 tests
+tests/test_cards.py             54 tests
 tests/test_cctv_and_sync.py      9 tests
 tests/test_face_engine.py        9 tests
 tests/test_pay_periods.py       21 tests
@@ -26,7 +26,7 @@ tests/test_reports.py           27 tests
 tests/test_security_and_api.py  19 tests
 tests/test_workers.py            4 tests
 
-186 passed
+195 passed
 ```
 
 Useful invocations:
@@ -138,14 +138,23 @@ it just proves less. `requirements-dev.txt` installs it.
 `test_cards.py` and `test_reports.py` were written alongside the features they
 cover, and both are worth reading as examples.
 
-`test_cards.py` (41) covers all three barcode sources, the rendering of both
+`test_cards.py` (54) covers all three barcode sources, the rendering of both
 symbologies, the scan-normalisation cases a real scanner produces, the refusals
 `resolve()` distinguishes, the HTTP routes behind issuing, voiding and printing,
 and the card photograph &mdash; including both fallbacks, and the check that one
 worker's enrolment files are never offered on another's card. A group of tests
 covers the two print layouts: that fold is the default, that an unrecognised
 layout falls back to it, that every back names its owner, and that the duplex
-rows reverse and pad so a flipped sheet still lines up. Two of its route tests monkeypatch `app_module.record_punch`, because
+rows reverse and pad so a flipped sheet still lines up.
+
+A further group covers the **clock-in verification modes**. Every combination
+round-trips — choose a mode, read it back, get the same mode — because a settings
+page that showed a farm one thing while the terminal did another would be the
+worst possible failure for a screen whose whole job is answering *what does this
+check?* The rest of that group asserts that a weak mode really does drop the
+check it says it drops, that a mangled or missing mode field is a no-op rather
+than a silent downgrade, that any mode without the face check is marked weak, and
+that a change of mode is named in the audit log while an unchanged save is not. Two of its route tests monkeypatch `app_module.record_punch`, because
 the real route opens a camera and a test machine has none — the fixture is called
 `punches` and it is the pattern to copy if you add another.
 

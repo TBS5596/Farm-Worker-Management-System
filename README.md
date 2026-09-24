@@ -19,12 +19,15 @@ template with OpenCV's LBPH recognizer, and a punch that does not match is
 refused. A PIN alone cannot record attendance, so one worker cannot clock in for
 another.
 
-**Three factors at the gate.** A worker can also be issued a printed identity
-card carrying a barcode. With cards switched on, clocking in asks for something
-the worker *has* (the card), something they *know* (the PIN) and something they
-*are* (the face). Each of the three can be turned off in Settings, so a farm can
-run cards alone at a busy gate or all three where it matters. The scan is read by
-a USB scanner or by the browser's own camera - no extra software.
+**Three factors at the gate, chosen in one place.** A worker can also be issued a
+printed identity card carrying a barcode. **Settings -> Clock-in verification** is
+a single control that decides what the terminal demands: something the worker
+*has* (the card), something they *know* (the PIN), something they *are* (the
+face), in any working combination. Each option states what it gives up, and the
+three that cannot tell who is standing at the terminal are labelled weak and
+flagged on the dashboard, because a farm left in a demonstration setting has an
+attendance record that no longer means what everyone assumes. The card scan is
+read by a USB scanner or by the browser's own camera - no extra software.
 
 **Verified attendance.** Every session stores the match score, a clean snapshot,
 a short event clip, and how far the worker was from the farm when they punched.
@@ -51,6 +54,7 @@ queued and retried.
 | Attendance | Open-session clock in/out, snapshot per event, event clip, geofence distance, daily summaries |
 | Payroll | Weekly, fortnightly, semi-monthly or monthly generation from attendance, set farm-wide and overridable per worker. Overtime, NAPSA and NHIMA at configurable rates. Paid periods protected, and an overlap guard that refuses to pay the same day twice |
 | CCTV | Multiple USB and RTSP feeds, live MJPEG views with face and motion overlays, event and manual clips, camera health checks |
+| Clock-in verification | One setting choosing what a punch demands, from card + PIN + face down to a single factor. Weak combinations are labelled, surfaced on the dashboard, and named individually in the audit trail when changed |
 | Access control | Enforced roles (administrator, supervisor, viewer), forced password change on first login, full audit trail |
 | Worker cards | A two-sided printed card per worker: photograph, name, ID and department on the front, barcode on the back. The photograph is the enrolled face sample, so the card shows exactly what the camera checks against. The farm chooses what the barcode carries: the NRC, a one-way scramble of it, or a meaningless generated number. Two print layouts (fold, or double-sided), every back printed with its owner's name so a mis-collated sheet cannot go unnoticed, and a lost card is voided rather than deleted |
 | Analytics | A page that answers four questions in plain English - is attendance still being verified, who is not coming to work, where is the wage bill going, when is the work happening - with charts, ranked tables and a suggested action beside each finding |
@@ -213,8 +217,10 @@ understanding that a PIN alone is then enough again.
 6. Have a worker clock in from the home page and confirm the session appears on
    **Attendance** with a match score.
 7. **Payroll** - choose a week ending date and generate.
-8. *Optional:* **Settings -> Worker cards** - switch cards on, choose what the
-   barcode carries, then **Workers -> Issue cards** and print the sheet. Read
+8. **Settings -> Clock-in verification** - choose what a clock-in demands. A
+   fresh install starts at PIN + face; add the card once cards are printed.
+9. *Optional:* **Settings -> Worker cards** - choose what the barcode carries,
+   then **Workers -> Issue cards** and print the sheet. Read
    the printing section of [manual.md](manual.md) first: a card whose barcode
    belongs to a different worker records that worker's hours against the wrong
    person, and the print page's two layouts exist to prevent it.
@@ -265,8 +271,9 @@ INSTALL.md              Installation guide for Windows, Linux, macOS and Docker
 
 ## How verification works
 
-Each step below can be switched off in Settings. What is shown is the full
-three-factor path, with cards enabled.
+The full three-factor path is shown. Which of the three actually run is the
+**Clock-in verification** setting - one choice covering all three, rather than
+switches scattered across the settings page.
 
 ```
 scan the card (something the worker HAS)
@@ -364,11 +371,12 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-186 tests covering worker ID generation and PIN uniqueness, face template storage
+195 tests covering worker ID generation and PIN uniqueness, face template storage
 and matching, the clock in/out session rules, geofence behaviour, payroll
 arithmetic and weekly generation, the worker portal, identity cards and the
 scan-to-worker lookup, both card print layouts and the mirroring that keeps a
-double-sided sheet aligned, the Analytics figures, role enforcement, the API and
+double-sided sheet aligned, every clock-in verification combination and its round
+trip through the settings page, the Analytics figures, role enforcement, the API and
 CSV exports. The suite uses a temporary database and never touches `fms.db`.
 
 Four of those tests use a real photograph - enrolling it through the actual HTTP

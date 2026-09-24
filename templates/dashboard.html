@@ -162,6 +162,23 @@
         <i class="bi bi-shield-check me-2 text-success"></i>System Readiness
       </div>
       <ul class="list-group list-group-flush readiness-list">
+        {# What the terminal is actually checking. It sits first because a farm
+           whose verification has been dropped to a weak combination - for a
+           demonstration, and then left - has an attendance record that no
+           longer means what everyone assumes it means, and nothing else on
+           this page would say so. #}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <span>Clock-in checks</span>
+          {% if clockin_mode.strength == 'strong' %}
+            <span class="badge bg-success">{{ clockin_mode.short }}</span>
+          {% else %}
+            <a class="badge bg-warning text-dark text-decoration-none"
+               href="{{ url_for('settings') }}#clockin-verification"
+               title="{{ clockin_mode.note }}">
+              <i class="bi bi-exclamation-triangle-fill me-1"></i>{{ clockin_mode.short }}
+            </a>
+          {% endif %}
+        </li>
         <li class="list-group-item d-flex justify-content-between align-items-center">
           <span>Face recognizer</span>
           {% if engine.contrib_available %}
