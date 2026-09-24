@@ -17,7 +17,7 @@ flowchart TB
     end
 
     subgraph L2["APPLICATION - handling requests"]
-        R["app.py - 49 web routes"]
+        R["app.py - 54 web routes"]
         A["api.py - 15 JSON endpoints"]
     end
 
@@ -26,6 +26,8 @@ flowchart TB
         AS["attendance_service"]
         CE["cctv_engine"]
         PE["payroll_engine"]
+        BE["barcode_engine"]
+        RE["reports_engine"]
         GF["geofence"]
         SE["sync_engine"]
         SEC["security"]

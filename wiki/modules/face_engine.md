@@ -2,7 +2,7 @@
 
 ← [Module index](README.md) · [Wiki index](../README.md)
 
-**~400 lines. The module the project rests on.**
+**~445 lines. The module the project rests on.**
 
 Turns camera frames into an identity decision. For how the algorithm works, read
 [05 — Face Recognition Explained](../05-face-recognition-explained.md) first;

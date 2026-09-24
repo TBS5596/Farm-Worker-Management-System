@@ -11,7 +11,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-195 tests, about a minute, eleven modules.
+206 tests, about a minute, eleven modules.
 
 ```
 tests/test_attendance.py        11 tests
@@ -24,9 +24,9 @@ tests/test_portal.py            34 tests
 tests/test_real_face.py          4 tests
 tests/test_reports.py           27 tests
 tests/test_security_and_api.py  19 tests
-tests/test_workers.py            4 tests
+tests/test_workers.py           11 tests
 
-195 passed
+206 passed
 ```
 
 Useful invocations:
@@ -163,6 +163,19 @@ constructed summaries, including the systemic-lateness check: it builds a
 workforce where everybody is fifteen minutes late and asserts that the page
 blames the shift-start setting rather than the workers.
 
+## What `test_workers.py` now also covers
+
+Beyond worker IDs and PIN uniqueness, it pins the reporting that answers *which
+database is open*. Students reported that restarting the project "created a new
+database"; it does not, but running it two ways opens two different files and
+nothing said so. The tests assert that the path is absolute (a relative
+`sqlite:///` would give a different database per working directory), that both
+locations are declared and distinct, that the startup description always names
+the file, that a new database says `NEW AND EMPTY`, and that it points at the
+other location when a database exists there. One more asserts the demo seeder can
+tell its own eight fictional workers from somebody's real data, which is what
+decides whether `--force` asks before deleting.
+
 ## Two defects the suite actually caught
 
 Worth knowing, because they show what the tests are for.
@@ -219,7 +232,7 @@ completely the wrong reason.
 ## The scripts in `tools/`
 
 
-Five scripts. None is part of the running application.
+Six scripts. None is part of the running application.
 
 ### `tools/seed_demo.py`
 
@@ -230,12 +243,41 @@ python tools/seed_demo.py
 Eight fictional workers, two weeks of attendance, daily summaries and payroll.
 Worker PINs are `1000`, `1001`, `1002`… For demonstrations and screenshots.
 
+**`--force` deletes everything first.** It removes every worker and everything
+hanging off them, which is fine on a demonstration database and a disaster on a
+fortnight of real attendance — and the two look identical from the command line.
+It therefore prints what it is about to delete and, when the workers are not the
+eight fictional ones it creates, requires the operator to type `DELETE`. With no
+terminal attached it refuses outright rather than guessing, since nobody is there
+to agree. `--yes` skips the prompt, and is for scripts rather than habit.
+
 **Everything it creates is fictional** — invented names, masked phone numbers
 (`+260 97X XXX 001`), district-only addresses, no NRC numbers. That is
 deliberate: demo data ends up in screenshots, and screenshots end up in reports.
 Keep it that way if you extend it.
 
 **Do not run it against a live database.**
+
+### `tools/db_info.py`
+
+```bash
+python tools/db_info.py
+```
+
+Lists every FMS database in the project — size, last change, row counts, first
+few workers — without starting the server.
+
+It exists because of a specific, repeated confusion. The project can be run two
+ways and each uses its own file: `fms.db` for `python app.py`, `data/fms.db`
+under Docker. Enter data one way, start it the other way, and the system is
+empty — and the reasonable conclusion is that the software threw the work away.
+It did not; it opened the other file.
+
+Two changes address that. `app.describe_database()` prints the path and the row
+counts at every startup, and says so explicitly when the file is new, naming the
+other location if a database exists there. This script answers the same question
+on demand, read-only (`mode=ro`), so it is safe to run against a database a
+server is holding open.
 
 ### `tools/benchmark.py`
 

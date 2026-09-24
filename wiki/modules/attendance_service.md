@@ -2,7 +2,7 @@
 
 ← [Module index](README.md) · [Wiki index](../README.md)
 
-**~270 lines. One public function that matters.**
+**~415 lines. One public function that matters.**
 
 Runs the whole clock-in/clock-out transaction in the right order. For the
 narrative walkthrough see [03 — Follow a Clock-In](../03-follow-a-clock-in.md);

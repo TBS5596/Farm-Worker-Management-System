@@ -455,10 +455,15 @@ mkdir -p data && cp fms.db data/fms.db
 6. Have a worker clock in from the home page and confirm the session appears on
    **Attendance** with a match score and a snapshot.
 7. **Payroll** — choose a week ending date and generate.
-8. *Optional:* **Settings → Worker cards** — if you want workers to clock in
-   with a printed card, switch cards on there first, choose what the barcode
-   carries, then go to **Workers → Issue cards** and print the sheet. See
-   [the operator manual](manual.md) for what each barcode option means.
+8. **Settings → Clock-in verification** — choose what a worker must present to
+   clock in: the card they *have*, the PIN they *know*, the face they *are*. A
+   fresh installation starts at PIN + face. Add the card once cards are printed.
+9. *Optional:* **Settings → Worker cards** — if you are using cards, choose what
+   the barcode carries and which barcode type to print, then go to
+   **Workers → Issue cards**. See [the operator manual](manual.md) for what each
+   barcode option means, and read its printing section before you print a batch:
+   a card carrying somebody else's barcode records their hours against the wrong
+   person.
 
 ### Optional: demonstration data
 
@@ -477,7 +482,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-195 tests, about a minute. All should pass.
+206 tests, about a minute. All should pass.
 
 ### Check the recognizer really loaded
 
@@ -511,6 +516,104 @@ if the database contains no active administrator at all, the account named
 
 ---
 
+## Keeping your data between runs
+
+**Your data is not thrown away when you stop the application.** Everything lives
+in one SQLite file, and the next start opens that same file. If you have started
+the app and found an empty system, the cause is almost always that you opened a
+*different* file, not that anything was deleted.
+
+### The one thing that catches people out
+
+The project can be run two ways, and each uses its own database file:
+
+| How you start it | Database file |
+| --- | --- |
+| `python app.py` | `fms.db` in the project folder |
+| `docker compose up` | `data/fms.db` in the project folder |
+
+These are **two separate databases**. Enter workers while running
+`python app.py`, then start it with Docker, and you will see an empty system —
+your workers are still in `fms.db`, untouched. Start it the first way again and
+they are all back.
+
+Two things make this visible rather than mysterious:
+
+**The application says which file it opened, every time it starts:**
+
+```
+------------------------------------------------------------------------
+Database: /home/you/fms/fms.db
+          existing file - 12 workers, 340 attendance records, 2 user accounts
+------------------------------------------------------------------------
+```
+
+If it says `NEW AND EMPTY` when you expected your data, read the next two lines:
+when a database exists in the other location, it names the path and says so.
+
+**You can ask at any time, without starting the server:**
+
+```bash
+python tools/db_info.py
+```
+
+It lists every FMS database in the project, how big each is, when it last
+changed, and the first few workers in each — so you can tell in one command which
+file has your work in it.
+
+### Moving your data from one to the other
+
+Stop the application first — copying a database while it is open can produce a
+corrupt copy.
+
+```bash
+# From "python app.py" to Docker
+mkdir -p data && cp fms.db data/fms.db
+
+# From Docker to "python app.py"
+cp data/fms.db fms.db
+```
+
+Copy `captures/` as well if you want the photographs and clips to follow; both
+ways of running use the same `captures/` folder, so normally there is nothing to
+do there.
+
+### Putting the database wherever you like
+
+Set `FMS_DATABASE_URI` and both ways of running will use the same file:
+
+```bash
+# macOS / Linux
+export FMS_DATABASE_URI="sqlite:////absolute/path/to/fms.db"
+
+# Windows PowerShell
+$env:FMS_DATABASE_URI = "sqlite:///C:/absolute/path/to/fms.db"
+```
+
+Note the **four** slashes after `sqlite:` on macOS and Linux — three for the
+scheme and one for the root of the filesystem. Three slashes means a path
+relative to wherever you happened to be standing when you started the app, which
+is its own way of ending up with several databases.
+
+### Starting again on purpose
+
+If you actually *want* an empty system, stop the app, rename the database rather
+than deleting it, and start again:
+
+```bash
+mv fms.db fms-old-$(date +%F).db
+```
+
+A renamed file can be put back. A deleted one cannot.
+
+> **A warning about the demo script.** `python tools/seed_demo.py --force`
+> **deletes every worker** and everything attached to them. It now shows you what
+> it is about to delete and, when the data does not look like the eight demo
+> workers, makes you type `DELETE` before it will do it. Do not get into the
+> habit of adding `--yes` to get past that.
+
+---
+
 ## Backing up
 
 Everything that matters is in two places:
@@ -530,6 +633,20 @@ unpacking the archive in place, and starting it again.
 ---
 
 ## Troubleshooting
+
+**My workers/attendance have disappeared** — almost certainly not deleted. The
+project uses a different database file depending on how you start it: `fms.db`
+when you run `python app.py`, `data/fms.db` under Docker. Run
+`python tools/db_info.py` to see both and which has your data, then read
+[Keeping your data between runs](#keeping-your-data-between-runs). The
+application also prints which file it opened every time it starts.
+
+**It made a new database instead of using my old one** — same cause as above,
+with one addition: check whether `FMS_DATABASE_URI` is set in your shell
+(`echo $FMS_DATABASE_URI`). If it is, that overrides both locations. A
+`sqlite:///` with three slashes is a path *relative to the folder you started
+from*, so starting the app from a different folder then gives you a different,
+empty database.
 
 **`python` is not recognized (Windows)** — Python was installed without *Add
 python.exe to PATH*. Re-run the installer, choose *Modify*, tick the box.

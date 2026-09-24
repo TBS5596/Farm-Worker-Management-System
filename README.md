@@ -180,6 +180,32 @@ clip writing all work inside the container. A health check polls
 
 ---
 
+## Where your data lives
+
+One SQLite file, and the next start opens that same file — stopping the
+application never throws anything away. The catch worth knowing about:
+
+| How you start it | Database file |
+| --- | --- |
+| `python app.py` | `fms.db` |
+| `docker compose up` | `data/fms.db` |
+
+Those are **two separate databases**, so entering data one way and then starting
+the other way shows an empty system. Nothing has been lost; a different file was
+opened. The application prints which file it opened at every start, and
+
+```bash
+python tools/db_info.py
+```
+
+lists every database in the project with its size, age and first few workers, so
+you can see at a glance which one has your work in it.
+[INSTALL.md](INSTALL.md#keeping-your-data-between-runs) covers moving data
+between them, pointing both at one file with `FMS_DATABASE_URI`, and starting
+over deliberately.
+
+---
+
 ## Upgrading an existing database
 
 Nothing to do by hand. On the first start, `migrations.py` compares the models
@@ -189,7 +215,9 @@ change is logged, and a second start is a no-op.
 
 Two things happen automatically to keep you from being locked out:
 
-- An account whose role is not recognised becomes an administrator.
+- An account whose role is not recognised is treated as a **viewer**, the least
+  privileged role. `security.normalize_role()` fails closed on purpose: a
+  mangled value in the database must not become an administrator by accident.
 - If no active administrator exists at all (the previous release defaulted every
   account to `supervisor`), the account named `admin`, or else the oldest account,
   is promoted.
@@ -198,9 +226,10 @@ Existing accounts keep their current passwords; only newly created or reset
 accounts are forced to change.
 
 Existing workers have no enrolled face, so **they cannot clock in until they are
-enrolled**. Enrol everyone on the Biometric page before the next shift, or switch
-*Require a face match* off in Settings while you work through the list - with the
-understanding that a PIN alone is then enough again.
+enrolled**. Enrol everyone on the Biometric page before the next shift, or pick a
+clock-in method without the face check under **Settings -> Clock-in verification**
+while you work through the list. Those methods are all labelled *Weak*, because a
+PIN alone is then enough again - switch back once everyone is enrolled.
 
 ---
 
@@ -371,7 +400,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-195 tests covering worker ID generation and PIN uniqueness, face template storage
+206 tests covering worker ID generation and PIN uniqueness, face template storage
 and matching, the clock in/out session rules, geofence behaviour, payroll
 arithmetic and weekly generation, the worker portal, identity cards and the
 scan-to-worker lookup, both card print layouts and the mirroring that keeps a
@@ -451,9 +480,8 @@ the daily summaries from the Attendance page if sessions were imported directly.
 
 | Document | What it covers |
 | --- | --- |
-| **[wiki/](wiki/README.md)** | **The developer manual.** How the code works, in plain English, with 38 diagrams and 12 annotated screenshots: a guided tour plus a page per module |
+| **[wiki/](wiki/README.md)** | **The developer manual.** How the code works, in plain English, with 42 diagrams and 12 annotated screenshots: a guided tour plus a page per module |
 | [INSTALL.md](INSTALL.md) | Installing on Windows, Linux, macOS and Docker; services, backups, troubleshooting |
 | `/manual` (in the app) | Operator manual, reachable from the sidebar while signed in |
 | [manual.md](manual.md) | The same operator manual as a file, for printing |
 | [FMS_PROJECT_OVERVIEW.md](FMS_PROJECT_OVERVIEW.md) | Technical documentation: architecture, modules, schema, design decisions |
-| `docs/Sikapula_Natasha_2022017692_project_report.pdf` | The final year project report: methodology, design, measured results |

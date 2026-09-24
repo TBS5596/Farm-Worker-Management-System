@@ -2,7 +2,7 @@
 
 ← [Module index](README.md) · [Wiki index](../README.md)
 
-**~490 lines. The single source of truth for the schema.**
+**~523 lines. The single source of truth for the schema.**
 
 For the relationships and the reasoning, read
 [04 — The Database](../04-the-database.md). This page is the field reference.

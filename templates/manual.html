@@ -49,9 +49,11 @@
     <li><strong>Biometric</strong> - enrol at least three face samples per worker.</li>
     <li>Have a worker clock in from the home page and check <strong>Attendance</strong>.</li>
     <li><strong>Payroll</strong> - pick the cycle and a date in the period, and generate.</li>
-    <li><em>Optional:</em> <strong>Settings &rarr; Worker cards</strong> to switch cards
-        on, then <strong>Workers &rarr; Issue cards</strong> and print the sheet
-        (sections 5 and 6).</li>
+    <li><strong>Settings &rarr; Clock-in verification</strong> - choose what a worker must
+        present to clock in (section 2). A fresh install starts at PIN + face.</li>
+    <li><em>Optional:</em> <strong>Settings &rarr; Worker cards</strong> for what the
+        barcode carries, then <strong>Workers &rarr; Issue cards</strong> and print the
+        sheet (sections 5 and 6).</li>
     <li>Tell workers they can check their own hours and payslips at <code>/me</code>
         on their phones (section 11).</li>
   </ol>
@@ -180,7 +182,9 @@
     Optional. Scanning a card says <em>who is standing here</em> before any PIN is typed,
     so a clock-in can check all three things at once: the card the worker
     <strong>has</strong>, the PIN they <strong>know</strong>, and the face they
-    <strong>are</strong>. Each of the three can be switched off in Settings.
+    <strong>are</strong>. Which of the three actually run is one setting -
+    <strong>Clock-in verification</strong>, section 2 - rather than three separate
+    switches.
   </p>
 
   <div class="table-responsive">
@@ -804,6 +808,12 @@
                 installed alongside it. Reinstall from <code>requirements.txt</code></td></tr>
         <tr><td>Payroll generates nothing</td>
             <td>No recorded hours that week, or rebuild the daily summaries first</td></tr>
+        <tr><td>Everything has disappeared &mdash; no workers, no attendance</td>
+            <td>Almost certainly not deleted. The records live in one file, and which file
+                depends on how the system was started: <code>fms.db</code> with
+                <code>python app.py</code>, <code>data/fms.db</code> under Docker. Run
+                <code>python tools/db_info.py</code> to see both and which holds your
+                records. The startup message also names the file it opened</td></tr>
         <tr><td>Payroll skipped a worker, "already paid" in red</td>
             <td>A different <em>paid</em> period already covers some of those days -
                 usually after moving somebody from weekly to monthly. Nothing is broken;
@@ -851,6 +861,14 @@
 
   <h5 class="section-title">16) Routine</h5>
   <ul class="mb-0">
+    <li><strong>As it starts:</strong> read the two lines it prints. They name the records
+        file it opened and how many workers and attendance records are in it. If it ever
+        says <em>NEW AND EMPTY</em> when you expected yesterday's work, stop and read those
+        lines rather than re-entering anything &mdash; the records are almost certainly in
+        the other file, and the message says where.</li>
+    <li><strong>Weekly, and before anything risky:</strong> copy the records file
+        (<code>fms.db</code>). On a farm host it is one power cut away from being the only
+        copy.</li>
     <li><strong>Each morning:</strong> CCTV &rarr; Health Check; confirm the attendance
         camera is online. While you are on the Dashboard, glance at <strong>Clock-in
         checks</strong> in System Readiness &mdash; it should be green. Amber means a check

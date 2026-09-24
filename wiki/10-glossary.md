@@ -164,21 +164,72 @@ naming it as an argument.
 The settings you will meet most often. All live in the `settings` table, all
 stored as strings.
 
+**What a clock-in demands.** These three are written together from the single
+*Clock-in verification* chooser on the settings page; nothing sets them
+individually. [`attendance_service.CLOCKIN_MODES`](modules/attendance_service.md)
+names each combination.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `face_verification_required` | `on` | Off means nothing checks who is standing there |
+| `barcode_enabled` | `off` | Whether a clock-in starts with a card scan |
+| `barcode_require_pin` | `on` | Whether the PIN is still asked for after a card scan |
+
+**Face matching.**
+
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `face_match_threshold` | `35` | Accept at or above this confidence |
-| `face_verification_required` | `on` | Off means a PIN alone is enough — verification is bypassed |
 | `face_require_eyes` | `on` | Reject a face with no detectable eyes |
+
+**Worker cards.**
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `barcode_source` | `nrc_plain` | What the barcode carries: `nrc_plain`, `nrc_hash` or `card_number`. This choice has a privacy consequence — see [barcode_engine](modules/barcode_engine.md) |
+| `barcode_symbology` | `code128` | `code128` (striped, suits a laser scanner) or `qr` (survives a creased card) |
+| `barcode_camera_scan` | `on` | Whether the clock-in page offers the browser camera as a scanner. The button hides itself where the browser cannot do it |
+
+**Cameras and recording.**
+
+| Key | Default | Meaning |
+| --- | --- | --- |
 | `camera_index` | `0` | Which camera is the attendance camera |
+| `camera_sources` | `[]` | Extra camera sources as JSON, one object per feed. Managed from the CCTV page rather than edited by hand |
+| `clip_recording_enabled` | `on` | Record video at attendance events |
+| `clip_seconds` | `6` | Clip length |
+
+**Location.**
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `farm_latitude`, `farm_longitude` | empty | The farm centre. Until set, distance cannot be measured at all |
 | `geofence_radius_m` | `500` | The clock-in circle, in metres |
 | `geofence_enforce` | `off` | Whether distance can actually refuse a punch |
+
+**Pay.**
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `payroll_period` | `weekly` | The farm-wide pay cycle. A worker may override it |
 | `standard_day_hours` | `8` | Hours before overtime starts |
 | `overtime_multiplier` | `1.5` | Overtime rate multiplier |
 | `napsa_rate` | `0.05` | Employee pension contribution |
 | `nhima_rate` | `0.01` | Employee health insurance contribution |
 | `default_hourly_rate` | `15` | Used when a worker has no rate of their own |
-| `clip_recording_enabled` | `on` | Record video at attendance events |
-| `clip_seconds` | `6` | Clip length |
+| `shift_start_time`, `shift_end_time` | `07:00`, `17:00` | Used to measure lateness and early departure. If the start is set earlier than work really begins, Analytics says so rather than blaming the workers |
+
+**Worker portal and display.**
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `portal_enabled` | `on` | Whether workers can sign in at `/me` |
+| `portal_require_face` | `on` | Whether that sign-in needs a face match. Kept separate from `face_verification_required` on purpose: switching attendance verification off for a demonstration must not silently drop the portal to PIN-only access to wage history |
+| `chart_refresh_seconds` | `0` | How often a charted page reloads itself. `0` is off. A viewer can override it for their own browser |
+| `org_name` | `FMS Farm` | Shown on the sidebar, the clock-in screen and every page title |
+
+**Cloud.** `firebase_bucket`, `firebase_project_id` and `firebase_credentials_json`
+are empty by default; setting them turns on upload with an offline retry queue.
 
 ## Environment variables
 
