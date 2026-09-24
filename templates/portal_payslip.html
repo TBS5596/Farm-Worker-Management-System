@@ -1,0 +1,62 @@
+{% extends "portal_base.html" %}
+{% block title %}{{ org_name }} - Payslip{% endblock %}
+{% block content %}
+
+  <a class="btn-ghost d-block text-center mb-3 text-decoration-none"
+     href="{{ url_for('portal.payslips') }}">
+    <i class="bi bi-chevron-left me-1"></i>All payslips
+  </a>
+
+  <div class="p-card">
+    <h2>{{ period_label(row.period_start, row.week_ending, row.period_type) }}</h2>
+    {% if row.period_start %}
+      <div class="p-row">
+        <span class="k">Period covered</span>
+        <span class="v">{{ row.period_start.strftime('%d %b') }} &ndash; {{ row.week_ending.strftime('%d %b %Y') }}</span>
+      </div>
+    {% endif %}
+
+    {# Every component, not just the net figure. A worker who queries a payment
+       can then see exactly how it was reached, which is the whole argument for
+       computing pay from the records rather than transcribing it. #}
+    <div class="p-row"><span class="k">Hours worked</span><span class="v p-money">{{ '%.2f'|format(row.total_hours or 0) }}</span></div>
+    <div class="p-row"><span class="k">Of which overtime</span><span class="v p-money">{{ '%.2f'|format(row.overtime_hours or 0) }}</span></div>
+    <div class="p-row"><span class="k">Hourly rate</span><span class="v p-money">ZMW {{ '%.2f'|format(row.hourly_rate or 0) }}</span></div>
+    {# Basic pay is not a stored column - it is gross minus the overtime
+       component. Showing it means the four money rows visibly add up, which is
+       the difference between a payslip a worker can check and one they have to
+       take on trust. #}
+    {% set basic = (row.gross_pay or 0) - (row.overtime_pay or 0) %}
+    <div class="p-row"><span class="k">Basic pay</span><span class="v p-money">ZMW {{ '%.2f'|format(basic) }}</span></div>
+    <div class="p-row"><span class="k">Overtime pay</span><span class="v p-money">+ ZMW {{ '%.2f'|format(row.overtime_pay or 0) }}</span></div>
+    <div class="p-row"><span class="k"><strong>Gross pay</strong></span><span class="v p-money"><strong>ZMW {{ '%.2f'|format(row.gross_pay or 0) }}</strong></span></div>
+  </div>
+
+  <div class="p-card">
+    <h2>Deductions</h2>
+    <div class="p-row">
+      <span class="k">NAPSA{% if row.napsa_rate %} ({{ '%.1f'|format(row.napsa_rate * 100) }}%){% endif %}</span>
+      <span class="v p-money">- ZMW {{ '%.2f'|format(row.napsa_deduction or 0) }}</span>
+    </div>
+    <div class="p-row">
+      <span class="k">NHIMA{% if row.nhima_rate %} ({{ '%.1f'|format(row.nhima_rate * 100) }}%){% endif %}</span>
+      <span class="v p-money">- ZMW {{ '%.2f'|format(row.nhima_deduction or 0) }}</span>
+    </div>
+  </div>
+
+  <div class="p-card text-center">
+    <h2>Net pay</h2>
+    <div class="p-net p-money" style="font-size:2rem;">ZMW {{ '%.2f'|format(row.net_pay or 0) }}</div>
+    {% if row.payment_date %}
+      <div style="font-size:.82rem;color:var(--p-muted);margin-top:.35rem;">
+        Paid on {{ row.payment_date.strftime('%d %b %Y') }}
+      </div>
+    {% endif %}
+  </div>
+
+  <p class="text-center" style="font-size:.8rem;color:var(--p-muted);">
+    Figures are calculated from the shifts recorded for you.
+    If something looks wrong, speak to your supervisor.
+  </p>
+
+{% endblock %}

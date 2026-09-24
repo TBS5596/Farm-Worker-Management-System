@@ -144,7 +144,22 @@
         <div class="card-body p-4">
           <h6 class="text-muted text-uppercase fw-bold mb-3">Payroll Rules (ZMW)</h6>
           <div class="row g-3">
-            <div class="col-md-3">
+                        <div class="col-12 mb-3">
+              <label class="form-label">Pay Cycle</label>
+              <select class="form-select" name="payroll_period">
+                {% for key, meta in periods.items() %}
+                  <option value="{{ key }}" {% if settings.get('payroll_period', 'weekly') == key %}selected{% endif %}>{{ meta.label }}</option>
+                {% endfor %}
+              </select>
+              <div class="form-text">
+                How often payroll is generated for the whole farm. Any individual worker
+                can be put on a different cycle from their record on the Workers page -
+                casual labour weekly and permanent staff monthly is a common arrangement.
+                Changing this does not alter payslips that already exist.
+              </div>
+            </div>
+
+<div class="col-md-3">
               <label class="form-label">Standard Day (hours)</label>
               <input type="number" class="form-control" name="standard_day_hours" min="1" max="16" step="0.5"
                      value="{{ settings.get('standard_day_hours', '8') }}" title="Hours before overtime starts" />

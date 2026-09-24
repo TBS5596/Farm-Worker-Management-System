@@ -35,3 +35,6 @@ Thumbs.db
 .env
 
 docs/
+# Screenshots and files saved out of a Claude session. Working material, not
+# project source.
+Claude outputs/

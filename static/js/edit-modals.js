@@ -48,6 +48,7 @@ document.addEventListener('DOMContentLoaded', function () {
         nrc_number: 'editNrc',
         status: 'editStatus',
         hourly_rate: 'editHourlyRate',
+        payroll_period: 'editPayrollPeriod',
         enrollment_date: 'editEnrollmentDate'
       },
       textFields: {

@@ -297,19 +297,37 @@ def list_payroll():
 @api.post("/payroll/generate")
 @api_key_required
 def generate_payroll():
-    """Generate a week's payroll from recorded attendance.
+    """Generate one pay period from recorded attendance.
 
         POST /api/v1/payroll/generate   {"week_ending": "2026-08-23"}
+        POST /api/v1/payroll/generate   {"week_ending": "2026-09-23",
+                                         "period_type": "monthly"}
 
-    Idempotent in the way that matters: weeks already marked paid are skipped,
-    so a retry after a network timeout cannot rewrite settled pay.
+    `period_type` is optional and defaults to the farm-wide cycle in Settings.
+    The date parameter keeps its original name so clients written before other
+    cycles existed keep working; for weekly and fortnightly it is the last day
+    of the period, and for semi-monthly and monthly it is any day inside it.
+
+    Only workers on the requested cycle are touched.
+
+    Idempotent in the ways that matter: a period already marked paid is
+    skipped, and so is any worker whose days are already covered by a
+    different paid period, so a retry after a network timeout cannot rewrite
+    settled pay or pay the same day twice.
     """
     payload = request.get_json(silent=True) or request.form
-    week_ending = _parse_date(payload.get("week_ending"))
-    if not week_ending:
+    anchor = _parse_date(payload.get("week_ending") or payload.get("period_end"))
+    if not anchor:
         return jsonify({"ok": False, "error": "week_ending_required",
                         "detail": "Supply week_ending as YYYY-MM-DD."}), 400
-    outcome = payroll_engine.generate_week(week_ending)
+
+    requested = (payload.get("period_type") or "").strip().lower()
+    if requested and requested not in payroll_engine.PERIODS:
+        return jsonify({"ok": False, "error": "unknown_period_type",
+                        "detail": "period_type must be one of: "
+                                  + ", ".join(payroll_engine.PERIODS)}), 400
+
+    outcome = payroll_engine.generate_period(anchor, requested or None)
     return jsonify({"ok": True, "data": outcome})
 
 

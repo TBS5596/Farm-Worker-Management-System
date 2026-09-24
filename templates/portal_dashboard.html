@@ -1,0 +1,95 @@
+{% extends "portal_base.html" %}
+{% block title %}{{ org_name }} - My Dashboard{% endblock %}
+{% block content %}
+
+  {# Current state first. "Am I clocked in?" is the question a worker opens
+     this page to answer, so it goes above everything else. #}
+  <div class="p-card">
+    {% if open_session %}
+      <h2>Right now</h2>
+      <div class="p-row">
+        <span class="k">Status</span>
+        <span class="v"><span class="p-badge ok">Clocked in</span></span>
+      </div>
+      <div class="p-row">
+        <span class="k">Since</span>
+        <span class="v">{{ open_session.check_in_time.strftime('%H:%M, %d %b %Y') }}</span>
+      </div>
+    {% else %}
+      <h2>Right now</h2>
+      <div class="p-row">
+        <span class="k">Status</span>
+        <span class="v"><span class="p-badge off">Not clocked in</span></span>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="p-card">
+    <h2>This week</h2>
+    <div class="p-stats">
+      <div class="p-stat"><div class="v">{{ week.days }}</div><div class="l">Days worked</div></div>
+      <div class="p-stat"><div class="v">{{ '%.1f'|format(week.hours) }}</div><div class="l">Hours</div></div>
+      <div class="p-stat"><div class="v">{{ '%.1f'|format(week.overtime) }}</div><div class="l">Overtime</div></div>
+      <div class="p-stat"><div class="v">{{ month.days }}</div><div class="l">Days this month</div></div>
+    </div>
+  </div>
+
+  <div class="p-card">
+    <h2>My details</h2>
+    <div class="p-row"><span class="k">Worker ID</span><span class="v">{{ me.worker_id }}</span></div>
+    <div class="p-row"><span class="k">Name</span><span class="v">{{ me.name }}</span></div>
+    <div class="p-row"><span class="k">Department</span><span class="v">{{ me.department or '-' }}</span></div>
+    <div class="p-row"><span class="k">Paid</span><span class="v">{{ my_period }}</span></div>
+    <div class="p-row">
+      <span class="k">Hourly rate</span>
+      <span class="v p-money">{% if me.hourly_rate %}ZMW {{ '%.2f'|format(me.hourly_rate) }}{% else %}Farm default{% endif %}</span>
+    </div>
+    <div class="p-row"><span class="k">Phone</span><span class="v">{{ me.phone_number or '-' }}</span></div>
+    <div class="p-row">
+      <span class="k">Face enrolled</span>
+      <span class="v">
+        {% if samples %}<span class="p-badge ok">{{ samples }} sample{{ '' if samples == 1 else 's' }}</span>
+        {% else %}<span class="p-badge warn">Not enrolled</span>{% endif %}
+      </span>
+    </div>
+    {# Anything wrong on this page is corrected by a supervisor, not here: a
+       worker editing their own hourly rate would defeat the point of the
+       system. Saying so stops people hunting for an edit button. #}
+    <p class="hint text-muted mt-2 mb-0" style="font-size:.8rem;">
+      Something wrong? Ask your supervisor to correct it.
+    </p>
+  </div>
+
+  {% if last_payslip %}
+    <div class="p-card">
+      <h2>Last payslip</h2>
+      <div class="p-row">
+        <span class="k">{{ period_label(last_payslip.period_start, last_payslip.week_ending, last_payslip.period_type) }}</span>
+        <span class="v p-net p-money">ZMW {{ '%.2f'|format(last_payslip.net_pay or 0) }}</span>
+      </div>
+      <a class="btn-ghost d-block text-center mt-2 text-decoration-none"
+         href="{{ url_for('portal.payslips') }}">See all payslips</a>
+    </div>
+  {% endif %}
+
+  <div class="p-card">
+    <h2>Recent attendance</h2>
+    {% for row in recent %}
+      <div class="p-row">
+        <span class="k">{{ row.check_in_time.strftime('%a %d %b') }}</span>
+        <span class="v">
+          {{ row.check_in_time.strftime('%H:%M') }}
+          &rarr;
+          {% if row.check_out_time %}{{ row.check_out_time.strftime('%H:%M') }}{% else %}<em>open</em>{% endif %}
+        </span>
+      </div>
+    {% else %}
+      <div class="p-empty"><i class="bi bi-calendar-x"></i>No attendance recorded yet.</div>
+    {% endfor %}
+    {% if recent %}
+      <a class="btn-ghost d-block text-center mt-2 text-decoration-none"
+         href="{{ url_for('portal.attendance') }}">See all attendance</a>
+    {% endif %}
+  </div>
+
+{% endblock %}

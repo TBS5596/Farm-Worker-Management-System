@@ -137,6 +137,7 @@
                         "nrc_number": worker.nrc_number or "",
                         "status": worker.status or "active",
                         "hourly_rate": worker.hourly_rate or "",
+                        "payroll_period": worker.payroll_period or "",
                         "enrollment_date": worker.enrollment_date.strftime("%Y-%m-%d") if worker.enrollment_date else ""
                       } | tojson | forceescape }}'
                       title="Edit worker">
@@ -246,6 +247,18 @@
               <div class="form-text">Used to calculate this worker's pay from their recorded hours.</div>
             </div>
             <div class="col-md-6">
+              <label class="form-label">Pay Cycle</label>
+              {# Blank means "follow the farm default", exactly as a blank
+                 hourly rate falls back to the farm default rate. #}
+              <select class="form-select" name="payroll_period" title="How often this worker is paid">
+                <option value="">Farm default ({{ periods[farm_period].label }})</option>
+                {% for key, meta in periods.items() %}
+                  <option value="{{ key }}">{{ meta.label }}</option>
+                {% endfor %}
+              </select>
+              <div class="form-text">Leave on the farm default unless this worker is paid on a different cycle.</div>
+            </div>
+            <div class="col-md-6">
               <label class="form-label">PIN <span class="text-danger">*</span></label>
               <input type="password" class="form-control" name="pin" minlength="4" placeholder="Enter unique PIN" title="Worker PIN" required />
               <div class="form-text">Must be unique across all workers.</div>
@@ -317,6 +330,15 @@
               <label class="form-label">Hourly Rate (ZMW)</label>
               <input type="number" class="form-control" name="hourly_rate" id="editHourlyRate" min="0" step="0.5"
                      placeholder="Leave blank to use the default rate" title="Hourly rate in ZMW" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Pay Cycle</label>
+              <select class="form-select" name="payroll_period" id="editPayrollPeriod" title="How often this worker is paid">
+                <option value="">Farm default ({{ periods[farm_period].label }})</option>
+                {% for key, meta in periods.items() %}
+                  <option value="{{ key }}">{{ meta.label }}</option>
+                {% endfor %}
+              </select>
             </div>
             <div class="col-12">
               <label class="form-label">Address</label>

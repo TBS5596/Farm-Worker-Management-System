@@ -1,0 +1,68 @@
+{% extends "portal_base.html" %}
+{% block title %}{{ org_name }} - My Attendance{% endblock %}
+{% block content %}
+
+  <div class="p-card">
+    <h2>My attendance</h2>
+    <p class="mb-0" style="font-size:.85rem;color:var(--p-muted);">
+      Every shift recorded for you, newest first.
+      {{ pagination.total }} record{{ '' if pagination.total == 1 else 's' }} in total.
+    </p>
+  </div>
+
+  {% for row in pagination.items %}
+    <div class="p-entry">
+      {% if shots.get(row.attendance_id) %}
+        {# The worker's own photo, served by a route that checks the record
+           belongs to them. The admin /captures/ route stays admin-only. #}
+        <img class="shot" src="{{ url_for('portal.snapshot', snapshot_id=shots[row.attendance_id]) }}"
+             alt="Photo taken when you clocked in" loading="lazy" />
+      {% else %}
+        <div class="shot d-flex align-items-center justify-content-center">
+          <i class="bi bi-person" style="opacity:.4;"></i>
+        </div>
+      {% endif %}
+
+      <div class="body">
+        <div class="date">{{ row.check_in_time.strftime('%a %d %b %Y') }}</div>
+        <div class="times">
+          In {{ row.check_in_time.strftime('%H:%M') }}
+          &middot;
+          Out {% if row.check_out_time %}{{ row.check_out_time.strftime('%H:%M') }}{% else %}&mdash;{% endif %}
+        </div>
+        <div class="mt-1">
+          {% if row.verified_by_face %}
+            {# A verified badge rather than the raw match score: the number is
+               an engineering diagnostic and means nothing useful to a worker. #}
+            <span class="p-badge ok"><i class="bi bi-check-circle-fill"></i> Face verified</span>
+          {% else %}
+            <span class="p-badge warn">Recorded manually</span>
+          {% endif %}
+          {% if row.check_out_time is none %}
+            <span class="p-badge off">Still open</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="hours">
+        {% if row.check_out_time %}
+          {{ '%.2f'|format(((row.check_out_time - row.check_in_time).total_seconds() / 3600)) }} h
+        {% else %}&mdash;{% endif %}
+      </div>
+    </div>
+  {% else %}
+    <div class="p-card">
+      <div class="p-empty">
+        <i class="bi bi-calendar-x"></i>
+        No attendance has been recorded for you yet.
+      </div>
+    </div>
+  {% endfor %}
+
+  {% if pagination.pages and pagination.pages > 1 %}
+    {% with endpoint = 'portal.attendance' %}
+      {% include '_portal_pager.html' %}
+    {% endwith %}
+  {% endif %}
+
+{% endblock %}

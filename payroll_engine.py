@@ -11,6 +11,7 @@ a hard-coded 5% would quietly become wrong.
 
 from __future__ import annotations
 
+import calendar
 from datetime import date, datetime, time, timedelta
 
 from database import db
@@ -160,12 +161,118 @@ def refresh_range(day_from: date, day_to: date, worker_pk: int | None = None) ->
 # Payroll
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Pay periods
+# ---------------------------------------------------------------------------
+#
+# Four cycles. A farm sets a default in Settings, and any individual worker can
+# override it on their record - casual labour weekly, permanent staff monthly,
+# on the same farm at the same time.
+#
+# Nothing below touches the arithmetic. compute_pay() takes hours and a rate
+# and has no idea what period they came from, and overtime is decided per DAY
+# in rebuild_day() against the standard day, never per period. So a monthly run
+# simply sums thirty days of already-correct daily overtime instead of seven.
+
+PERIODS = {
+    "weekly":       {"label": "Weekly",       "noun": "Week"},
+    "fortnightly":  {"label": "Fortnightly",  "noun": "Fortnight"},
+    "semi-monthly": {"label": "Semi-monthly", "noun": "Half-month"},
+    "monthly":      {"label": "Monthly",      "noun": "Month"},
+}
+DEFAULT_PERIOD = "weekly"
+
+
+def normalize_period(value: str | None) -> str:
+    """Map stored text to a known cycle, defaulting to weekly.
+
+    Fails safe the same way security.normalize_role does: an unrecognised value
+    becomes the conservative default rather than raising in the middle of a
+    payroll run.
+    """
+    v = (value or "").strip().lower()
+    return v if v in PERIODS else DEFAULT_PERIOD
+
+
+def farm_period() -> str:
+    """The farm-wide default cycle from Settings."""
+    return normalize_period(_setting("payroll_period", DEFAULT_PERIOD))
+
+
+def worker_period(worker: Worker) -> str:
+    """This worker's cycle: their own if set, otherwise the farm default.
+
+    Deliberately the same shape as worker_rate() - one worker-level value with
+    a farm-level fallback - so there is one idiom to learn, not two.
+    """
+    own = (getattr(worker, "payroll_period", None) or "").strip().lower()
+    return own if own in PERIODS else farm_period()
+
+
+def period_bounds(anchor: date, period_type: str | None = None) -> tuple[date, date]:
+    """The first and last day of the pay period containing `anchor`.
+
+    How `anchor` is read depends on the cycle, and the difference is not
+    arbitrary:
+
+      weekly / fortnightly  the period ENDS on the anchor date. A farm can end
+                            its week on whatever day it likes, so the operator
+                            picks the date and gets the 7 or 14 days up to it.
+                            This is exactly the old week_bounds behaviour.
+
+          period_bounds(date(2026, 8, 23), "weekly")
+              -> (2026-08-17, 2026-08-23)
+
+      semi-monthly/monthly  a month ends when the calendar says it does, not
+                            when somebody picks a date. So the anchor is read
+                            as any day INSIDE the period and the bounds snap to
+                            the calendar - which also means a clerk typing the
+                            23rd gets the right month rather than an error.
+
+          period_bounds(date(2026, 9, 23), "monthly")
+              -> (2026-09-01, 2026-09-30)
+          period_bounds(date(2026, 9, 23), "semi-monthly")
+              -> (2026-09-16, 2026-09-30)
+    """
+    period_type = normalize_period(period_type)
+
+    if period_type == "weekly":
+        return anchor - timedelta(days=6), anchor
+    if period_type == "fortnightly":
+        return anchor - timedelta(days=13), anchor
+
+    last_day = calendar.monthrange(anchor.year, anchor.month)[1]
+    if period_type == "semi-monthly":
+        if anchor.day <= 15:
+            return anchor.replace(day=1), anchor.replace(day=15)
+        return anchor.replace(day=16), anchor.replace(day=last_day)
+
+    return anchor.replace(day=1), anchor.replace(day=last_day)
+
+
+def period_label(start: date | None, end: date, period_type: str | None = None) -> str:
+    """How a period is written on a payslip.
+
+        weekly        "Week ending 23 Aug 2026"
+        fortnightly   "Fortnight ending 23 Aug 2026"
+        semi-monthly  "1-15 Sep 2026"
+        monthly       "September 2026"
+    """
+    period_type = normalize_period(period_type)
+    if period_type == "monthly":
+        return end.strftime("%B %Y")
+    if period_type == "semi-monthly" and start:
+        return f"{start.day}-{end.day} {end.strftime('%b %Y')}"
+    return f"{PERIODS[period_type]['noun']} ending {end.strftime('%d %b %Y')}"
+
+
 def week_bounds(week_ending: date) -> tuple[date, date]:
     """The seven days ending on, and including, week_ending.
 
-        week_bounds(date(2026, 8, 23))  ->  (2026-08-17, 2026-08-23)
+    Kept as the weekly case of period_bounds so existing callers and tests
+    written before other cycles existed keep working unchanged.
     """
-    return week_ending - timedelta(days=6), week_ending
+    return period_bounds(week_ending, "weekly")
 
 
 def compute_pay(total_hours: float, overtime_hours: float, hourly_rate: float,
@@ -214,6 +321,52 @@ def compute_pay(total_hours: float, overtime_hours: float, hourly_rate: float,
     }
 
 
+def period_totals(worker_pk: int, day_from: date, day_to: date) -> dict:
+    """Hours, overtime and days worked between two dates, inclusive.
+
+    The only thing that changes between a weekly and a monthly run: the two
+    dates. Overtime is already decided per day, so summing thirty days is as
+    correct as summing seven.
+    """
+    rows = (DailyAttendanceSummary.query
+            .filter(DailyAttendanceSummary.worker_id == worker_pk)
+            .filter(DailyAttendanceSummary.summary_date >= day_from)
+            .filter(DailyAttendanceSummary.summary_date <= day_to)
+            .all())
+    return {
+        "total_hours": round(sum(r.total_hours or 0.0 for r in rows), 2),
+        "overtime_hours": round(sum(r.overtime_hours or 0.0 for r in rows), 2),
+        "days_worked": len(rows),
+    }
+
+
+def paid_overlap(worker_pk: int, day_from: date, day_to: date, ignore_id: int | None = None):
+    """Any PAID payroll row for this worker covering days in [day_from, day_to].
+
+    This is the guard that stops the same day being paid twice. Without it, a
+    farm that switches a worker from weekly to monthly and regenerates would
+    produce a monthly row covering days already settled inside four weekly
+    rows, and nothing would complain.
+
+    Legacy rows written before period_start existed are all weeks, so their
+    start is inferred as six days before their end.
+
+    Two ranges overlap when each starts on or before the other ends.
+    """
+    rows = (Payroll.query
+            .filter(Payroll.worker_id == worker_pk)
+            .filter(db.func.lower(Payroll.paid_status) == "paid")
+            .all())
+    for row in rows:
+        if ignore_id is not None and row.payroll_id == ignore_id:
+            continue
+        row_end = row.week_ending
+        row_start = row.period_start or (row_end - timedelta(days=6))
+        if row_start <= day_to and day_from <= row_end:
+            return row
+    return None
+
+
 def week_totals(worker_pk: int, week_ending: date) -> dict:
     day_from, day_to = week_bounds(week_ending)
     rows = (DailyAttendanceSummary.query
@@ -228,20 +381,36 @@ def week_totals(worker_pk: int, week_ending: date) -> dict:
     }
 
 
-def generate_week(week_ending: date, worker_pk: int | None = None) -> dict:
-    """Create or refresh payroll rows for a week from recorded attendance.
+def generate_period(anchor: date, period_type: str | None = None,
+                    worker_pk: int | None = None) -> dict:
+    """Create or refresh payroll rows for one pay period.
 
-    Rebuilds the seven daily summaries first, so the totals reflect the
-    attendance table as it stands rather than whatever was last cached.
+    `anchor` picks the period; how it is read depends on the cycle - see
+    period_bounds(). `period_type` defaults to the farm-wide setting.
 
-    A week already marked `paid` is skipped, never rewritten - so re-running
-    generation after a correction elsewhere is always safe.
+    Only workers ON THAT CYCLE are touched. Running a monthly period must not
+    quietly generate for the casual labourers who are paid weekly, so each
+    worker's effective cycle is checked against the one being generated.
 
-    Returns counts plus a row-by-row breakdown, which the flash message
-    summarises: "3 created, 2 updated from recorded attendance. 2 workers had
-    no hours."
+    Four reasons a worker is skipped, each counted separately so the operator
+    is told what happened rather than left wondering:
+
+      other_cycle    they are on a different pay cycle
+      no_hours       no recorded attendance in the period
+      already_paid   this exact period is settled - never rewritten
+      overlap        a DIFFERENT paid period already covers some of these days
+
+    That last one is the guard against paying a day twice. It matters most
+    when a worker moves from weekly to monthly: without it, the first monthly
+    run would re-pay days already settled inside four weekly rows.
+
+    Returns counts plus a row-by-row breakdown for the flash message.
     """
-    day_from, day_to = week_bounds(week_ending)
+    period_type = normalize_period(period_type or farm_period())
+    day_from, day_to = period_bounds(anchor, period_type)
+
+    # Rebuild the daily summaries first, so the totals reflect the attendance
+    # table as it stands rather than whatever was last cached.
     refresh_range(day_from, day_to, worker_pk=worker_pk)
 
     config = rates()
@@ -249,27 +418,58 @@ def generate_week(week_ending: date, worker_pk: int | None = None) -> dict:
     if worker_pk:
         workers = workers.filter(Worker.id == worker_pk)
 
-    outcome = {"week_ending": week_ending.isoformat(), "created": 0, "updated": 0,
-               "skipped_no_hours": 0, "rows": []}
+    outcome = {
+        "period_type": period_type,
+        "period_start": day_from.isoformat(),
+        "period_end": day_to.isoformat(),
+        "week_ending": day_to.isoformat(),      # kept for existing callers
+        "label": period_label(day_from, day_to, period_type),
+        "created": 0, "updated": 0,
+        "skipped_no_hours": 0, "skipped_other_cycle": 0,
+        "skipped_already_paid": 0, "skipped_overlap": 0,
+        "rows": [], "conflicts": [],
+    }
 
     for worker in workers.order_by(Worker.worker_id.asc()).all():
-        totals = week_totals(worker.id, week_ending)
+        if worker_period(worker) != period_type:
+            outcome["skipped_other_cycle"] += 1
+            continue
+
+        totals = period_totals(worker.id, day_from, day_to)
         if totals["total_hours"] <= 0:
             outcome["skipped_no_hours"] += 1
             continue
 
-        figures = compute_pay(totals["total_hours"], totals["overtime_hours"],
-                             worker_rate(worker), config)
-
-        row = Payroll.query.filter_by(worker_id=worker.id, week_ending=week_ending).first()
+        row = Payroll.query.filter_by(worker_id=worker.id, week_ending=day_to).first()
         if row and (row.paid_status or "").lower() == "paid":
-            continue  # never rewrite a paid week
+            outcome["skipped_already_paid"] += 1
+            continue
+
+        # Any OTHER paid period covering these days? If the exact-period row
+        # existed and was paid we already skipped above, so anything found here
+        # is a genuinely different settled period.
+        clash = paid_overlap(worker.id, day_from, day_to,
+                             ignore_id=row.payroll_id if row else None)
+        if clash:
+            outcome["skipped_overlap"] += 1
+            outcome["conflicts"].append({
+                "worker_id": worker.worker_id,
+                "name": worker.name,
+                "paid_period": period_label(
+                    clash.period_start, clash.week_ending, clash.period_type),
+            })
+            continue
+
+        figures = compute_pay(totals["total_hours"], totals["overtime_hours"],
+                              worker_rate(worker), config)
 
         created = row is None
         if created:
-            row = Payroll(worker_id=worker.id, week_ending=week_ending)
+            row = Payroll(worker_id=worker.id, week_ending=day_to)
             db.session.add(row)
 
+        row.period_start = day_from
+        row.period_type = period_type
         row.total_hours = figures["total_hours"]
         row.overtime_hours = figures["overtime_hours"]
         row.hourly_rate = figures["hourly_rate"]
@@ -295,6 +495,15 @@ def generate_week(week_ending: date, worker_pk: int | None = None) -> dict:
 
     db.session.commit()
     return outcome
+
+
+def generate_week(week_ending: date, worker_pk: int | None = None) -> dict:
+    """Generate one weekly period.
+
+    The original entry point, kept so callers and tests written before other
+    cycles existed keep working. New code should call generate_period().
+    """
+    return generate_period(week_ending, "weekly", worker_pk=worker_pk)
 
 
 def attendance_trend(days: int = 14) -> dict:

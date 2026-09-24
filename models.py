@@ -131,6 +131,12 @@ class Worker(db.Model):
     emergency_contact = db.Column(db.String(120), nullable=True)
     department = db.Column(db.String(80), nullable=True)
     hourly_rate = db.Column(db.Float, nullable=True)
+    # Pay cycle for this worker: "weekly", "fortnightly", "semi-monthly" or
+    # "monthly". NULL means "use the farm default in Settings", exactly as a
+    # NULL hourly_rate falls back to default_hourly_rate. Farms commonly run
+    # casual labour weekly and permanent staff monthly, so this has to be
+    # settable per person rather than only farm-wide.
+    payroll_period = db.Column(db.String(20), nullable=True)
     face_enrolled_at = db.Column(db.DateTime, nullable=True)
     enrollment_date = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(20), default="active", nullable=False)
@@ -227,7 +233,18 @@ class Payroll(db.Model):
 
     payroll_id = db.Column(db.Integer, primary_key=True)
     worker_id = db.Column(db.Integer, db.ForeignKey("workers.id"), nullable=False)
+    # The last day of the period this row covers. The column is named
+    # week_ending for history - it predates any period other than a week, and
+    # the additive-only migration cannot rename a column - but it now means
+    # "period ending" for every cycle.
     week_ending = db.Column(db.Date, nullable=False)
+    # The first day of the period, and which cycle produced it. Both are
+    # recorded on the ROW rather than only read from Settings, because a farm
+    # that switches from weekly to monthly still has to be able to read last
+    # year's payslips: without these, a list showing 875 next to 3,400 is
+    # unreadable and a worker will think they were short-paid.
+    period_start = db.Column(db.Date, nullable=True)
+    period_type = db.Column(db.String(20), nullable=True)
     total_hours = db.Column(db.Float, nullable=True)
     overtime_hours = db.Column(db.Float, nullable=True)
     hourly_rate = db.Column(db.Float, nullable=True)

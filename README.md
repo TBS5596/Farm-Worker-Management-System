@@ -42,10 +42,11 @@ queued and retried.
 | Face enrolment | Camera capture or photo upload, up to 8 samples per worker, quality score per sample, clear-and-redo |
 | Verification | LBPH matching with a configurable threshold, eye-visibility check, every attempt logged with its score |
 | Attendance | Open-session clock in/out, snapshot per event, event clip, geofence distance, daily summaries |
-| Payroll | Weekly generation from attendance, overtime, NAPSA and NHIMA at configurable rates, paid weeks protected |
+| Payroll | Weekly, fortnightly, semi-monthly or monthly generation from attendance, set farm-wide and overridable per worker. Overtime, NAPSA and NHIMA at configurable rates. Paid periods protected, and an overlap guard that refuses to pay the same day twice |
 | CCTV | Multiple USB and RTSP feeds, live MJPEG views with face and motion overlays, event and manual clips, camera health checks |
 | Access control | Enforced roles (administrator, supervisor, viewer), forced password change on first login, full audit trail |
 | Reporting | Attendance trend chart, CSV exports for attendance, payroll, summaries, verification attempts and the audit log |
+| Worker portal | Self-service at `/me`: a worker signs in with their code, PIN and face to see their own details, attendance and paid payslips on their phone. Read-only, and scoped to one person |
 | Integration | JSON API at `/api/v1` with an API key, for Postman testing or a future mobile client |
 | Cloud | Optional Firebase Storage upload with an offline retry queue and per-record sync state |
 

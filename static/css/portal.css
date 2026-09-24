@@ -1,0 +1,265 @@
+/* ===========================================================================
+   portal.css - the worker self-service portal at /me
+
+   Designed phone-first, because that is where it is used: a worker on the farm
+   WiFi checking their hours on their own handset. The admin dashboard's
+   sidebar shell would be wrong here, so this is a separate, much smaller
+   layout - a header bar, a scrolling column of cards, and a fixed bottom tab
+   bar in the pattern people already know from every app on their phone.
+
+   Colours are taken from admin.css so the two halves of the system look like
+   one product: #1a4731 dark green, #2e7d52 accent, #f4f6f9 page.
+   =========================================================================== */
+
+:root {
+  --p-green: #1a4731;
+  --p-accent: #2e7d52;
+  --p-page: #f4f6f9;
+  --p-line: #e3e7ec;
+  --p-muted: #5f6b76;
+}
+
+body.portal {
+  margin: 0;
+  background: var(--p-page);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #1c2430;
+  /* Room for the fixed tab bar, plus the phone's own home indicator. */
+  padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+}
+
+/* --- Header --------------------------------------------------------------- */
+
+.portal-header {
+  background: var(--p-green);
+  color: #fff;
+  padding: 1rem 1.1rem;
+  padding-top: calc(1rem + env(safe-area-inset-top, 0px));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.portal-header .who { min-width: 0; }
+.portal-header .name {
+  font-weight: 700;
+  font-size: 1.05rem;
+  /* A long name must not push the sign-out button off a narrow screen. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.portal-header .code { font-size: .8rem; opacity: .75; }
+.portal-header a.signout {
+  color: #fff;
+  opacity: .85;
+  text-decoration: none;
+  font-size: .85rem;
+  white-space: nowrap;
+}
+
+/* --- Content -------------------------------------------------------------- */
+
+.portal-main { padding: 1rem; max-width: 640px; margin: 0 auto; }
+
+.p-card {
+  background: #fff;
+  border: 1px solid var(--p-line);
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+.p-card h2 {
+  font-size: .78rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--p-muted);
+  margin: 0 0 .75rem;
+  font-weight: 700;
+}
+
+/* Two stat tiles per row on a phone, four on anything wider. */
+.p-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: .6rem; }
+@media (min-width: 560px) { .p-stats { grid-template-columns: repeat(4, 1fr); } }
+
+.p-stat {
+  background: #fff;
+  border: 1px solid var(--p-line);
+  border-radius: 12px;
+  padding: .8rem;
+}
+.p-stat .v { font-size: 1.5rem; font-weight: 700; color: var(--p-green); line-height: 1.1; }
+.p-stat .l { font-size: .72rem; color: var(--p-muted); margin-top: .15rem; }
+
+.p-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .55rem 0;
+  border-bottom: 1px solid var(--p-line);
+  font-size: .92rem;
+}
+.p-row:last-child { border-bottom: 0; }
+.p-row .k { color: var(--p-muted); }
+.p-row .v { font-weight: 600; text-align: right; }
+
+.p-badge {
+  display: inline-block;
+  padding: .12rem .5rem;
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 700;
+}
+.p-badge.ok { background: #e4f3ea; color: #1a6b3c; }
+.p-badge.warn { background: #fdf0d8; color: #8a5a06; }
+.p-badge.off { background: #eef1f4; color: var(--p-muted); }
+
+/* --- Attendance and payslip entries --------------------------------------- */
+
+/* Each record is its own card rather than a table row: a table with eight
+   columns is unreadable at 380px, and horizontal scrolling on a phone hides
+   exactly the columns people came to check. */
+.p-entry {
+  background: #fff;
+  border: 1px solid var(--p-line);
+  border-radius: 12px;
+  padding: .85rem;
+  margin-bottom: .7rem;
+  display: flex;
+  gap: .85rem;
+  align-items: flex-start;
+}
+.p-entry .shot {
+  width: 54px; height: 54px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: #eef1f4;
+  flex: 0 0 54px;
+}
+.p-entry .body { flex: 1 1 auto; min-width: 0; }
+.p-entry .date { font-weight: 700; font-size: .95rem; }
+.p-entry .times { color: var(--p-muted); font-size: .85rem; margin-top: .1rem; }
+.p-entry .hours { font-weight: 700; color: var(--p-green); white-space: nowrap; }
+
+.p-money { font-variant-numeric: tabular-nums; }
+.p-net { font-size: 1.35rem; font-weight: 700; color: var(--p-green); }
+
+a.p-entry-link { text-decoration: none; color: inherit; display: block; }
+
+/* --- Pagination ----------------------------------------------------------- */
+
+.p-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  margin: 1rem 0 .5rem;
+}
+.p-pager a, .p-pager span {
+  padding: .5rem .9rem;
+  border-radius: 8px;
+  font-size: .88rem;
+  text-decoration: none;
+}
+.p-pager a { background: #fff; border: 1px solid var(--p-line); color: var(--p-green); font-weight: 600; }
+.p-pager span.disabled { color: #aab3bd; }
+.p-pager .count { color: var(--p-muted); font-size: .82rem; }
+
+/* --- Bottom tab bar ------------------------------------------------------- */
+
+.portal-tabs {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  background: #fff;
+  border-top: 1px solid var(--p-line);
+  display: flex;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  z-index: 50;
+}
+.portal-tabs a {
+  flex: 1 1 0;
+  text-align: center;
+  padding: .6rem .25rem .7rem;
+  text-decoration: none;
+  color: var(--p-muted);
+  font-size: .72rem;
+}
+.portal-tabs a i { display: block; font-size: 1.3rem; margin-bottom: .1rem; }
+.portal-tabs a.active { color: var(--p-accent); font-weight: 700; }
+
+/* --- Sign-in -------------------------------------------------------------- */
+
+body.portal-signin {
+  background: linear-gradient(160deg, #1a4731 0%, #123222 100%);
+  min-height: 100vh;
+  padding-bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.signin-wrap { width: 100%; max-width: 420px; padding: 1.25rem; }
+.signin-card { background: #fff; border-radius: 16px; padding: 1.4rem; }
+.signin-brand { text-align: center; color: #fff; margin-bottom: 1.1rem; }
+.signin-brand .n { font-size: 1.3rem; font-weight: 700; }
+.signin-brand .s { opacity: .8; font-size: .85rem; }
+
+.signin-card label { font-weight: 600; font-size: .85rem; margin-bottom: .25rem; display: block; }
+.signin-card input[type="text"],
+.signin-card input[type="password"] {
+  width: 100%;
+  padding: .7rem .8rem;
+  border: 1px solid var(--p-line);
+  border-radius: 10px;
+  font-size: 1.05rem;   /* 16px+ stops iOS zooming the page on focus */
+  margin-bottom: .9rem;
+  box-sizing: border-box;
+}
+
+.capture-box {
+  border: 1px dashed #c3ccd6;
+  border-radius: 12px;
+  padding: .9rem;
+  text-align: center;
+  margin-bottom: .9rem;
+  background: #fafbfc;
+}
+.capture-box video, .capture-box img {
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #11201a;
+  display: block;
+  margin-bottom: .6rem;
+}
+.capture-box .hint { font-size: .8rem; color: var(--p-muted); }
+.capture-box .ready { color: #1a6b3c; font-weight: 600; font-size: .85rem; }
+
+.btn-portal {
+  width: 100%;
+  padding: .8rem;
+  border: 0;
+  border-radius: 10px;
+  background: var(--p-accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.btn-portal:disabled { background: #9fb8aa; cursor: not-allowed; }
+.btn-ghost {
+  width: 100%;
+  padding: .7rem;
+  border: 1px solid var(--p-line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--p-green);
+  font-weight: 600;
+  cursor: pointer;
+}
+.signin-foot { text-align: center; margin-top: 1rem; }
+.signin-foot a { color: #cfe3d6; font-size: .85rem; text-decoration: none; }
+
+.p-empty { text-align: center; color: var(--p-muted); padding: 2rem 1rem; }
+.p-empty i { font-size: 2rem; display: block; margin-bottom: .5rem; opacity: .5; }

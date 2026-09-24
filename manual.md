@@ -17,8 +17,14 @@ That single check is what makes the record trustworthy. A PIN can be shared or
 guessed; a face at the camera cannot be handed to a friend. This is why enrolment
 matters more than any other setup step.
 
-At the end of the week, payroll reads those recorded hours and works out the pay.
-Nobody types hours or amounts into a form.
+At the end of each pay period, payroll reads those recorded hours and works out
+the pay. Nobody types hours or amounts into a form. The farm chooses whether that
+period is a week, a fortnight, half a month or a month, and individual workers can
+be on different cycles.
+
+Workers can also sign in on their own phones to see the hours recorded for them
+and their payslips, which means the office is not the only place the record can
+be checked.
 
 ---
 
@@ -75,7 +81,9 @@ created or reset later.
 | Default hourly rate | Used for any worker without their own rate |
 | NAPSA and NHIMA rates | Deduction percentages. Confirm the current statutory rates before a real payroll run |
 | Shift start and end | Used to measure lateness and early departure |
+| **Pay cycle** | How often payroll runs for the whole farm: weekly, fortnightly, twice a month or monthly. Individual workers can differ - see section 8 |
 | Clip recording | Whether a short video is recorded at each punch, and how long |
+| **Worker portal** | Whether workers can sign in to see their own hours and payslips, and whether that sign-in needs a face match. Leave the face check **on** - see section 15 |
 
 ### 4.2 The clock-in camera (CCTV page)
 
@@ -95,6 +103,11 @@ created or reset later.
 **Workers -> Add Worker.** Name, phone and a PIN are required. The Worker ID is
 generated automatically (0001, 0002, ...). Set the hourly rate here; leave it
 blank to use the default.
+
+**Pay cycle** works the same way: leave it on *Farm default* for almost
+everybody, and change it only for a worker paid on a different cycle from the
+rest of the farm. Casual labour weekly and permanent staff monthly is a common
+arrangement and is fully supported - see section 8.
 
 ### 4.4 Enrolment (the step that makes it work)
 
@@ -169,6 +182,10 @@ What the worker sees:
 [Snapshot saved] -> [Attendance recorded] -> [Clip recorded] -> [Summary updated]
 ```
 
+**Workers can check their own record.** Anyone enrolled can sign in at `/me` on
+their phone to see their hours and payslips, without asking the office. Section
+15 covers it.
+
 ---
 
 ## 6. Checking attendance
@@ -193,14 +210,23 @@ What the worker sees:
 
 **Payroll** page:
 
-1. Choose the **week ending** date (normally Sunday).
-2. Press **Generate Payroll**.
+1. Choose the **pay cycle**. It already shows your farm default, so if the farm
+   runs one cycle you can leave it alone.
+2. Choose a **date in the period**. On weekly and fortnightly this is the last
+   day of the period; on monthly and twice-a-month it can be any day inside it.
+   Section 8 explains why the two behave differently.
+3. Press **Generate Payroll**.
 
-For every active worker the system totals the recorded hours for those seven days,
-splits regular from overtime hours, applies the worker's rate, and computes gross
-pay, NAPSA, NHIMA and net pay. Workers with no hours are skipped and reported.
+For every active worker **on that cycle**, the system totals the recorded hours
+for the period, splits regular from overtime hours, applies the worker's rate,
+and computes gross pay, NAPSA, NHIMA and net pay. Workers with no hours are
+skipped and reported, and so are workers on a different cycle.
 
-Weeks already marked **paid** are never overwritten, so re-running is safe.
+Periods already marked **paid** are never overwritten, so re-running is safe.
+
+A worker whose days are already covered by a *different* paid period is skipped
+with a red message naming the clash. That is the system stopping a double
+payment, not an error - section 8 explains what to do about it.
 
 To mark a week paid, press edit on the row, set status to *paid* and add the
 payment date.
@@ -209,11 +235,68 @@ The rates used are shown on the page, and the source column says whether a row
 came from attendance or was entered by hand. Even a hand-entered row has its pay
 calculated: you enter hours and a rate, never an amount.
 
-**Export CSV** produces the payment list.
+**Export CSV** produces the payment list. It now names the period type and both
+of its dates, so a spreadsheet covering a change of cycle still reads correctly.
+
+Once a period is marked paid, the workers on it can see their own payslip on
+their phone - see section 15.
 
 ---
 
-## 8. Cameras and recordings
+---
+
+## 8. Choosing how often payroll runs
+
+The farm can be paid weekly, fortnightly, twice a month, or monthly — and
+individual workers can be on a different cycle from everybody else. Casual
+labour weekly and permanent staff monthly, on the same farm, is a common
+arrangement and is fully supported.
+
+**Set the farm default** on **Settings → Pay Cycle**. Most farms set this once
+and never touch it again.
+
+**Put an individual worker on a different cycle** on the **Workers** page, in
+the *Pay Cycle* box on their record. Leaving it on *Farm default* is what you
+want for almost everybody.
+
+**Running payroll.** On the Payroll page, choose the cycle and a date, then
+press Generate. The cycle box already shows the farm default, so if your farm
+runs one cycle you can ignore it.
+
+How the date is read depends on the cycle, and this catches people out:
+
+| Cycle | What the date means |
+| --- | --- |
+| Weekly | The **last day** of the week you are paying |
+| Fortnightly | The **last day** of the fortnight |
+| Twice a month | **Any day** in the half-month — it fills in 1–15 or 16 to month end |
+| Monthly | **Any day** in the month — it fills in the whole month |
+
+So on a monthly cycle you can type any date in September and get September.
+
+**Only workers on that cycle are paid.** Running a monthly period does not
+touch the weekly casuals, and the message afterwards tells you how many were
+left alone for that reason.
+
+**Two protections you cannot switch off.**
+
+A period already marked **paid** is never regenerated, so re-running after a
+correction elsewhere is always safe.
+
+And if a worker's days are already covered by a *different* paid period, they
+are skipped with a red message naming the clash. This matters when you move
+somebody from weekly to monthly: without it, the first monthly run would pay
+again for days already settled in their weekly payslips. **If you see that
+message, nothing went wrong — the system stopped a double payment.** Mark the
+old period unpaid, or generate from the date after it ends.
+
+**Changing the cycle does not change existing payslips.** Every payslip records
+the period it covered, so a worker who moved from weekly to monthly sees their
+old weeks correctly labelled as weeks.
+
+---
+
+## 9. Cameras and recordings
 
 The CCTV page shows every active camera live, with green boxes on detected faces
 and orange boxes on movement.
@@ -228,7 +311,7 @@ and orange boxes on movement.
 
 ---
 
-## 9. Users and roles
+## 10. Users and roles
 
 **Users** page (administrators only).
 
@@ -247,7 +330,7 @@ recorded on the **Audit Log** page with the username, time and IP address.
 
 ---
 
-## 10. Cloud sync (optional)
+## 11. Cloud sync (optional)
 
 Without cloud sync the system is fully usable: everything is stored on the office
 machine. This is the normal state on a remote farm.
@@ -262,7 +345,7 @@ show what is waiting, uploaded and failed.
 
 ---
 
-## 11. Data Hub
+## 12. Data Hub
 
 **Data Hub** browses every table directly - useful for checking raw records or
 pulling figures for a report. Notable tables:
@@ -277,7 +360,7 @@ pulling figures for a report. Notable tables:
 
 ---
 
-## 12. Troubleshooting
+## 13. Troubleshooting
 
 | Symptom | Cause and fix |
 | --- | --- |
@@ -292,18 +375,70 @@ pulling figures for a report. Notable tables:
 
 ---
 
-## 13. Weekly routine
+## 14. Routine
 
 **Every morning:** CCTV -> Health Check. Confirm the attendance camera is online.
 
 **During the day:** watch the Attendance page. Refused attempts appear on the
 Biometric page with the reason.
 
-**Friday:** Payroll -> choose week ending -> Generate -> export CSV -> mark rows
-paid once paid.
+**At the end of each pay period** - Friday on a weekly cycle, month end on a
+monthly one: Payroll -> choose the cycle and a date -> Generate -> export CSV ->
+mark the rows paid once they have been paid. Marking them paid is also what
+releases the payslip to the worker's phone.
+
+**If the farm runs two cycles**, run each one separately. Generating the monthly
+period does not touch the weekly casuals, and vice versa.
 
 **When a worker joins:** add them on Workers, then enrol at least three face
 samples before their first shift.
 
 **When a worker leaves:** deactivate them on Workers. Their records stay for the
 audit trail, but they can no longer clock in.
+
+---
+
+## 15. For workers: checking your own hours and payslips
+
+Workers can look up their own records without asking anyone. This is separate
+from clocking in, and it does **not** give access to the office dashboard.
+
+**How to get there.** On the farm WiFi, open the same address the clock-in
+screen uses and tap **My hours & payslips** at the bottom, or go straight to
+`/me`.
+
+**Signing in takes three things:**
+
+1. Your Worker ID, for example `0001`
+2. Your PIN
+3. A photo of your face, taken there and then
+
+The photo is the point. Anyone who saw you type your PIN at the terminal still
+cannot open your payslips, because the system checks the face against the one
+enrolled for that Worker ID. If your face has not been enrolled yet, you cannot
+sign in here — ask a supervisor to enrol you on the Biometric page.
+
+**What a worker sees:**
+
+- **Home** — whether they are clocked in right now, hours and days this week and
+  this month, their own details, and their last payslip
+- **Attendance** — every shift recorded for them, newest first, with the photo
+  taken at clock-in
+- **Payslips** — each paid week, with hours, overtime, rate, gross pay, NAPSA,
+  NHIMA and net pay all shown
+
+**What a worker cannot do.** Everything here is read-only. They cannot see any
+other worker, cannot reach any office page, and cannot change a single figure.
+Corrections are made by a supervisor on the dashboard.
+
+**Why the current week is missing.** A week appears only once it has been marked
+paid. Until then the figure can still change when payroll is regenerated, and
+showing a number that later moves causes more disputes than it settles.
+
+**If somebody is locked out.** Five wrong attempts in fifteen minutes locks that
+Worker ID for fifteen minutes. Waiting clears it; so does a supervisor resetting
+the PIN on the Workers page.
+
+**Switching it off.** Settings has two controls: one disables the portal
+entirely, and one drops sign-in to Worker ID and PIN without the face check.
+Leave the face check on — it is what makes a PIN safe to use for wage history.

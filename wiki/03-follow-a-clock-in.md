@@ -103,10 +103,18 @@ JavaScript before the form is submitted. They may be absent — the browser can
 refuse, or the machine may have no location source — which is why
 `normalize_coordinates()` returns `None` rather than raising.
 
-> **Worth noticing:** a worker never gets a session. There is no
-> `session["worker_logged_in"]`. A worker is not a user of the dashboard; they
-> are the *subject* of a transaction. Only supervisors and administrators sign
-> in. This is why the codebase has both a `workers` table and a separate `users`
+> **Worth noticing:** clocking in creates **no session at all**. The worker
+> types their code, the camera checks them, a row is written, and that is the
+> end of it — the next person steps up to a screen that has forgotten the last
+> one. A shared terminal must work that way.
+>
+> A worker *can* have a session, but only in the separate self-service portal
+> at `/me`, where they sign in to read their own hours and payslips. That is a
+> different door with a different key: it sets `worker_logged_in`, never
+> `admin_logged_in`, so it can never reach the dashboard. See
+> [modules/portal.md](modules/portal.md).
+>
+> This is why the codebase has both a `workers` table and a separate `users`
 > table — see [04 — The Database](04-the-database.md).
 
 ## Step 2 — Credentials, and only credentials

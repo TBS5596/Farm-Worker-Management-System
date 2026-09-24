@@ -37,7 +37,8 @@
 
   {# --- Scrolling link list ------------------------------------------------
        .sidebar-nav is what gains a scrollbar when the window is too short for
-       all twelve items. Keep the class on this element. #}
+       every item. Keep the class on this element - the list has grown before and
+   will again, and it is what stops a short window hiding the bottom of it. #}
   <ul class="nav flex-column mt-3 px-2 gap-1 sidebar-nav">
     <li class="nav-item">
       <a href="{{ url_for('dashboard') }}" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}">
@@ -96,6 +97,15 @@
     <li class="nav-item">
       <a href="{{ url_for('settings') }}" class="nav-link {% if active_page == 'settings' %}active{% endif %}">
         <i class="bi bi-gear-fill me-2"></i>Settings
+      </a>
+    </li>
+    {# The worker portal opens in a new tab: it is a different sign-in with a
+       different session, so following it here would look like being signed
+       out. Useful for showing a worker how it works. #}
+    <li class="nav-item">
+      <a href="{{ url_for('portal.login') }}" class="nav-link" target="_blank" rel="noopener">
+        <i class="bi bi-phone me-2"></i>Worker Portal
+        <i class="bi bi-box-arrow-up-right ms-1 small opacity-75"></i>
       </a>
     </li>
     <li class="nav-item">

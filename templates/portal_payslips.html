@@ -1,0 +1,48 @@
+{% extends "portal_base.html" %}
+{% block title %}{{ org_name }} - My Payslips{% endblock %}
+{% block content %}
+
+  <div class="p-card">
+    <h2>My payslips</h2>
+    <p class="mb-0" style="font-size:.85rem;color:var(--p-muted);">
+      A pay period appears here once it has been paid. The current period is
+      still being worked out and is not shown until then.
+    </p>
+  </div>
+
+  {% for row in pagination.items %}
+    <a class="p-entry-link" href="{{ url_for('portal.payslip', payroll_id=row.payroll_id) }}">
+      <div class="p-entry">
+        <div class="body">
+          {# The stored label rather than a bare date: if the farm ever changed
+             cycle, old rows are still weeks and new ones months, and the
+             amounts differ by a factor of four. #}
+          <div class="date">{{ period_label(row.period_start, row.week_ending, row.period_type) }}</div>
+          <div class="times">
+            {{ '%.2f'|format(row.total_hours or 0) }} hours
+            {% if row.overtime_hours %} &middot; {{ '%.2f'|format(row.overtime_hours) }} overtime{% endif %}
+          </div>
+          <div class="mt-1"><span class="p-badge ok">Paid</span></div>
+        </div>
+        <div class="text-end">
+          <div class="p-net p-money">{{ '%.2f'|format(row.net_pay or 0) }}</div>
+          <div style="font-size:.72rem;color:var(--p-muted);">ZMW net</div>
+        </div>
+      </div>
+    </a>
+  {% else %}
+    <div class="p-card">
+      <div class="p-empty">
+        <i class="bi bi-cash-stack"></i>
+        You have no paid payslips yet.
+      </div>
+    </div>
+  {% endfor %}
+
+  {% if pagination.pages and pagination.pages > 1 %}
+    {% with endpoint = 'portal.payslips' %}
+      {% include '_portal_pager.html' %}
+    {% endwith %}
+  {% endif %}
+
+{% endblock %}

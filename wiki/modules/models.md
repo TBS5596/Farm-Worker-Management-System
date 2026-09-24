@@ -72,6 +72,7 @@ Dashboard accounts. **Not workers.**
 | `pin_fingerprint` | SHA-256, used **only** for PIN uniqueness. **Nothing to do with fingerprints** |
 | `fingerprint_template` | **Dead.** Reserved for a scanner that was never bought |
 | `hourly_rate` | Blank falls back to the farm default |
+| `payroll_period` | This worker's pay cycle. **Blank falls back to the farm default**, same convention as the rate |
 | `face_enrolled_at` | Set on first sample, cleared when wiped. No samples = cannot clock in |
 | `status` | `active` / `inactive` / `suspended`. Only `active` can clock in |
 
@@ -142,7 +143,8 @@ interpretable after somebody changes the setting.
 
 | Column | Notes |
 | --- | --- |
-| `worker_id`, `week_ending` | The pair identifies the row |
+| `worker_id`, `week_ending` | The pair identifies the row. `week_ending` now means **period** ending for every cycle — it could not be renamed, since migrations are additive only |
+| `period_start`, `period_type` | What this row actually covers. Recorded on the row so a farm that switches cycles can still read old payslips |
 | `total_hours`, `overtime_hours`, `hourly_rate` | |
 | `overtime_pay`, `gross_pay` | |
 | `napsa_rate`, `nhima_rate` | **The rates in force when it was generated** |

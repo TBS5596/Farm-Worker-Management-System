@@ -4,67 +4,36 @@
    payroll.html - weekly pay, calculated rather than typed.
 
    Two ways in:
-     Generate From Attendance  the normal route. Reads the recorded clock-in and
-                               clock-out times for the seven days ending on the
-                               chosen date and computes hours, overtime, gross,
-                               NAPSA, NHIMA and net for every active worker.
-                               Weeks already marked paid are never overwritten,
-                               so re-running is safe.
-     Add a Single Record       for a correction, or a worker whose hours came in
-                               on paper. Even here only hours and a rate are
-                               entered - the amounts are still calculated.
-
-   The Source column says which of the two a row came from ("attendance" or
-   "manual"), so an audit can tell them apart.
-
-   All amounts are ZMW. The rates actually used are stored on each row, so a
-   payslip stays reproducible after the rates change in Settings.
-
-   Context: workers, worker_lookup, payroll_rows, rates, default_week_ending
-   (the most recent Sunday).
-   =========================================================================== #}
-
-{% block title %}{{ org_name }} - Payroll{% endblock %}
-
-{% block extra_css %}
-<link rel="stylesheet" href="https://cdn.datatables.net/2.3.8/css/dataTables.dataTables.min.css" />
-<link rel="stylesheet" href="{{ url_for('static', filename='css/datatables.css') }}" />
-{% endblock %}
-
-{% block content %}
-<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-  <h5 class="mb-0"><i class="bi bi-cash-stack me-2 text-success"></i>Payroll</h5>
-  <div class="d-flex gap-2">
-    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('export_csv', export_key='payroll') }}"
-       title="Download payroll as CSV">
-      <i class="bi bi-download me-1"></i>Export CSV
-    </a>
-    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('tables_hub_table_page', table_key='payroll') }}">
-      Full Table
-    </a>
-  </div>
-</div>
-
-<div class="row g-3 mb-4">
-  {# --- Generate from attendance: the normal weekly route -------------- #}
-  <div class="col-xl-7">
-    <div class="card shadow-sm h-100 border-success">
-      <div class="card-header fw-semibold bg-white">
-        <i class="bi bi-magic me-2 text-success"></i>Generate From Attendance
-      </div>
-      <div class="card-body">
-        <p class="text-muted small">
-          Reads the recorded clock-in and clock-out times for the seven days ending on the date you
-          choose, then calculates hours, overtime, gross pay and statutory deductions for every
-          active worker. Weeks already marked paid are never overwritten.
+     Generate From Attendance  the normal route. Reads the recorded clock-in and clock-out times for the pay period you choose, then
+        calculates hours, overtime, gross pay and statutory deductions for every active worker
+        <strong>on that cycle</strong>. Periods already marked paid are never overwritten, and a
+        worker whose days are already covered by a different paid period is skipped rather than
+        paid twice.
         </p>
         <form method="POST" action="{{ url_for('generate_payroll_page') }}" class="row g-2 align-items-end">
-          <div class="col-sm-6">
-            <label class="form-label">Week Ending</label>
-            <input type="date" class="form-control" name="week_ending" value="{{ default_week_ending }}"
-                   title="Last day of the pay week" required />
+          <div class="col-sm-4">
+            <label class="form-label">Pay cycle</label>
+            {# Defaults to the farm-wide setting, so a farm running one cycle
+               never has to touch this. It is here for farms running two - the
+               common case being casual labour weekly, permanent staff monthly. #}
+            <select class="form-select" name="payroll_period">
+              {% for key, meta in periods.items() %}
+                <option value="{{ key }}" {% if key == farm_period %}selected{% endif %}>
+                  {{ meta.label }}{% if key == farm_period %} (farm default){% endif %}
+                </option>
+              {% endfor %}
+            </select>
           </div>
-          <div class="col-sm-6">
+          <div class="col-sm-4">
+            <label class="form-label">Date in the period</label>
+            {# For weekly and fortnightly this is the LAST day of the period, so
+               a farm can end its week on whatever day it likes. For semi-monthly
+               and monthly it is any day inside the period and the bounds snap to
+               the calendar - a clerk typing the 23rd gets the whole month. #}
+            <input type="date" class="form-control" name="week_ending" value="{{ default_week_ending }}"
+                   title="Weekly and fortnightly end on this date. Monthly and semi-monthly use the calendar period containing it." required />
+          </div>
+          <div class="col-sm-4">
             {% if can('payroll.manage') %}
             <button class="btn btn-success w-100" type="submit">
               <i class="bi bi-calculator me-1"></i>Generate Payroll
@@ -150,7 +119,7 @@
           <tr>
             <th>ID</th>
             <th>Worker</th>
-            <th>Week Ending</th>
+            <th>Period</th>
             <th>Hours</th>
             <th>OT</th>
             <th>Rate</th>
@@ -176,7 +145,12 @@
                 {{ p.worker_id }}
               {% endif %}
             </td>
-            <td class="text-nowrap">{{ p.week_ending.strftime('%d %b %Y') if p.week_ending else '-' }}</td>
+            {# The label rather than a bare date: once a farm runs more than one
+               cycle, "23 Aug" alone does not say whether that row is a week or
+               a month, and the amounts differ by a factor of four. #}
+            <td class="text-nowrap">
+              {{ period_label(p.period_start, p.week_ending, p.period_type) if p.week_ending else '-' }}
+            </td>
             <td>{{ '%.2f'|format(p.total_hours) if p.total_hours is not none else '-' }}</td>
             <td>{{ '%.2f'|format(p.overtime_hours) if p.overtime_hours else '-' }}</td>
             <td>{{ '%.2f'|format(p.hourly_rate) if p.hourly_rate is not none else '-' }}</td>
