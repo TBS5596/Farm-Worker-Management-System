@@ -1,4 +1,4 @@
-"""Smart Reports.
+"""Analytics.
 
 A report is only worth having if its numbers are right and its findings are
 discriminating. Both are tested here.

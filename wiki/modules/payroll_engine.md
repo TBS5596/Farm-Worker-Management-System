@@ -2,7 +2,7 @@
 
 ← [Module index](README.md) · [Wiki index](../README.md)
 
-**~330 lines. Turns attendance rows into hours, and hours into money.**
+**~540 lines. Turns attendance rows into hours, and hours into money.**
 
 ---
 

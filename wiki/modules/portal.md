@@ -2,7 +2,7 @@
 
 ← [Module index](README.md) · [Wiki index](../README.md)
 
-**~460 lines. The second front door, at `/me`.**
+**~555 lines. The second front door, at `/me`.**
 
 ---
 
@@ -212,4 +212,4 @@ that demonstration would silently drop wage history to PIN-only access.
 
 - [security.md](security.md) — the dashboard's side of the same boundary
 - [06 — Security and Roles](../06-security-and-roles.md) — the two populations
-- `tests/test_portal.py` — 29 tests, most of them about what a worker *cannot* reach
+- `tests/test_portal.py` — 34 tests, most of them about what a worker *cannot* reach

@@ -46,12 +46,12 @@ back up.
 
 | Page | Module | Lines | What it is |
 | --- | --- | --- | --- |
-| [app.md](app.md) | `app.py` | ~1900 | Application factory, 54 routes, seeding, helpers |
-| [models.md](models.md) | `models.py` | ~520 | The sixteen tables |
-| [face_engine.md](face_engine.md) | `face_engine.py` | ~450 | Detection, enrolment, matching, the card photograph |
-| [attendance_service.md](attendance_service.md) | `attendance_service.py` | ~270 | The clock-in transaction |
+| [app.md](app.md) | `app.py` | ~1980 | Application factory, 54 routes, seeding, helpers |
+| [models.md](models.md) | `models.py` | ~523 | The sixteen tables |
+| [face_engine.md](face_engine.md) | `face_engine.py` | ~445 | Detection, enrolment, matching, the card photograph |
+| [attendance_service.md](attendance_service.md) | `attendance_service.py` | ~415 | The clock-in transaction |
 | [cctv_engine.md](cctv_engine.md) | `cctv_engine.py` | ~470 | Cameras, streaming, clips, health |
-| [payroll_engine.md](payroll_engine.md) | `payroll_engine.py` | ~330 | Summaries and pay |
+| [payroll_engine.md](payroll_engine.md) | `payroll_engine.py` | ~540 | Summaries and pay |
 | [barcode_engine.md](barcode_engine.md) | `barcode_engine.py` | ~270 | Card values, rendering, scan lookup |
 | [reports_engine.md](reports_engine.md) | `reports_engine.py` | ~800 | The figures behind Analytics and My record |
 | [geofence.md](geofence.md) | `geofence.py` | ~80 | Distance from the farm |
@@ -59,7 +59,7 @@ back up.
 | [sync_engine.md](sync_engine.md) | `sync_engine.py` | ~195 | Cloud upload and the offline queue |
 | [exports.md](exports.md) | `exports.py` | ~175 | CSV generation |
 | [api.md](api.md) | `api.py` | ~390 | The 15 JSON endpoints |
-| [portal.md](portal.md) | `portal.py` | ~560 | The worker self-service portal at `/me` |
+| [portal.md](portal.md) | `portal.py` | ~555 | The worker self-service portal at `/me` |
 | [frontend.md](frontend.md) | `templates/`, `static/` | — | HTML, CSS, JavaScript |
 | [support-modules.md](support-modules.md) | `database.py`, `paths.py`, `migrations.py` | ~100 | The small ones |
 

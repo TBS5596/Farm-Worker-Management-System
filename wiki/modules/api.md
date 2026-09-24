@@ -59,7 +59,7 @@ flowchart LR
     subgraph open["No key required"]
         H["GET /health"]
     end
-    subgraph read["Read - 13 endpoints"]
+    subgraph read["Read - 12 endpoints"]
         W["/workers<br/>/workers/{code}"]
         A["/attendance<br/>/attendance/trend<br/>/summary/daily"]
         P["/payroll"]

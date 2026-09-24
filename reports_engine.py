@@ -1,4 +1,4 @@
-"""Smart Reports: the questions a farm manager actually asks, answered.
+"""Analytics: the questions a farm manager actually asks, answered.
 
 The dashboard shows what is happening right now. This module answers the
 questions that only appear once you look across weeks: who has stopped turning

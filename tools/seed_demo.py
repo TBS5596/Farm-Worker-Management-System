@@ -106,11 +106,56 @@ def _set(key: str, value: str) -> None:
         db.session.add(Setting(key=key, value=value))
 
 
-def main(force: bool) -> None:
+#: The eight fictional workers this script creates. A database containing only
+#: these names is demo data and can be replaced without asking; anything else is
+#: somebody's real work.
+_DEMO_NAMES = {name for name, _department, _rate in WORKERS}
+
+
+def _looks_like_real_data() -> bool:
+    """True if the database holds workers this script did not create."""
+    return any(w.name not in _DEMO_NAMES for w in Worker.query.all())
+
+
+def main(force: bool, assume_yes: bool = False) -> None:
     with app.app_context():
-        if Worker.query.count() and not force:
-            print("Workers already exist. Re-run with --force to reseed demo data.")
+        existing = Worker.query.count()
+
+        if existing and not force:
+            print(f"This database already has {existing} workers. "
+                  f"Re-run with --force to replace them with demo data.")
             return
+
+        if force and existing:
+            # --force deletes every worker and everything hanging off them. That
+            # is fine on a demonstration database and a disaster on a fortnight
+            # of real attendance, and the two are indistinguishable from the
+            # command line - so say what is about to go, and where it lives.
+            print(f"\n  Database: {app.config['SQLALCHEMY_DATABASE_URI']}")
+            print(f"  About to permanently delete:")
+            print(f"    {existing} workers")
+            print(f"    {Attendance.query.count()} attendance records")
+            print(f"    {FaceTemplate.query.count()} enrolled face samples")
+            print(f"    {Payroll.query.count()} payroll rows")
+            print(f"    {BiometricTransaction.query.count()} verification records")
+
+            if _looks_like_real_data() and not assume_yes:
+                print("\n  These are NOT the demo workers. This looks like real data.")
+                print("  There is no undo. Take a copy of the database file first if")
+                print("  you are unsure - see 'Keeping your data between runs' in")
+                print("  INSTALL.md.")
+                try:
+                    answer = input("\n  Type DELETE to continue, anything else to stop: ")
+                except EOFError:
+                    # Not attached to a terminal - a script or a CI run. Refusing
+                    # is the only safe answer, because nobody is there to agree.
+                    print("\n  Not running interactively, so nothing was deleted.")
+                    print("  Re-run with --yes if you really mean it.")
+                    return
+                if answer.strip() != "DELETE":
+                    print("  Nothing was deleted.")
+                    return
+            print()
 
         if force:
             for model in (BiometricTransaction, DailyAttendanceSummary, Payroll,
@@ -271,4 +316,10 @@ def main(force: bool) -> None:
 
 
 if __name__ == "__main__":
-    main(force="--force" in sys.argv)
+    if "--help" in sys.argv or "-h" in sys.argv:
+        print(__doc__ or "")
+        print("  python tools/seed_demo.py           create demo data in an empty database")
+        print("  python tools/seed_demo.py --force   REPLACE whatever is there with demo data")
+        print("  python tools/seed_demo.py --force --yes   the same, without the confirmation")
+        sys.exit(0)
+    main(force="--force" in sys.argv, assume_yes="--yes" in sys.argv)

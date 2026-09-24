@@ -213,7 +213,9 @@ explains why that small print matters more than it looks.
 Scanning the card at the terminal tells the system who is standing there, before
 any PIN is typed.
 
-**Switch them on.** Settings -> *Worker cards* -> **Card scanning: on**.
+**Switch them on.** Cards are turned on by choosing a card method in
+**Settings -> Clock-in verification** (section 4.1.1), not on this part of the
+page. What follows is what a card then carries and how it is read.
 
 **Choose what the barcode carries.** This is the one decision worth thinking
 about, because a card gets dropped, lent and left in pockets.
@@ -394,7 +396,7 @@ What the worker sees:
 
 **Workers can check their own record.** Anyone enrolled can sign in at `/me` on
 their phone to see their hours and payslips, without asking the office. Section
-15 covers it.
+16 covers it.
 
 ---
 
@@ -626,6 +628,7 @@ pulling figures for a report. Notable tables:
 | One genuine worker keeps being rejected | Too few samples or poor light. Add samples in the conditions they actually clock in under |
 | "Recognizer: correlation-fallback" warning | `opencv-contrib-python` is missing, or plain `opencv-python` is installed alongside it and shadowing it. Reinstall from `requirements.txt` |
 | Payroll generates nothing | No recorded hours for that week, or summaries need rebuilding from the Attendance page |
+| Everything has disappeared - no workers, no attendance | Almost certainly not deleted. The system keeps its records in one file, and which file depends on how it was started: `fms.db` when started with `python app.py`, `data/fms.db` under Docker. Run `python tools/db_info.py` to see both and which one holds your records. The startup message also names the file it opened |
 | Everyone signed out after a restart | `FMS_SECRET_KEY` is not set, so a new key is generated on each boot |
 | Clip button shows nothing | Clip recording is off in Settings, or the camera could not be reopened. Check Hardware Health |
 | The scanner types the code but nothing happens | The scanner is not set to send Enter at the end. Either configure it to (the manufacturer's sheet says how) or press Enter yourself |
@@ -640,12 +643,26 @@ pulling figures for a report. Notable tables:
 
 ## 15. Routine
 
+**Before anything else, the first time you start it each day:** look at the two
+lines the system prints as it starts. They name the records file it opened and
+how many workers and attendance records are in it. If it ever says *NEW AND
+EMPTY* when you expected yesterday's work, stop and read those lines rather than
+re-entering anything - the records are almost certainly in the other file, and
+the message says where.
+
 **Every morning:** CCTV -> Health Check. Confirm the attendance camera is online.
 While you are on the Dashboard, glance at **Clock-in checks** in System Readiness:
 it should be green. Amber means a check has been switched off.
 
 **During the day:** watch the Attendance page. Refused attempts appear on the
 Biometric page with the reason.
+
+**Every week, and before anything risky:** take a copy of the records file. On a
+farm host it is one power cut away from being the only copy.
+
+```
+cp fms.db fms-backup-$(date +%F).db
+```
 
 **At the end of each pay period** - Friday on a weekly cycle, month end on a
 monthly one: Payroll -> choose the cycle and a date -> Generate -> export CSV ->

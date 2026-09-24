@@ -2,7 +2,7 @@
 
 ← [Module index](README.md) · [Wiki index](../README.md)
 
-**~1600 lines. The biggest file in the project, and the one you will open most.**
+**~1980 lines. The biggest file in the project, and the one you will open most.**
 
 ---
 

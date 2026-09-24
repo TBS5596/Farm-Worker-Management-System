@@ -108,7 +108,87 @@ def _resolve_secret_key() -> str:
         return secrets.token_hex(32)
 
 
+#: Where a SQLite database would live under each way of running the project.
+#: Running natively and running under Docker use *different files*, and a
+#: student who enters data one way and then starts the other way finds an empty
+#: system and reasonably concludes the software threw their work away. It did
+#: not - it opened the other file. `describe_database()` below exists to say so
+#: out loud rather than leave anybody guessing.
+DB_LOCATIONS = {
+    "native": os.path.join(BASE_DIR, "fms.db"),
+    "docker": os.path.join(BASE_DIR, "data", "fms.db"),
+}
+
+
+def database_path() -> str | None:
+    """The SQLite file this process will use, or None if not SQLite."""
+    uri = os.environ.get("FMS_DATABASE_URI",
+                         f"sqlite:///{os.path.join(BASE_DIR, 'fms.db')}")
+    if not uri.startswith("sqlite:///"):
+        return None
+    return os.path.abspath(uri[len("sqlite:///"):])
+
+
+def describe_database() -> list[str]:
+    """Lines to print at startup saying which database is open and what is in it.
+
+    Silence is the problem this solves. The application opened a database, and
+    whether that database is the one with last week's attendance in it or a
+    brand new empty file is the single most useful fact at startup - and it was
+    the one thing never stated.
+    """
+    path = database_path()
+    if path is None:
+        return [f"Database: {os.environ.get('FMS_DATABASE_URI')}"]
+
+    lines = [f"Database: {path}"]
+
+    # Whether the file existed *before* this process opened it. It cannot be
+    # tested here: create_app() has already run db.create_all() by now, so the
+    # file exists either way. _DB_EXISTED_AT_STARTUP is captured at the one
+    # moment the answer is still available.
+    if _DB_EXISTED_AT_STARTUP:
+        try:
+            with app.app_context():
+                lines.append(
+                    f"          existing file - {Worker.query.count()} workers, "
+                    f"{Attendance.query.count()} attendance records, "
+                    f"{User.query.count()} user accounts"
+                )
+        except Exception:
+            lines.append("          existing file")
+    else:
+        lines.append("          NEW AND EMPTY - nothing has been recorded in it yet")
+        # The most common cause by far: data was entered through the other way
+        # of running the project. Say so, with the path, rather than leaving
+        # somebody to conclude their work is gone.
+        found_elsewhere = False
+        for name, other in DB_LOCATIONS.items():
+            if os.path.abspath(other) == path:
+                continue
+            try:
+                if os.path.exists(other) and os.path.getsize(other) > 0:
+                    how = ("under Docker" if name == "docker"
+                           else "directly with python app.py")
+                    lines.append(f"          NOTE: another database already exists at {other}")
+                    lines.append(f"          That is the one used when running {how}. "
+                                 f"Your earlier data is probably there, not lost.")
+                    found_elsewhere = True
+            except OSError:
+                pass
+        if found_elsewhere:
+            lines.append("          See 'Keeping your data between runs' in INSTALL.md.")
+
+    return lines
+
+
+#: Set once, before the schema is created. See describe_database().
+_DB_EXISTED_AT_STARTUP = False
+
+
 def create_app() -> Flask:
+    global _DB_EXISTED_AT_STARTUP
+
     app = Flask(__name__)
     app.config["SECRET_KEY"] = _resolve_secret_key()
     app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
@@ -118,6 +198,15 @@ def create_app() -> Flask:
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # enrolment photo uploads
 
     db.init_app(app)
+
+    # Read before create_all(), which would otherwise make the answer "yes"
+    # every time and hide the very case worth reporting.
+    _existing = database_path()
+    try:
+        _DB_EXISTED_AT_STARTUP = bool(
+            _existing and os.path.exists(_existing) and os.path.getsize(_existing) > 0)
+    except OSError:
+        _DB_EXISTED_AT_STARTUP = False
 
     with app.app_context():
         db.create_all()
@@ -1972,6 +2061,16 @@ if __name__ == "__main__":
     # arbitrary code execution through the browser, so `debug=True` on a farm
     # network - or during a public demonstration - is a remote shell.
     debug_enabled = os.environ.get("FMS_DEBUG", "").strip().lower() in ("1", "true", "on", "yes")
+
+    # Printed before the server starts, so it is the first thing in the log and
+    # the first thing on screen. Nothing here is a secret - the path and the
+    # record counts are exactly what somebody needs to answer "is this the
+    # database I was using yesterday?".
+    print("-" * 72)
+    for line in describe_database():
+        print(line)
+    print("-" * 72, flush=True)
+
     app.run(
         debug=debug_enabled,
         host=os.environ.get("FMS_HOST", "0.0.0.0"),

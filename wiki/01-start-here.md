@@ -173,9 +173,9 @@ demonstration data. The face thumbnails are deliberately obscured.*
 
 ## How the code is laid out
 
-Fourteen Python modules at the project root. There is no `src/` directory and no
-package nesting — with fourteen files, a folder hierarchy would add ceremony
-without adding clarity.
+Seventeen Python modules at the project root. There is no `src/` directory and no
+package nesting — at this size a folder hierarchy would add ceremony without
+adding clarity.
 
 ```
 app.py                  Web routes and the application factory
@@ -188,15 +188,18 @@ face_engine.py          Face enrolment and matching
 attendance_service.py   The clock-in/clock-out transaction
 cctv_engine.py          Cameras, streaming, clips
 payroll_engine.py       Summaries and pay
+barcode_engine.py       Worker identity cards: the value, the barcode, the lookup
+reports_engine.py       The figures behind the Analytics page
 geofence.py             Distance from the farm
 security.py             Roles and permissions
 sync_engine.py          Cloud upload queue
 exports.py              CSV files
 api.py                  The JSON API
+portal.py               The worker self-service portal at /me
 
 templates/              HTML
 static/css/, static/js/ Styles and browser scripts
-tests/                  63 tests
+tests/                  206 tests
 tools/                  Scripts: demo data, benchmarks, experiments
 ```
 

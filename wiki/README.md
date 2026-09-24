@@ -17,14 +17,14 @@ Read these in order. Each one assumes the ones before it.
 | # | Page | What you will understand afterwards |
 | --- | --- | --- |
 | 01 | [Start Here](01-start-here.md) | What the system is for, the one idea the whole design turns on, and how to get it running |
-| 02 | [The Big Picture](02-the-big-picture.md) | The four layers, the eight service modules, and what talks to what |
+| 02 | [The Big Picture](02-the-big-picture.md) | The four layers, the ten service modules, and what talks to what |
 | 03 | [Follow a Clock-In](03-follow-a-clock-in.md) | Every step of the most important transaction, from button press to database row |
 | 04 | [The Database](04-the-database.md) | All sixteen tables, how they relate, and how the schema upgrades itself |
 | 05 | [Face Recognition Explained](05-face-recognition-explained.md) | How LBPH actually works, with no computer-vision background assumed |
 | 06 | [Security and Roles](06-security-and-roles.md) | Who can do what, how it is enforced, and where the audit trail comes from |
 | 07 | [Design Decisions](07-design-decisions.md) | Why the odd-looking parts are the way they are |
 | 08 | [Making Your First Change](08-making-your-first-change.md) | Six worked recipes: add a field, a page, an endpoint, a setting, a refusal reason, a report |
-| 09 | [Testing and Tools](09-testing-and-tools.md) | The 170 tests, what they cover, and the scripts in `tools/` |
+| 09 | [Testing and Tools](09-testing-and-tools.md) | The 206 tests, what they cover, and the scripts in `tools/` |
 | 10 | [Glossary](10-glossary.md) | Every term and abbreviation this project uses |
 
 ## Module reference
