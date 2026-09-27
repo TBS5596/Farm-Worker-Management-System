@@ -100,6 +100,60 @@ def test_every_template_compiles(app_context):
     assert not broken, "templates with syntax errors:\n  " + "\n  ".join(broken)
 
 
+def test_datatables_always_has_jquery_loaded_before_it(app_context):
+    """DataTables is a jQuery plugin, and it fails at load time without it.
+
+    This was live for the whole project's history: nine admin pages loaded
+    `dataTables.min.js` with no jQuery anywhere, so the script threw
+    "jQuery is not defined" on every one of them, `window.DataTable` was never
+    defined, and every table silently lost its search, sorting and paging -
+    features the README, the wiki and the report all claim.
+
+    Nothing caught it because the page still returns 200 and still renders the
+    table as plain HTML. Only a browser sees the error, so the check lives here
+    as a source check instead.
+    """
+    import glob
+
+    broken = []
+    for path in sorted(glob.glob("templates/*.html")):
+        with open(path) as handle:
+            source = handle.read()
+        if "vendor/dataTables.min.js" not in source:
+            continue
+        if "vendor/jquery.min.js" not in source:
+            broken.append(f"{path}: loads DataTables with no jQuery")
+            continue
+        # Order matters as much as presence: jQuery must be parsed first.
+        if source.index("vendor/jquery.min.js") > source.index("vendor/dataTables.min.js"):
+            broken.append(f"{path}: loads jQuery after DataTables")
+
+    assert not broken, "DataTables cannot start on these pages:\n  " + "\n  ".join(broken)
+
+
+def test_every_vendored_asset_a_template_asks_for_exists(app_context):
+    """A vendored path with a typo is a 404 that only a browser would notice.
+
+    The whole point of vendoring was that the interface works with no internet;
+    a missing file puts it right back to a half-styled page, and the server
+    still returns 200 for the page itself.
+    """
+    import glob
+    import os
+    import re
+
+    missing = []
+    for path in sorted(glob.glob("templates/*.html")):
+        with open(path) as handle:
+            source = handle.read()
+        for asset in re.findall(r"filename='(vendor/[^']+)'", source):
+            if not os.path.exists(os.path.join("static", asset)):
+                missing.append(f"{path} -> static/{asset}")
+
+    assert not missing, "templates reference vendored files that do not exist:\n  " + \
+        "\n  ".join(missing)
+
+
 def test_a_jinja_comment_cannot_swallow_a_block(app_context):
     """The exact shape of the payroll.html failure, named so it stays fixed.
 

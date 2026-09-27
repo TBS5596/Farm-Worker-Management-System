@@ -73,7 +73,7 @@ queued and retried.
 
 - Flask, Flask-SQLAlchemy, SQLite
 - OpenCV (`opencv-contrib-python>=4.10,<5.0` - contrib build required, 5.x breaks detection)
-- Bootstrap 5.3, Bootstrap Icons, DataTables, Chart.js - all served from
+- Bootstrap 5.3, Bootstrap Icons, jQuery, DataTables, Chart.js - all served from
   `static/vendor/`, not from a CDN, because a farm office is often offline
 - `python-barcode` and `qrcode` for the identity cards (both render SVG, so no
   image library is needed)
@@ -404,7 +404,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-263 tests covering worker ID generation and PIN uniqueness, face template storage
+265 tests covering worker ID generation and PIN uniqueness, face template storage
 and matching, the clock in/out session rules, geofence behaviour, payroll
 arithmetic and weekly generation, the worker portal, identity cards and the
 scan-to-worker lookup, both card print layouts and the mirroring that keeps a

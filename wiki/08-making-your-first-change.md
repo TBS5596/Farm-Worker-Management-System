@@ -11,7 +11,7 @@ every file you must touch.
 
 ```bash
 source .venv/bin/activate
-pytest                    # 263 tests. Confirm they pass BEFORE you change anything
+pytest                    # 265 tests. Confirm they pass BEFORE you change anything
 python app.py
 ```
 

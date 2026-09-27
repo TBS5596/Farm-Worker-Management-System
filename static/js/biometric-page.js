@@ -24,8 +24,8 @@ document.addEventListener('DOMContentLoaded', function () {
     columnDefs: [{ orderable: false, targets: 8 }],
   });
 
-  // Example: clicking upload on Natasha Sikapula's row (worker pk 2) points the
-  // form at /workers/2/face/enroll and names her in the modal title.
+  // Example: clicking upload on Musonda Banda's row (worker pk 2) points the
+  // form at /workers/2/face/enroll and names them in the modal title.
   FMSUI.onDelegatedClick('.upload-face-btn', function (btn) {
     document.getElementById('uploadFaceForm').action =
       '/workers/' + btn.dataset.workerPk + '/face/enroll';
