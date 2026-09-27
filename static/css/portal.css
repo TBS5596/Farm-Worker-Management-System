@@ -442,3 +442,11 @@ body.portal-signin {
   font-size: .78rem;
   color: #6c757d;
 }
+
+/* A one-line note under a sign-in field. Used where the label alone does not
+   say where the value comes from - "Card number" needs to say which number. */
+.field-hint {
+  margin: -.35rem 0 .9rem;
+  font-size: .78rem;
+  color: var(--p-muted);
+}

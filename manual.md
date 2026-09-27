@@ -89,7 +89,7 @@ created or reset later.
 | Shift start and end | Used to measure lateness and early departure |
 | **Pay cycle** | How often payroll runs for the whole farm: weekly, fortnightly, twice a month or monthly. Individual workers can differ - see section 9 |
 | Clip recording | Whether a short video is recorded at each punch, and how long |
-| **Worker portal** | Whether workers can sign in to see their own hours and payslips, and whether that sign-in needs a face match. Leave the face check **on** - see section 16 |
+| **Portal sign-in** | Whether workers can sign in to see their own hours and payslips at all, and what they must present when they do. Set separately from clock-in verification - see section 4.1.2 |
 | **Worker cards** | What the barcode carries, and whether the browser camera may be used as a scanner. Whether cards are scanned at all is part of Clock-in verification - see section 4.1.1 |
 | **Refresh charts every** | How often a page that shows charts reloads itself. Useful on an office screen left open all day. Anyone can override it for their own browser from the selector on the page |
 
@@ -136,6 +136,35 @@ Two things make that hard to forget:
 anybody a card - do that on the Workers page (section 4.5). A worker who has not
 been issued one yet can still clock in with their worker number, and the audit log
 records that the card was not used.
+
+#### 4.1.2 Choosing what signing in to the portal demands
+
+**Settings -> Portal sign-in.** The same three checks as clock-in, chosen
+separately, because the two protect different things.
+
+Clocking in protects the **attendance record**. The portal protects a worker's
+**wage history** - what they earned, what was deducted, what they were paid. A
+farm might reasonably run a fast combination at a busy gate in the morning and
+still want the full check before anybody can read what a colleague earns.
+
+The same six options appear, with the same card, PIN and face chips. What
+differs is what a weak setting costs you:
+
+| Setting | What it means here |
+| --- | --- |
+| **PIN and face** *(default)* | The right setting for almost every farm |
+| **Card, PIN and face** | The strongest |
+| **Card and face** | Safe - the face still decides. Useful where workers struggle with a PIN |
+| Card and PIN, no camera | *Weak.* A card can be picked up and a PIN watched. Whoever has both reads that worker's pay |
+| PIN only, no camera | *Weak.* Four digits, typed in front of a queue every morning. Anyone who watched can read that worker's entire wage history, and the worker will never know |
+| Card only | *Weak.* A barcode is not a secret. Whoever has the number reads that worker's pay |
+
+**Why this is a separate setting.** If the portal shared the clock-in setting,
+switching the camera check off for a demonstration would silently drop wage
+history to PIN-only access. The two are kept apart so that cannot happen by
+accident.
+
+Changing it is written to the **Audit Log** by name, like the clock-in setting.
 
 ### 4.2 The clock-in camera (CCTV page)
 
@@ -768,11 +797,15 @@ from clocking in, and it does **not** give access to the office dashboard.
 screen uses and tap **My hours & payslips** at the bottom, or go straight to
 `/me`.
 
-**Signing in takes three things:**
+**Signing in takes what the farm has set** (section 4.1.2). By default, three
+things:
 
 1. Your Worker ID, for example `0001`
 2. Your PIN
 3. A photo of your face, taken there and then
+
+Where the farm has chosen a card method, you enter the code printed under the
+barcode on your card instead of your Worker ID.
 
 The photo is the point. Anyone who saw you type your PIN at the terminal still
 cannot open your payslips, because the system checks the face against the one
@@ -819,6 +852,7 @@ showing a number that later moves causes more disputes than it settles.
 Worker ID for fifteen minutes. Waiting clears it; so does a supervisor resetting
 the PIN on the Workers page.
 
-**Switching it off.** Settings has two controls: one disables the portal
-entirely, and one drops sign-in to Worker ID and PIN without the face check.
-Leave the face check on — it is what makes a PIN safe to use for wage history.
+**Changing what sign-in asks for.** Settings -> Portal sign-in offers the same
+six combinations as clock-in, set separately (section 4.1.2), plus a switch that
+disables the portal entirely. Leave a setting that includes the **face** check
+— it is what makes a four-digit PIN safe to use for wage history.

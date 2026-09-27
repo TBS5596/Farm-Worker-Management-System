@@ -58,6 +58,7 @@ queued and retried.
 | Payroll | Weekly, fortnightly, semi-monthly or monthly generation from attendance, set farm-wide and overridable per worker. Overtime, NAPSA and NHIMA at configurable rates. Paid periods protected, and an overlap guard that refuses to pay the same day twice |
 | CCTV | Multiple USB and RTSP feeds, live MJPEG views with face and motion overlays, event and manual clips, camera health checks |
 | Clock-in verification | One setting choosing what a punch demands, from card + PIN + face down to a single factor. Weak combinations are labelled, surfaced on the dashboard, and named individually in the audit trail when changed |
+| Portal sign-in | The same six combinations, chosen separately for the worker portal, because clocking in guards the attendance record while the portal guards a worker's wage history |
 | Access control | Enforced roles (administrator, supervisor, viewer), forced password change on first login, full audit trail |
 | Worker cards | A two-sided printed card per worker: photograph, name, ID and department on the front, barcode on the back. The photograph is the enrolled face sample, so the card shows exactly what the camera checks against. The farm chooses what the barcode carries: the NRC, a one-way scramble of it, or a meaningless generated number. Two print layouts (fold, or double-sided), every back printed with its owner's name so a mis-collated sheet cannot go unnoticed, and a lost card is voided rather than deleted |
 | Analytics | A page that answers four questions in plain English - is attendance still being verified, who is not coming to work, where is the wage bill going, when is the work happening - with charts, ranked tables and a suggested action beside each finding |
@@ -403,7 +404,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-212 tests covering worker ID generation and PIN uniqueness, face template storage
+263 tests covering worker ID generation and PIN uniqueness, face template storage
 and matching, the clock in/out session rules, geofence behaviour, payroll
 arithmetic and weekly generation, the worker portal, identity cards and the
 scan-to-worker lookup, both card print layouts and the mirroring that keeps a

@@ -11,22 +11,23 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-212 tests, about a minute, eleven modules.
+263 tests, about a minute, twelve modules.
 
 ```
 tests/test_attendance.py        11 tests
 tests/test_cards.py             54 tests
 tests/test_cctv_and_sync.py     15 tests
+tests/test_pages_render.py      38 tests
 tests/test_face_engine.py        9 tests
 tests/test_pay_periods.py       21 tests
 tests/test_payroll.py            7 tests
-tests/test_portal.py            34 tests
+tests/test_portal.py            47 tests
 tests/test_real_face.py          4 tests
 tests/test_reports.py           27 tests
 tests/test_security_and_api.py  19 tests
 tests/test_workers.py           11 tests
 
-212 passed
+263 passed
 ```
 
 Useful invocations:
@@ -132,6 +133,33 @@ the buddy-punching case, tested end to end.
 Those four tests need `scikit-image` for the sample photograph and **skip
 automatically** without it, so the suite still passes on a machine that lacks it —
 it just proves less. `requirements-dev.txt` installs it.
+
+## `test_pages_render.py`, and the bug that caused it
+
+This file exists because of a real failure worth recording.
+
+`templates/payroll.html` had its header destroyed by an edit: the comment
+terminator, the title block, the stylesheet block and the opening of the content
+block were all lost. Jinja comments **do not nest**, so the `{# ... #}` a few
+lines further down closed the outer comment early and everything after it became
+live template with no block open. The template would not compile, `/payroll`
+returned 500, and it shipped that way and stayed broken for weeks.
+
+The suite did not catch it because it tested the payroll *engine* thoroughly and
+never once asked the payroll *page* to render.
+
+The fix is not "add a test for payroll". It is that a page nobody renders in the
+suite is a page that can break silently, so `test_pages_render.py` walks
+`app.url_map` itself and asserts that no GET page returns 500. Pages added later
+are covered the day they are added, with nobody having to remember. Two
+companion tests narrow the diagnosis when it fires: one compiles every template
+and reports the offending line number, and one asserts that every template
+extending a base actually declares a content block — the precise shape of this
+failure, named so it stays fixed.
+
+There is also a guard on the guard: `test_the_url_map_actually_has_pages_in_it`
+fails if the filter ever stops finding pages, because a filter bug would
+otherwise make every test in the file pass while checking nothing.
 
 ## Where the newer suites sit
 

@@ -4,11 +4,62 @@
    payroll.html - weekly pay, calculated rather than typed.
 
    Two ways in:
-     Generate From Attendance  the normal route. Reads the recorded clock-in and clock-out times for the pay period you choose, then
-        calculates hours, overtime, gross pay and statutory deductions for every active worker
-        <strong>on that cycle</strong>. Periods already marked paid are never overwritten, and a
-        worker whose days are already covered by a different paid period is skipped rather than
-        paid twice.
+     Generate From Attendance  the normal route. Reads the recorded clock-in and
+                               clock-out times for the pay period you choose and
+                               computes hours, overtime, gross, NAPSA, NHIMA and
+                               net for every active worker on that cycle.
+                               Periods already marked paid are never overwritten,
+                               so re-running is safe.
+     Add a Single Record       for a correction, or a worker whose hours came in
+                               on paper. Even here only hours and a rate are
+                               entered - the amounts are still calculated.
+
+   The Source column says which of the two a row came from ("attendance" or
+   "manual"), so an audit can tell them apart.
+
+   All amounts are ZMW. The rates actually used are stored on each row, so a
+   payslip stays reproducible after the rates change in Settings.
+
+   Context: workers, worker_lookup, payroll_rows, rates, periods, farm_period,
+   default_week_ending.
+   =========================================================================== #}
+
+{% block title %}{{ org_name }} - Payroll{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/dataTables.dataTables.min.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/datatables.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+  <h5 class="mb-0"><i class="bi bi-cash-stack me-2 text-success"></i>Payroll</h5>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('export_csv', export_key='payroll') }}"
+       title="Download payroll as CSV">
+      <i class="bi bi-download me-1"></i>Export CSV
+    </a>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('tables_hub_table_page', table_key='payroll') }}">
+      Full Table
+    </a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  {# --- Generate from attendance: the normal route -------------------- #}
+  <div class="col-xl-7">
+    <div class="card shadow-sm h-100 border-success">
+      <div class="card-header fw-semibold bg-white">
+        <i class="bi bi-magic me-2 text-success"></i>Generate From Attendance
+      </div>
+      <div class="card-body">
+        <p class="text-muted small">
+          Reads the recorded clock-in and clock-out times for the pay period you
+          choose, then calculates hours, overtime, gross pay and statutory
+          deductions for every active worker <strong>on that cycle</strong>.
+          Periods already marked paid are never overwritten, and a worker whose
+          days are already covered by a different paid period is skipped rather
+          than paid twice.
         </p>
         <form method="POST" action="{{ url_for('generate_payroll_page') }}" class="row g-2 align-items-end">
           <div class="col-sm-4">

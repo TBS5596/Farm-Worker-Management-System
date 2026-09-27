@@ -35,6 +35,7 @@ import reports_engine
 import sync_engine
 import attendance_service
 from api import api as api_blueprint
+import portal as portal_blueprint_module
 from portal import portal as portal_blueprint
 from attendance_service import match_threshold, record_punch
 from database import db
@@ -300,6 +301,10 @@ DEFAULT_SETTINGS = {
     # attendance verification off for a demonstration must not silently drop
     # the portal to PIN-only access to wage history.
     "portal_require_face": "on",
+    # The other two factors the portal can ask for. Written together with the
+    # one above from the Portal Sign-In chooser; see portal.PORTAL_MODES.
+    "portal_require_card": "off",
+    "portal_require_pin": "on",
     # Cloud
     "firebase_bucket": "",
     "firebase_project_id": "",
@@ -1319,6 +1324,16 @@ def _register_routes(app: Flask) -> None:
                 mode_key = previous_mode
             mode_settings = attendance_service.settings_for_mode(mode_key)
 
+            # Same treatment for the portal, and for the same reason: a
+            # mangled field must leave the current combination alone rather
+            # than quietly exposing wage history.
+            previous_portal_mode = portal_blueprint_module.portal_mode()
+            portal_mode_key = (request.form.get("portal_mode") or "").strip().lower()
+            if portal_mode_key not in portal_blueprint_module.PORTAL_MODES:
+                portal_mode_key = previous_portal_mode
+            portal_mode_settings = portal_blueprint_module.settings_for_portal_mode(
+                portal_mode_key)
+
             _save_settings({
                 "org_name": request.form.get("org_name", "").strip(),
                 "face_match_threshold": str(threshold_value),
@@ -1351,10 +1366,22 @@ def _register_routes(app: Flask) -> None:
                 # The three factor switches are written from the chosen mode,
                 # resolved above, rather than from three separate checkboxes.
                 **mode_settings,
+                # The portal was previously absent from this handler entirely,
+                # so its settings could be seeded but never changed from the
+                # page that appeared to offer them.
+                "portal_enabled": "on" if request.form.get("portal_enabled") else "off",
+                **portal_mode_settings,
             })
             # A change of clock-in mode changes what the attendance record
             # means, so it is named in the audit trail rather than buried in a
             # generic "settings updated".
+            if portal_mode_key != previous_portal_mode:
+                _log_audit(
+                    "settings.portal_mode",
+                    f"Portal sign-in changed from "
+                    f"{portal_blueprint_module.PORTAL_MODES[previous_portal_mode]['short']} to "
+                    f"{portal_blueprint_module.PORTAL_MODES[portal_mode_key]['short']}",
+                )
             if mode_key != previous_mode:
                 _log_audit(
                     "settings.clockin_mode",
@@ -1373,6 +1400,8 @@ def _register_routes(app: Flask) -> None:
             periods=payroll_engine.PERIODS,
             clockin_modes=attendance_service.CLOCKIN_MODES,
             clockin_mode=attendance_service.clockin_mode(),
+            portal_modes=portal_blueprint_module.PORTAL_MODES,
+            portal_mode=portal_blueprint_module.portal_mode(),
             card_sources=barcode_engine.SOURCES,
             card_symbologies=barcode_engine.SYMBOLOGIES,
             card_stats=barcode_engine.stats(),

@@ -99,6 +99,135 @@ def portal_requires_face() -> bool:
     return _flag("portal_require_face", "on")
 
 
+def portal_requires_card() -> bool:
+    return _flag("portal_require_card", "off")
+
+
+def portal_requires_pin() -> bool:
+    """Only meaningful when the card is required; otherwise the PIN is the
+    only secret there is and cannot be switched off."""
+    if not portal_requires_card():
+        return True
+    return _flag("portal_require_pin", "on")
+
+
+# ---------------------------------------------------------------------------
+# What signing in demands
+#
+# The same six combinations the capture point offers, chosen separately,
+# because the two guard different things. Clocking in guards the attendance
+# record; this guards a worker's wage history. A farm might reasonably run a
+# fast combination at a busy gate and still want the full check before somebody
+# can read what a colleague earns.
+#
+# The mode is derived from the three settings rather than stored, for the same
+# reason as the clock-in one: a settings table edited by hand, or upgraded from
+# a release without modes, must report what is actually enforced.
+# ---------------------------------------------------------------------------
+
+#: Same keys and factor tuples as attendance_service.CLOCKIN_MODES, so the two
+#: choosers read identically. The notes differ, and deliberately: what a weak
+#: setting gives away here is not the same thing.
+PORTAL_MODES = {
+    "card_pin_face": {
+        "label": "Card, PIN and face",
+        "short": "Card + PIN + Face",
+        "factors": (True, True, True),
+        "strength": "strong",
+        "summary": "The worker enters their card code and PIN, and the camera "
+                   "checks their face.",
+        "note": "The strongest setting. Nothing short of the worker themselves "
+                "opens their wage history.",
+    },
+    "pin_face": {
+        "label": "PIN and face",
+        "short": "PIN + Face",
+        "factors": (False, True, True),
+        "strength": "strong",
+        "summary": "The worker enters their worker number and PIN, and the "
+                   "camera checks their face.",
+        "note": "The default, and the right setting for almost every farm. A PIN "
+                "gets typed in front of a queue; the face is what stops the "
+                "person behind them reading their pay.",
+    },
+    "card_face": {
+        "label": "Card and face",
+        "short": "Card + Face",
+        "factors": (True, False, True),
+        "strength": "strong",
+        "summary": "The worker enters their card code and the camera checks "
+                   "their face. No PIN is asked for.",
+        "note": "Safe, because the face still decides. Useful where workers "
+                "struggle to remember a PIN.",
+    },
+    "card_pin": {
+        "label": "Card and PIN, no camera",
+        "short": "Card + PIN",
+        "factors": (True, True, False),
+        "strength": "weak",
+        "summary": "The worker enters their card code and PIN. Nothing checks "
+                   "who is actually holding the phone.",
+        "note": "A card can be picked up and a PIN can be watched. Whoever has "
+                "both can read that worker's hours, deductions and pay.",
+    },
+    "pin_only": {
+        "label": "PIN only, no camera",
+        "short": "PIN only",
+        "factors": (False, True, False),
+        "strength": "weak",
+        "summary": "The worker enters their worker number and PIN. Nothing "
+                   "checks who is actually holding the phone.",
+        "note": "Four digits, typed in front of a queue at the terminal every "
+                "morning. Anyone who watched can then read that worker's entire "
+                "wage history, and the worker will never know.",
+    },
+    "card_only": {
+        "label": "Card only",
+        "short": "Card only",
+        "factors": (True, False, False),
+        "strength": "weak",
+        "summary": "The worker enters their card code and nothing else is "
+                   "checked.",
+        "note": "A barcode is not a secret - anyone who handles a card can copy "
+                "it with a phone. Whoever has the number can read that worker's "
+                "pay.",
+    },
+}
+
+DEFAULT_PORTAL_MODE = "pin_face"
+
+
+def portal_mode() -> str:
+    """The named combination the portal settings currently add up to."""
+    current = (portal_requires_card(), portal_requires_pin(), portal_requires_face())
+    for key, mode in PORTAL_MODES.items():
+        if mode["factors"] == current:
+            return key
+    return DEFAULT_PORTAL_MODE
+
+
+def portal_mode_info() -> dict:
+    key = portal_mode()
+    return {"key": key, **PORTAL_MODES[key]}
+
+
+def settings_for_portal_mode(key: str) -> dict:
+    """The three settings a named mode implies. Raises on an unknown mode.
+
+    Raising rather than defaulting, because a typo that quietly selected a
+    weaker combination would expose wage history without anybody noticing.
+    """
+    key = (key or "").strip().lower()
+    if key not in PORTAL_MODES:
+        raise ValueError(f"unknown portal sign-in mode: {key}")
+    card, pin, face = PORTAL_MODES[key]["factors"]
+    return {
+        "portal_require_card": "on" if card else "off",
+        "portal_require_pin": "on" if pin else "off",
+        "portal_require_face": "on" if face else "off",
+    }
+
+
 # ---------------------------------------------------------------------------
 # Throttle
 # ---------------------------------------------------------------------------
@@ -261,6 +390,8 @@ def login():
         return redirect(url_for("portal.dashboard"))
     return render_template("portal_login.html",
                            org_name=_setting("org_name", "FMS Farm"),
+                           require_card=portal_requires_card(),
+                           require_pin=portal_requires_pin(),
                            require_face=portal_requires_face())
 
 
@@ -272,23 +403,44 @@ def do_login():
     org = _setting("org_name", "FMS Farm")
     code = request.form.get("worker_id", "").strip().upper()
     pin = request.form.get("pin", "").strip()
+    card = request.form.get("card_value", "").strip()
+
+    need_card = portal_requires_card()
+    need_pin = portal_requires_pin()
 
     def refuse(message: str, category: str = "danger"):
         flash(message, category)
         return redirect(url_for("portal.login"))
 
-    if not code or not pin:
-        return refuse("Enter your Worker ID and PIN.")
+    # The card, when the farm asks for one. It identifies the worker, so it can
+    # stand in for the worker number rather than being typed as well as it.
+    carded_worker = None
+    if need_card:
+        if not card:
+            return refuse("Scan your card, or type the code printed on it.")
+        carded_worker, reason = barcode_engine.resolve(card)
+        if carded_worker is None:
+            return refuse(barcode_engine.CARD_REASON_MESSAGES.get(
+                reason, "That card was not accepted."))
+        # Everything downstream - the lockout counter, the audit line - keys on
+        # the worker number, so adopt the one the card resolved to.
+        code = carded_worker.worker_id
+
+    if not code:
+        return refuse("Enter your Worker ID.")
+    if need_pin and not pin:
+        return refuse("Enter your PIN.")
 
     if _recent_failures(code) >= MAX_ATTEMPTS:
         return refuse("Too many failed attempts. Wait 15 minutes, or ask your "
                       "supervisor to reset your PIN.")
 
-    worker = Worker.query.filter_by(worker_id=code).filter(Worker.status == "active").first()
+    worker = carded_worker or (Worker.query.filter_by(worker_id=code)
+                               .filter(Worker.status == "active").first())
 
     # One message for a bad code and a bad PIN, so the form cannot be used to
     # discover which worker codes exist.
-    if not worker or not worker.check_pin(pin):
+    if worker is None or (need_pin and not worker.check_pin(pin)):
         _record_failure(code)
         return refuse("Worker ID or PIN is incorrect.")
 

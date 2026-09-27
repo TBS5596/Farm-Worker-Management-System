@@ -1,9 +1,11 @@
 {# ===========================================================================
    portal_login.html - the worker's sign-in screen at /me
 
-   Three factors, in order: worker code, PIN, and a photo of their face. The
-   photo is the important one - a four digit PIN was only ever meant to guard a
-   clock-in, not a year of wage history.
+   What this asks for is configurable - Settings -> Portal sign-in offers the
+   same six combinations the capture point does, chosen separately because the
+   two guard different things. The default is worker code, PIN and a photo of
+   their face, and the photo is the important one: a four digit PIN was only
+   ever meant to guard a clock-in, not a year of wage history.
 
    Two ways to take that photo, and the reason is a browser rule worth
    remembering: getUserMedia (the live preview) only works in a SECURE context,
@@ -38,13 +40,25 @@
       <form method="POST" action="{{ url_for('portal.do_login') }}"
             enctype="multipart/form-data" id="signinForm">
 
+        {% if require_card %}
+        {# The card identifies the worker, so the worker number is not asked
+           for as well - one fewer thing to type on a phone with cold hands. #}
+        <label for="card_value">Card number</label>
+        <input type="text" id="card_value" name="card_value"
+               placeholder="Scan your card, or type the code"
+               autocomplete="off" required autofocus />
+        <p class="field-hint">The code printed under the barcode on your card.</p>
+        {% else %}
         <label for="worker_id">Worker ID</label>
         <input type="text" id="worker_id" name="worker_id" placeholder="e.g. 0001"
                inputmode="numeric" autocomplete="username" required autofocus />
+        {% endif %}
 
+        {% if require_pin %}
         <label for="pin">PIN</label>
         <input type="password" id="pin" name="pin" placeholder="Your PIN"
                inputmode="numeric" autocomplete="current-password" minlength="4" required />
+        {% endif %}
 
         {% if require_face %}
           <label>Your photo</label>
