@@ -437,6 +437,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('static', filename='vendor/jquery.min.js') }}"></script>
 <script src="{{ url_for('static', filename='vendor/dataTables.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/components.js') }}"></script>
 <script src="{{ url_for('static', filename='js/edit-modals.js') }}"></script>

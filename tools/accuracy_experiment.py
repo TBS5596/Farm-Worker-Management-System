@@ -41,7 +41,8 @@ import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-import face_engine  # noqa: E402
+import face_engine
+from paths import FACES_DIR  # noqa: E402
 from app import app  # noqa: E402
 from models import FaceTemplate, Worker  # noqa: E402
 
@@ -95,6 +96,15 @@ def _variant(image, brightness=0, angle=0.0, scale=1.0, blur=0):
 
 # Capture conditions a farm terminal actually sees: even light, bright morning
 # sun, shade, a turned head, standing closer or further back, and camera shake.
+# Held out from CONDITIONS: these are what the subject is ENROLLED with, so
+# that every probe below is a capture the recogniser has not already seen.
+ENROL_CONDITIONS = [
+    ("enrolment, even light", dict(brightness=0, angle=0)),
+    ("enrolment, slightly left", dict(brightness=6, angle=-3)),
+    ("enrolment, slightly right", dict(brightness=-6, angle=3)),
+    ("enrolment, a little closer", dict(brightness=0, angle=0, scale=1.04)),
+]
+
 CONDITIONS = [
     ("even light, square to camera", dict(brightness=0, angle=0)),
     ("bright light", dict(brightness=25, angle=0)),
@@ -128,7 +138,38 @@ def main():
 
         subject = enrolled[0]
         others = enrolled[1:]
+
+        # Enrol the subject from the photograph this experiment probes with.
+        #
+        # This used to take whichever worker happened to be enrolled first and
+        # trust that their stored templates came from the same face. They do
+        # not: seed_demo.py enrols drawn placeholder portraits, deliberately,
+        # so that demonstration data contains no real person. Probing those
+        # with a photograph refuses every genuine trial, and the script then
+        # reported FRR 100% at every threshold as though it were a result.
+        # A number like that is worse than no number, because it looks like
+        # evidence.
+        #
+        # ENROL_CONDITIONS are held out from CONDITIONS below, so no probe is
+        # ever one of the enrolled samples - which is what makes the genuine
+        # trials genuine rather than a lookup.
+        face_engine.clear_templates(subject)
+        enrolled_ok = 0
+        for _label, kwargs in ENROL_CONDITIONS:
+            outcome = face_engine.enroll_frame(subject, _variant(face, **kwargs),
+                                               FACES_DIR, require_eyes=True)
+            enrolled_ok += 1 if outcome["ok"] else 0
+        if enrolled_ok < 2:
+            print(f"Could not enrol the sample photograph ({enrolled_ok} of "
+                  f"{len(ENROL_CONDITIONS)} accepted). Without it the genuine "
+                  f"trials would measure nothing; stopping rather than "
+                  f"reporting a meaningless 100% rejection rate.")
+            return
+        print(f"Enrolled {enrolled_ok} held-out captures of the sample "
+              f"photograph as {subject.worker_id}.")
+
         face_engine.invalidate()
+        _PER_WORKER.clear()
 
         genuine, impostor, per_condition = [], [], []
 
@@ -223,6 +264,10 @@ def main():
 
     out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "docs",
                                        "accuracy_results.json"))
+    # Same reason as in benchmark.py: docs/ is gitignored and absent on a
+    # fresh clone, and losing a completed experiment to a missing directory
+    # is a poor way to end a long run.
+    os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", encoding="utf-8") as handle:
         json.dump(report, handle, indent=2)
 

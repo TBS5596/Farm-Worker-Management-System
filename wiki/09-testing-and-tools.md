@@ -11,13 +11,13 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-263 tests, about a minute, twelve modules.
+265 tests, about a minute, twelve modules.
 
 ```
 tests/test_attendance.py        11 tests
 tests/test_cards.py             54 tests
 tests/test_cctv_and_sync.py     15 tests
-tests/test_pages_render.py      38 tests
+tests/test_pages_render.py      40 tests
 tests/test_face_engine.py        9 tests
 tests/test_pay_periods.py       21 tests
 tests/test_payroll.py            7 tests
@@ -27,7 +27,7 @@ tests/test_reports.py           27 tests
 tests/test_security_and_api.py  19 tests
 tests/test_workers.py           11 tests
 
-263 passed
+265 passed
 ```
 
 Useful invocations:

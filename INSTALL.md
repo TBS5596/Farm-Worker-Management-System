@@ -482,7 +482,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-263 tests, about a minute. All should pass.
+265 tests, about a minute. All should pass.
 
 ### Check which cameras the machine can see
 

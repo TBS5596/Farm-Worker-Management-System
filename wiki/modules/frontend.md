@@ -197,7 +197,7 @@ analytics-page.js   portal-reports.js auto-refresh.js
 Plain browser JavaScript. No framework, no build step, no bundler. Each script
 is loaded only by the page that needs it, through `extra_js`.
 
-Libraries — Bootstrap, Bootstrap Icons, **DataTables** (sorting, searching,
+Libraries — Bootstrap, Bootstrap Icons, **jQuery**, **DataTables** (sorting, searching,
 paging of record tables) and **Chart.js** (dashboard and analytics charts) — are
 served from **`static/vendor/`**, not from a CDN. See the note below; it is about
 1.1 MB and it is the difference between a farm machine that has never had a
@@ -264,6 +264,11 @@ browser. See [cctv_engine.md](cctv_engine.md).
   template quietly breaks that claim, and it breaks it only on the machine that
   has never had a connection — which is the one machine nobody tests on. If you
   add a library, vendor it.
+- **DataTables needs jQuery, and for most of this project's life nothing loaded
+  it.** Every table silently lost its search, sorting and paging while the page
+  still returned 200 and still drew the rows — only a browser console showed it.
+  `tests/test_pages_render.py` now asserts that any template loading DataTables
+  also loads jQuery, and loads it first.
 - **Bootstrap Icons needs its font files too.** `static/vendor/fonts/` holds the
   `.woff` and `.woff2`; the vendored stylesheet's relative paths expect them there.
 

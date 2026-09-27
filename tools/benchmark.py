@@ -230,6 +230,10 @@ def main():
         }
 
     out = os.path.join(os.path.dirname(__file__), "..", "docs", "benchmark_results.json")
+    # docs/ is gitignored, so a fresh clone has no such directory and this
+    # script - which the README and the wiki both tell people to run - died on
+    # the last line after doing all the work.
+    os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     with open(os.path.abspath(out), "w", encoding="utf-8") as handle:
         json.dump(report, handle, indent=2)
 
