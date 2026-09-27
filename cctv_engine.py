@@ -438,6 +438,64 @@ def log_health(device_type: str, device_id: int, status: str, device_label: str 
         db.session.rollback()
 
 
+def probe_source(source, warmup: int = 2) -> dict:
+    """Open one camera source, read from it, and report what came back.
+
+    Deliberately database-free, unlike probe_feed() below. It is what
+    `tools/list_cameras.py` uses to sweep a machine for cameras before any of
+    them have been registered - including a phone attached as a system camera,
+    which is the whole reason somebody runs that script.
+
+    A few frames are thrown away first. A camera that has just been opened
+    frequently returns one or two black or garbage frames while it settles, and
+    reporting a resolution read from those is how you end up with 0x0 next to a
+    camera that works perfectly.
+    """
+    started = time.time()
+    cap = open_camera(coerce_source(source))
+    result = {
+        "source": str(source),
+        "opened": False,
+        "read_ok": False,
+        "width": 0,
+        "height": 0,
+        "fps": 0.0,
+        "elapsed_ms": 0,
+        "error": "",
+    }
+
+    try:
+        result["opened"] = cap.isOpened()
+        if result["opened"]:
+            for _ in range(max(0, warmup)):
+                cap.read()
+            ok, frame = cap.read()
+            result["read_ok"] = bool(ok and frame is not None)
+            if result["read_ok"]:
+                height, width = frame.shape[:2]
+                result["width"], result["height"] = int(width), int(height)
+                try:
+                    result["fps"] = round(float(cap.get(cv2.CAP_PROP_FPS)) or 0.0, 1)
+                except Exception:
+                    result["fps"] = 0.0
+            else:
+                result["error"] = "opened but returned no frame"
+        else:
+            result["error"] = "could not be opened"
+    except Exception as err:                      # noqa: BLE001 - report, never raise
+        # A probe that raises is useless: the caller is sweeping a range of
+        # indices precisely because it does not know which exist.
+        result["error"] = f"{type(err).__name__}: {err}"
+    finally:
+        try:
+            cap.release()
+        except Exception:
+            pass
+
+    result["elapsed_ms"] = int((time.time() - started) * 1000)
+    return result
+
+
 def probe_feed(feed: CCTVFeed) -> dict:
     """Try to open a feed, update its heartbeat and log the result."""
     source = coerce_source(feed.rtsp_url or "")

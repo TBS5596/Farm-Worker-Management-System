@@ -11,12 +11,12 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-206 tests, about a minute, eleven modules.
+212 tests, about a minute, eleven modules.
 
 ```
 tests/test_attendance.py        11 tests
 tests/test_cards.py             54 tests
-tests/test_cctv_and_sync.py      9 tests
+tests/test_cctv_and_sync.py     15 tests
 tests/test_face_engine.py        9 tests
 tests/test_pay_periods.py       21 tests
 tests/test_payroll.py            7 tests
@@ -26,7 +26,7 @@ tests/test_reports.py           27 tests
 tests/test_security_and_api.py  19 tests
 tests/test_workers.py           11 tests
 
-206 passed
+212 passed
 ```
 
 Useful invocations:
@@ -232,7 +232,7 @@ completely the wrong reason.
 ## The scripts in `tools/`
 
 
-Six scripts. None is part of the running application.
+Seven scripts. None is part of the running application.
 
 ### `tools/seed_demo.py`
 
@@ -257,6 +257,35 @@ deliberate: demo data ends up in screenshots, and screenshots end up in reports.
 Keep it that way if you extend it.
 
 **Do not run it against a live database.**
+
+### `tools/list_cameras.py`
+
+```bash
+python tools/list_cameras.py
+python tools/list_cameras.py --max 8
+python tools/list_cameras.py --source rtsp://192.168.1.50:554/stream1
+```
+
+Sweeps the local camera indices, opens each, and reports the resolution actually
+returned along with the source string to paste into the CCTV page.
+
+The job it really exists for is finding a **phone attached as a system camera**.
+Continuity Camera on macOS, and Camo or DroidCam elsewhere, make a phone appear
+as another numbered device with nothing to announce which number it got. Opening
+each one and comparing resolutions is the practical way to tell, since a phone
+almost always reports markedly more pixels than a built-in laptop webcam.
+
+It uses `cctv_engine.probe_source()`, which is `probe_feed()` without the
+database: no `CCTVFeed` row, no health log, no commit. That matters because this
+script runs on machines where nothing has been registered yet.
+
+`probe_source()` throws away a couple of frames before measuring. A camera that
+has just been opened often returns a black or garbage frame while it settles,
+and a resolution read from one of those reports `0x0` next to a camera that
+works perfectly. It also catches everything: the caller is sweeping indices it
+knows nothing about, so an exception from index 3 must not end the sweep.
+`tests/test_cctv_and_sync.py` asserts that, including against a backend that
+raises on read — which is what an unplugged-but-still-enumerated device does.
 
 ### `tools/db_info.py`
 

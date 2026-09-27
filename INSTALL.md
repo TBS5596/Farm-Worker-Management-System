@@ -482,7 +482,32 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-206 tests, about a minute. All should pass.
+212 tests, about a minute. All should pass.
+
+### Check which cameras the machine can see
+
+```bash
+python tools/list_cameras.py
+```
+
+Opens every camera it can find, reports the resolution each one really returns,
+and prints the source string to paste into the CCTV page. Run it whenever a feed
+will not come up, or when you have just connected a phone as a camera and need
+to know which index it landed on.
+
+A phone is worth connecting: its camera is far better than a built-in laptop
+webcam, and face matching depends on how much detail reaches the recogniser. Two
+ways, covered in full in [the operator manual](manual.md):
+
+- **Over WiFi** — an IP-camera app on the phone (*IP Webcam*, *DroidCam*) gives
+  an `http://` or `rtsp://` address you add as a network camera. Works on every
+  host, including a Raspberry Pi, and the phone can be at the gate while the
+  server is in the office.
+- **Plugged in** — Continuity Camera on a Mac with an iPhone, or Camo/iVCam/
+  DroidCam on Windows and Linux, makes the phone appear as an ordinary numbered
+  camera. Good for a demonstration; not for a farm, and **not available at all
+  when running under Docker on macOS or Windows**, where a container cannot
+  reach a camera.
 
 ### Check the recognizer really loaded
 
