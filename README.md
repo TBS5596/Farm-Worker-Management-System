@@ -37,7 +37,10 @@ are computed from the recorded sessions and a stored hourly rate. Nothing is
 typed in by hand.
 
 **Camera-only by design.** The project has no fingerprint scanner, so the camera
-is the biometric. USB webcams and RTSP IP cameras are both supported.
+is the biometric. USB webcams and RTSP IP cameras are both supported — and so is
+a phone, either as a network camera over WiFi or attached to the host as an
+ordinary capture device. `python tools/list_cameras.py` reports every camera a
+machine can open and the exact source string to register it with.
 
 **Offline first.** Everything is stored locally in SQLite. If Firebase is
 configured, snapshots upload as they are captured; when the link drops they are
@@ -400,7 +403,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-206 tests covering worker ID generation and PIN uniqueness, face template storage
+212 tests covering worker ID generation and PIN uniqueness, face template storage
 and matching, the clock in/out session rules, geofence behaviour, payroll
 arithmetic and weekly generation, the worker portal, identity cards and the
 scan-to-worker lookup, both card print layouts and the mirroring that keeps a

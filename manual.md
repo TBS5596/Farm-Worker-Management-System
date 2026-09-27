@@ -150,6 +150,72 @@ records that the card was not used.
    the attendance camera - the one used for verification, snapshots and clips.
    Everything else is surveillance.
 
+**Not sure what the source string should be?** Run this on the machine the
+system is installed on:
+
+```
+python tools/list_cameras.py
+```
+
+It opens every camera it can find, reports the resolution each one actually
+returns, and prints the exact source string to paste into step 1.
+
+### 4.2.1 Using a phone as the camera
+
+A phone camera is far better than the camera built into a laptop, and the
+difference is not cosmetic: face matching depends on how much detail reaches the
+recogniser, and at six in the morning under a shed roof that is the difference
+between recognising a worker and turning them away. If you have a spare phone,
+it is the cheapest upgrade available to this system.
+
+There are two ways to do it, and the right one depends on where the system runs.
+
+#### Over WiFi, as a network camera (works everywhere)
+
+Best for an actual farm. The phone sits at the clock-in point and the system can
+be in the office.
+
+1. Install an IP-camera app on the phone. *IP Webcam* on Android and *DroidCam*
+   on either are the common free ones.
+2. Start the app. It shows an address such as
+   `http://192.168.1.44:8080/video` or `rtsp://192.168.1.44:554/`.
+3. Add that address as a CCTV feed exactly as in step 1 above, and press Test.
+4. Star it to make it the attendance camera.
+
+The phone and the system must be on the same WiFi. Give the phone a fixed
+address in the router if you can - a phone that gets a new address after a
+reboot will stop working, and the CCTV page will say the camera is offline when
+nothing is actually broken. Keep the phone on a charger; a screen-on camera app
+flattens a battery in a few hours.
+
+#### Plugged into the machine, as a normal camera
+
+Best for a demonstration on a laptop. A phone connected to a computer can
+present itself as an ordinary camera, and the system then treats it exactly like
+a built-in webcam:
+
+- **iPhone with a Mac** - Continuity Camera, built into macOS. Nothing to
+  install; hold the phone near the Mac with both signed in to the same Apple
+  account.
+- **Any phone with Windows or Linux** - an app such as Camo, iVCam or DroidCam,
+  installed on both the phone and the computer.
+
+Once connected, run `python tools/list_cameras.py`. The phone appears as an
+extra numbered camera, usually with a noticeably higher resolution than the
+laptop's own. Use the source string the script prints, for example
+`builtin://1`.
+
+If two cameras appear and you cannot tell which is the phone, disconnect the
+phone, run the script again, and see which entry disappeared.
+
+**What this way cannot do.** It only works where the phone and the system are
+the same room and the same machine, so it suits a demonstration rather than a
+farm. It does not work at all when the system is running inside Docker on a Mac
+or Windows machine, because a container on those systems cannot reach a camera -
+that is a limitation of Docker on those platforms, not of this software. If you
+need a camera and Docker together, use the WiFi method above, or run the system
+directly with `python app.py`.
+
 ### 4.3 Workers
 
 **Workers -> Add Worker.** Name, phone and a PIN are required. The Worker ID is
@@ -621,7 +687,9 @@ pulling figures for a report. Notable tables:
 | Symptom | Cause and fix |
 | --- | --- |
 | Page will not open at all | Wrong port, or the app is not running. Use 8010; check `docker compose ps` |
-| Blank camera feed | Wrong source, another app is using the camera, or the USB device is not passed into Docker |
+| Blank camera feed | Wrong source, another app is using the camera, or the USB device is not passed into Docker. Run `python tools/list_cameras.py` to see what the machine can actually open |
+| A phone camera worked yesterday and is offline today | Its WiFi address changed. Check the address in the phone's camera app against the one registered on the CCTV page, and give the phone a fixed address in the router. See section 4.2.1 |
+| No camera at all when running under Docker on a Mac or Windows | Expected: containers on those systems cannot reach a camera. Use a phone over WiFi (section 4.2.1), or run the system directly with `python app.py` |
 | Everyone is rejected at clock-in | Camera not working, or no samples enrolled. Check the Biometric page |
 | Nobody is asked for a card, or for a PIN, or for their face | That check is switched off. Settings -> Clock-in verification (section 4.1.1). The Dashboard also shows what is currently being checked |
 | Attendance looks wrong and nobody can explain it | Check Settings -> Clock-in verification first. If the farm has been left in a weak setting, one worker may have been clocking in for another. The Audit Log shows when the setting was last changed |

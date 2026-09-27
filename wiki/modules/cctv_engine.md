@@ -37,6 +37,14 @@ This keeps the configuration a single field in the interface, which matters
 because the farm staff configuring it should not need to know which kind of
 camera they have.
 
+**This is also why a phone works as a camera with no code at all.** A phone
+running an IP-camera app is just an `rtsp://` or `http://` address, and a phone
+attached to the host through Continuity Camera, Camo or DroidCam is just another
+device index — the operating system presents it as an ordinary capture device,
+and `open_camera()`'s platform backend (`CAP_AVFOUNDATION` on macOS is the same
+framework Continuity Camera registers with) opens it like any webcam. Nothing in
+this module knows or needs to know that a phone is involved.
+
 ## Opening a camera: `open_camera()` and `open_best_camera()`
 
 ```mermaid
@@ -131,10 +139,23 @@ by scrubbing a timeline.
 It takes `app` and runs inside an application context, because it writes a
 database row from a code path that may not have one.
 
-## Health: `log_health()` and `probe_feed()`
+## Health: `log_health()`, `probe_feed()` and `probe_source()`
 
 `probe_feed()` opens a feed, reads one frame, releases it, and records the
 outcome with a latency into `hardware_health_logs`.
+
+`probe_source()` is the same idea without the database — no `CCTVFeed` row, no
+health log, no commit. It exists for `tools/list_cameras.py`, which sweeps a
+machine for cameras *before* any have been registered, typically to find which
+index a phone landed on.
+
+Two details in it are load-bearing. It discards a couple of frames before
+measuring, because a camera that has just opened often returns a black frame
+while it settles and a resolution read from that reports `0x0` beside a camera
+that works. And it catches everything rather than raising: the caller is looping
+over indices it knows nothing about, so a failure at index 3 must not end the
+sweep. An unplugged-but-still-enumerated device opens successfully and then
+throws on read, which is exactly the case the tests cover.
 
 **The log is a history, not a current state.** That is what lets you tell an
 intermittent camera from a dead one — the difference between a maintenance visit

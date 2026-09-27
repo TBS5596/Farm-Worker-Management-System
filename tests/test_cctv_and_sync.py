@@ -96,3 +96,82 @@ def test_tracking_the_same_record_twice_updates_it(app_context):
     row = CloudSyncMetadata.query.filter_by(table_name="event_snapshots", record_id=5).one()
     assert row.cloud_status == "synced"
     assert row.synced_at is not None
+
+
+# ---------------------------------------------------------------------------
+# Sweeping a machine for cameras
+#
+# probe_source() is what tools/list_cameras.py uses to find a phone attached as
+# a system camera. It is called in a loop over indices that mostly do not
+# exist, so the contract that matters is that it always answers and never
+# raises - a probe that throws is useless to a caller that is guessing.
+# ---------------------------------------------------------------------------
+
+def test_probing_a_source_that_does_not_exist_answers_rather_than_raises(app_context):
+    result = cctv_engine.probe_source(99)
+
+    assert result["opened"] is False
+    assert result["read_ok"] is False
+    assert result["error"]
+
+
+def test_probing_an_unreachable_url_answers_rather_than_raises(app_context):
+    """A wrong RTSP address is a normal typo, not an exceptional condition."""
+    result = cctv_engine.probe_source("rtsp://192.0.2.1:554/does-not-exist")
+
+    assert result["read_ok"] is False
+    assert result["source"] == "rtsp://192.0.2.1:554/does-not-exist"
+
+
+def test_a_probe_always_returns_the_full_shape(app_context):
+    """The reporting tool formats every field, so every field must be present."""
+    result = cctv_engine.probe_source(99)
+
+    for key in ("source", "opened", "read_ok", "width", "height",
+                "fps", "elapsed_ms", "error"):
+        assert key in result, f"probe_source() dropped {key}"
+
+
+def test_a_probe_survives_a_camera_that_explodes(app_context, monkeypatch):
+    """A backend that raises on read must not stop the sweep.
+
+    Exactly this happens on a machine where an index exists but the device
+    behind it has been unplugged: the open succeeds and the read throws.
+    """
+    class Exploding:
+        def isOpened(self): return True
+        def read(self): raise RuntimeError("device disappeared")
+        def get(self, _prop): return 0.0
+        def release(self): pass
+
+    monkeypatch.setattr(cctv_engine, "open_camera", lambda _source: Exploding())
+    result = cctv_engine.probe_source(0)
+
+    assert result["read_ok"] is False
+    assert "device disappeared" in result["error"]
+
+
+def test_the_probe_does_not_touch_the_database(app_context):
+    """Unlike probe_feed(), this one is for machines with nothing registered."""
+    from models import HardwareHealthLog
+
+    before = HardwareHealthLog.query.count()
+    cctv_engine.probe_source(99)
+
+    assert HardwareHealthLog.query.count() == before
+
+
+def test_a_phone_sized_frame_is_called_out_as_such(app_context):
+    """Resolution is how an operator tells a phone from a laptop webcam."""
+    import importlib.util
+    import os as _os
+
+    spec = importlib.util.spec_from_file_location(
+        "list_cameras", _os.path.join(_os.path.dirname(_os.path.dirname(__file__)),
+                                      "tools", "list_cameras.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert "phone" in module._guess(1920, 1080)
+    assert "laptop" in module._guess(1280, 720)
+    assert module._guess(0, 0) == ""
