@@ -45,7 +45,7 @@
         (section 2).</li>
     <li><strong>CCTV</strong> - add the clock-in camera, press <em>Test</em>, then the
         <i class="bi bi-star"></i> button to make it the attendance camera. A spare phone
-        makes a much better camera than a laptop webcam - section 4.</li>
+        makes a much better camera than a laptop webcam - section 5.</li>
     <li><strong>Workers</strong> - add each worker with an hourly rate and a unique PIN.</li>
     <li><strong>Biometric</strong> - enrol at least three face samples per worker.</li>
     <li>Have a worker clock in from the home page and check <strong>Attendance</strong>.</li>
@@ -54,9 +54,9 @@
         present to clock in (section 2). A fresh install starts at PIN + face.</li>
     <li><em>Optional:</em> <strong>Settings &rarr; Worker cards</strong> for what the
         barcode carries, then <strong>Workers &rarr; Issue cards</strong> and print the
-        sheet (sections 6 and 7).</li>
+        sheet (sections 7 and 8).</li>
     <li>Tell workers they can check their own hours and payslips at <code>/me</code>
-        on their phones (section 12).</li>
+        on their phones (section 13).</li>
   </ol>
 
   <h5 class="section-title">2) Clock-in Verification: What The Terminal Checks</h5>
@@ -122,12 +122,55 @@
 
   <p class="mt-3">
     <strong>A card method needs cards.</strong> Choosing a card option does not issue
-    anybody one &mdash; do that on the Workers page (section 6). A worker not yet issued a
+    anybody one &mdash; do that on the Workers page (section 7). A worker not yet issued a
     card can still clock in with their worker number, and the audit log records that the
     card was not used.
   </p>
 
-  <h5 class="section-title">3) Worker Onboarding</h5>
+  <h5 class="section-title">3) Portal Sign-In: What A Worker Must Present</h5>
+  <p>
+    <strong>Settings &rarr; Portal sign-in.</strong> The same three checks as section 2,
+    chosen <em>separately</em> &mdash; because the two protect different things. Clocking
+    in protects the <strong>attendance record</strong>; the portal protects a worker's
+    <strong>wage history</strong>: what they earned, what was deducted, what they were
+    paid. A farm may reasonably run a fast combination at a busy gate and still want the
+    full check before anybody can read what a colleague earns.
+  </p>
+
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered align-middle">
+      <thead class="table-light"><tr><th>Setting</th><th>What it means here</th></tr></thead>
+      <tbody>
+        <tr><td><strong>PIN and face</strong> (default)</td>
+            <td>The right setting for almost every farm</td></tr>
+        <tr><td><strong>Card, PIN and face</strong></td><td>The strongest</td></tr>
+        <tr><td><strong>Card and face</strong></td>
+            <td>Safe &mdash; the face still decides. Useful where workers struggle with a
+                PIN</td></tr>
+        <tr><td>Card and PIN, no camera <span class="badge bg-warning text-dark">Weak</span></td>
+            <td>A card can be picked up and a PIN watched. Whoever has both reads that
+                worker's pay</td></tr>
+        <tr><td>PIN only, no camera <span class="badge bg-warning text-dark">Weak</span></td>
+            <td>Four digits, typed in front of a queue every morning. Anyone who watched can
+                read that worker's entire wage history, and the worker will never know</td></tr>
+        <tr><td>Card only <span class="badge bg-warning text-dark">Weak</span></td>
+            <td>A barcode is not a secret. Whoever has the number reads that worker's
+                pay</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="example-box">
+    <p class="mb-1"><strong>Why this is a separate setting</strong></p>
+    <p class="mb-0">
+      If the portal shared the clock-in setting, switching the camera check off for a
+      demonstration would silently drop wage history to PIN-only access. The two are kept
+      apart so that cannot happen by accident. Changing this one is written to the Audit
+      Log by name, like the other.
+    </p>
+  </div>
+
+  <h5 class="section-title">4) Worker Onboarding</h5>
   <div class="example-box">
     <p class="mb-2"><strong>Example:</strong> add a new worker named "Moses Banda".</p>
     <ol class="mb-0">
@@ -159,7 +202,7 @@
         v
 [Worker can now clock in]</pre>
 
-  <h5 class="section-title">4) The Camera, And Using A Phone As One</h5>
+  <h5 class="section-title">5) The Camera, And Using A Phone As One</h5>
   <p>
     <strong>CCTV page &rarr; Add CCTV Feed.</strong> The source is
     <code>builtin://0</code> for this machine's own camera, <code>1</code> for a second
@@ -231,7 +274,7 @@
     <code>python app.py</code>.
   </p>
 
-  <h5 class="section-title">5) Face Enrolment</h5>
+  <h5 class="section-title">6) Face Enrolment</h5>
   <p>
     On the <strong>Biometric</strong> page each worker has a row showing how many samples
     are stored. Ask the worker to stand square to the camera in even light, with no hat
@@ -250,7 +293,7 @@
     samples for that worker so you can start again.
   </p>
 
-  <h5 class="section-title">6) Worker Cards</h5>
+  <h5 class="section-title">7) Worker Cards</h5>
   <p>
     Optional. Scanning a card says <em>who is standing here</em> before any PIN is typed,
     so a clock-in can check all three things at once: the card the worker
@@ -276,7 +319,7 @@
         <tr>
           <td><strong>Back</strong></td>
           <td>The barcode, the code in readable type, and &mdash; deliberately &mdash; the
-              worker's name and ID again in small print. Section 7 of this page explains
+              worker's name and ID again in small print. Section 8 of this page explains
               why that small print matters more than it looks.</td>
         </tr>
       </tbody>
@@ -342,7 +385,7 @@
     morning.
   </p>
 
-  <h5 class="section-title">7) Printing Cards Without Mixing Up The Barcodes</h5>
+  <h5 class="section-title">8) Printing Cards Without Mixing Up The Barcodes</h5>
 
   <div class="example-box">
     <p class="mb-1"><strong>What can go wrong, and why it is expensive</strong></p>
@@ -439,7 +482,7 @@
     seconds on a batch, and much cheaper than finding out from a payslip.
   </p>
 
-  <h5 class="section-title">8) Verified Clock In and Out</h5>
+  <h5 class="section-title">9) Verified Clock In and Out</h5>
   <p>
     Workers use the home page - they never sign in to the dashboard. They enter their
     Worker ID and PIN, choose Clock In or Clock Out, and look at the camera. With cards
@@ -541,7 +584,7 @@
     </table>
   </div>
 
-  <h5 class="section-title">9) Attendance Records</h5>
+  <h5 class="section-title">10) Attendance Records</h5>
   <ul>
     <li><strong>Identity</strong> - a green badge with the match score means the face
         matched the enrolled template.</li>
@@ -552,7 +595,7 @@
     <li><strong>Export CSV</strong> - the whole table for a spreadsheet or report.</li>
   </ul>
 
-  <h5 class="section-title">10) Analytics</h5>
+  <h5 class="section-title">11) Analytics</h5>
   <p>
     <strong>Dashboard &rarr; Analytics.</strong> The Attendance page says what happened;
     this page says what it means. Every figure is computed from the attendance and payroll
@@ -617,7 +660,7 @@
     tab.
   </p>
 
-  <h5 class="section-title">11) Payroll</h5>
+  <h5 class="section-title">12) Payroll</h5>
   <div class="example-box">
     <p class="mb-2"><strong>Example:</strong> pay the week ending Sunday 23 August.</p>
     <ol class="mb-0">
@@ -700,7 +743,7 @@
    +-- other paid period      --> skipped, reported in red
        covers these days          (stops a double payment)</pre>
 
-  <h5 class="section-title">12) For Workers: Your Own Hours and Payslips</h5>
+  <h5 class="section-title">13) For Workers: Your Own Hours and Payslips</h5>
   <p>
     Workers can look up their own records without asking anyone. This is separate from
     clocking in, and it gives <strong>no access to the office pages</strong>.
@@ -814,7 +857,7 @@
     - it is what makes a PIN safe to use for wage history.
   </p>
 
-  <h5 class="section-title">13) Cameras and Clips</h5>
+  <h5 class="section-title">14) Cameras and Clips</h5>
   <ul>
     <li><strong>Health Check</strong> opens every registered camera and records the result
         under Hardware Health. Worth running each morning.</li>
@@ -825,7 +868,7 @@
         snapshots; the rest are surveillance.</li>
   </ul>
 
-  <h5 class="section-title">14) Users and Roles</h5>
+  <h5 class="section-title">15) Users and Roles</h5>
   <div class="table-responsive">
     <table class="table table-sm table-bordered align-middle">
       <thead class="table-light"><tr><th>Role</th><th>Can do</th></tr></thead>
@@ -845,7 +888,7 @@
     deactivated. Every action is recorded on the <strong>Audit Log</strong> page.
   </p>
 
-  <h5 class="section-title">15) Edit and Reset Operations</h5>
+  <h5 class="section-title">16) Edit and Reset Operations</h5>
   <div class="example-box">
     <ol class="mb-0">
       <li>Click the row's <i class="bi bi-pencil-square"></i> button.</li>
@@ -855,7 +898,7 @@
     </ol>
   </div>
 
-  <h5 class="section-title">16) Troubleshooting</h5>
+  <h5 class="section-title">17) Troubleshooting</h5>
   <div class="table-responsive">
     <table class="table table-sm table-bordered align-middle">
       <thead class="table-light"><tr><th>Symptom</th><th>Cause and fix</th></tr></thead>
@@ -869,10 +912,10 @@
         <tr><td>A phone camera worked yesterday and is offline today</td>
             <td>Its WiFi address changed. Compare the address in the phone's camera app
                 with the one registered on the CCTV page, and give the phone a fixed
-                address in the router (section 4)</td></tr>
+                address in the router (section 5)</td></tr>
         <tr><td>No camera at all under Docker on a Mac or Windows</td>
             <td>Expected &mdash; containers on those platforms cannot reach a camera. Use a
-                phone over WiFi (section 4), or run directly with
+                phone over WiFi (section 5), or run directly with
                 <code>python app.py</code></td></tr>
         <tr><td>Everyone rejected at clock-in</td>
             <td>Camera not working, or nobody is enrolled. Check the Biometric page</td></tr>
@@ -922,7 +965,7 @@
                 is not creased across the bars</td></tr>
         <tr><td>The back of a card names a different worker from the front</td>
             <td>The double-sided print went wrong. Destroy those cards and reprint using
-                <strong>Fold</strong> (section 7). Check the attendance recorded since they
+                <strong>Fold</strong> (section 8). Check the attendance recorded since they
                 were issued &mdash; hours may have gone to the wrong person</td></tr>
         <tr><td>A card shows a grey outline instead of a photograph</td>
             <td>That worker's face is not enrolled. Enrol them on the Biometric page and
@@ -942,7 +985,7 @@
     </table>
   </div>
 
-  <h5 class="section-title">17) Routine</h5>
+  <h5 class="section-title">18) Routine</h5>
   <ul class="mb-0">
     <li><strong>As it starts:</strong> read the two lines it prints. They name the records
         file it opened and how many workers and attendance records are in it. If it ever
@@ -974,7 +1017,7 @@
         and print a replacement. Voiding is what stops the old card working; printing a new
         one on its own does not.</li>
     <li><strong>After printing a batch of cards:</strong> fan through them and check a few
-        at random that the face on the front and the name on the back agree (section 7).</li>
+        at random that the face on the front and the name on the back agree (section 8).</li>
   </ul>
 </div>
 {% endblock %}

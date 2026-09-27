@@ -136,6 +136,78 @@
         </div>
       </div>
 
+      {# ====================================================================
+         Portal sign-in. Deliberately its own chooser rather than reusing the
+         one above: clocking in guards the attendance record, this guards a
+         worker's wage history, and a farm may reasonably want a fast
+         combination at a busy gate and the full check before anybody can read
+         what a colleague earns.
+         ==================================================================== #}
+      <div class="card shadow-sm mb-3" id="portal-signin">
+        <div class="card-body p-4">
+          <h6 class="text-muted text-uppercase fw-bold mb-1">Portal Sign-In</h6>
+          <p class="text-muted small mb-3">
+            What a worker must present to open their own hours and payslips at
+            <code>/me</code>. The same three checks as above, chosen separately.
+          </p>
+
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" role="switch" id="portalEnabled"
+                   name="portal_enabled"
+                   {% if settings.get('portal_enabled', 'on') == 'on' %}checked{% endif %} />
+            <label class="form-check-label" for="portalEnabled">
+              Workers can sign in to see their own hours and payslips
+            </label>
+          </div>
+
+          {% set portal_active = portal_modes[portal_mode] %}
+          <div class="alert {{ 'alert-success' if portal_active.strength == 'strong' else 'alert-warning' }} d-flex align-items-start gap-2 mb-4">
+            <i class="bi {{ 'bi-shield-check' if portal_active.strength == 'strong' else 'bi-shield-exclamation' }} mt-1"></i>
+            <div>
+              <strong>Currently: {{ portal_active.label }}.</strong>
+              {{ portal_active.summary }}
+              {% if portal_active.strength == 'weak' %}
+              <div class="mt-1">{{ portal_active.note }}</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="mode-list">
+            {% for key, mode in portal_modes.items() %}
+            <label class="mode-option {{ 'is-weak' if mode.strength == 'weak' }} {{ 'is-active' if key == portal_mode }}"
+                   for="portal-mode-{{ key }}">
+              <input class="form-check-input mt-1" type="radio" name="portal_mode"
+                     id="portal-mode-{{ key }}" value="{{ key }}"
+                     {% if key == portal_mode %}checked{% endif %} />
+              <span class="mode-body">
+                <span class="mode-head">
+                  <span class="mode-label">{{ mode.label }}</span>
+                  {% if mode.strength == 'weak' %}
+                  <span class="badge bg-warning text-dark">Weak</span>
+                  {% endif %}
+                </span>
+                <span class="mode-factors">
+                  {% for name, on in [('Card', mode.factors[0]), ('PIN', mode.factors[1]), ('Face', mode.factors[2])] %}
+                  <span class="factor {{ 'on' if on else 'off' }}">
+                    <i class="bi {{ 'bi-check-lg' if on else 'bi-x-lg' }}"></i>{{ name }}
+                  </span>
+                  {% endfor %}
+                </span>
+                <span class="mode-summary">{{ mode.summary }}</span>
+                <span class="mode-note {{ 'text-danger-emphasis' if mode.strength == 'weak' }}">{{ mode.note }}</span>
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+
+          <div class="form-text mt-3">
+            This is separate from Clock-in Verification above on purpose. Switching
+            attendance verification off for a demonstration must not silently drop wage
+            history to PIN-only access.
+          </div>
+        </div>
+      </div>
+
       <div class="card shadow-sm mb-3">
         <div class="card-body p-4">
           <h6 class="text-muted text-uppercase fw-bold mb-3">Face Verification</h6>

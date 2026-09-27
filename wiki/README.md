@@ -24,7 +24,7 @@ Read these in order. Each one assumes the ones before it.
 | 06 | [Security and Roles](06-security-and-roles.md) | Who can do what, how it is enforced, and where the audit trail comes from |
 | 07 | [Design Decisions](07-design-decisions.md) | Why the odd-looking parts are the way they are |
 | 08 | [Making Your First Change](08-making-your-first-change.md) | Six worked recipes: add a field, a page, an endpoint, a setting, a refusal reason, a report |
-| 09 | [Testing and Tools](09-testing-and-tools.md) | The 212 tests, what they cover, and the scripts in `tools/` |
+| 09 | [Testing and Tools](09-testing-and-tools.md) | The 263 tests, what they cover, and the scripts in `tools/` |
 | 10 | [Glossary](10-glossary.md) | Every term and abbreviation this project uses |
 
 ## Module reference

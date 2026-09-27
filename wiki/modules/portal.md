@@ -184,6 +184,33 @@ in to the portal walk the register collecting photographs of their colleagues.
 Reading the worker from the session leaves nothing to tamper with: asking for
 somebody else's photograph is not refused, it is simply not expressible.
 
+## What signing in demands: `PORTAL_MODES`
+
+The same six combinations the capture point offers, chosen separately:
+
+```python
+portal_mode()                 # -> "pin_face", derived from three settings
+portal_mode_info()            # -> the same, plus label, factors, strength, notes
+settings_for_portal_mode(k)   # -> the settings it implies; raises on a typo
+```
+
+`PORTAL_MODES` deliberately shares its keys and factor tuples with
+`attendance_service.CLOCKIN_MODES`, so the two choosers read identically — there
+is a test asserting that. What differs is the **notes**, and that difference is
+the point. Sharing the wording would understate this one: a weak clock-in lets
+somebody punch for a colleague; a weak portal lets them read that colleague's
+pay. There is a test asserting the weak notes differ, too.
+
+The settings are separate for the reason `portal_requires_face()` has always
+documented: switching attendance verification off to run a demonstration without
+a camera must not silently drop wage history to PIN-only access.
+
+When a card method is chosen the card **replaces** the worker number on the form
+rather than being typed as well — the card already identifies the worker, and
+that is one fewer thing to type on a phone with cold hands. The PIN can only be
+switched off when a card is required; without one the PIN is the only secret
+there is.
+
 ## Two settings
 
 | Key | Default | Meaning |

@@ -322,3 +322,149 @@ def test_the_card_page_is_hidden_when_cards_are_switched_off(client, portal_work
     setting("barcode_enabled", "off")
     _sign_in_worker(client, portal_worker)
     assert client.get("/me/card").status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# What signing in to the portal demands
+#
+# The same six combinations the capture point offers, chosen separately. The
+# separation is the point: the clock-in guards the attendance record, this
+# guards a worker's wage history, and switching attendance verification off for
+# a demonstration must not silently drop wage history to PIN-only access.
+# ---------------------------------------------------------------------------
+
+def test_every_portal_mode_round_trips(app_context, setting):
+    for key in portal.PORTAL_MODES:
+        for name, value in portal.settings_for_portal_mode(key).items():
+            setting(name, value)
+        assert portal.portal_mode() == key
+
+
+def test_an_unknown_portal_mode_is_rejected_loudly(app_context):
+    with pytest.raises(ValueError):
+        portal.settings_for_portal_mode("pin_and_vibes")
+
+
+def test_the_portal_offers_the_same_combinations_as_the_clock_in(app_context):
+    """Same keys and same factor tuples, so the two choosers read identically."""
+    import attendance_service
+
+    assert set(portal.PORTAL_MODES) == set(attendance_service.CLOCKIN_MODES)
+    for key, mode in portal.PORTAL_MODES.items():
+        assert mode["factors"] == attendance_service.CLOCKIN_MODES[key]["factors"]
+
+
+def test_the_portal_warnings_are_not_the_clock_in_warnings(app_context):
+    """A weak portal setting gives away something different, and must say so.
+
+    Sharing the wording would understate it: a weak clock-in lets somebody
+    punch for a colleague, a weak portal lets them read that colleague's pay.
+    """
+    import attendance_service
+
+    for key, mode in portal.PORTAL_MODES.items():
+        if mode["strength"] != "weak":
+            continue
+        assert mode["note"] != attendance_service.CLOCKIN_MODES[key]["note"]
+
+
+def test_a_mode_without_a_face_check_is_marked_weak(app_context):
+    for key, mode in portal.PORTAL_MODES.items():
+        if not mode["factors"][2]:
+            assert mode["strength"] == "weak", f"{key} has no face check but is not weak"
+
+
+def test_the_default_portal_mode_asks_for_pin_and_face(app_context):
+    assert portal.portal_mode() == "pin_face"
+
+
+def test_the_pin_can_be_dropped_only_when_a_card_is_required(app_context, setting):
+    """Without a card there is nothing else identifying the worker, so the PIN
+    is the only secret there is and cannot be switched off."""
+    setting("portal_require_card", "off")
+    setting("portal_require_pin", "off")
+
+    assert portal.portal_requires_pin() is True
+
+
+# ---- the modes actually change what sign-in demands ------------------------
+
+def test_pin_only_signs_in_without_a_photo(client, portal_worker, setting):
+    setting("portal_require_card", "off")
+    setting("portal_require_face", "off")
+
+    _sign_in_worker(client, portal_worker)
+
+    with client.session_transaction() as session:
+        assert session["worker_logged_in"] is True
+
+
+def test_a_card_mode_refuses_a_sign_in_with_no_card(client, portal_worker, setting):
+    setting("portal_require_card", "on")
+    setting("portal_require_face", "off")
+
+    _sign_in_worker(client, portal_worker)
+
+    with client.session_transaction() as session:
+        assert "worker_logged_in" not in session
+
+
+def test_a_card_signs_the_worker_in_without_their_number(client, portal_worker, setting):
+    """The card identifies the worker, so the worker number is not asked for
+    as well - one fewer thing to type on a phone with cold hands."""
+    import barcode_engine
+
+    setting("portal_require_card", "on")
+    setting("portal_require_face", "off")
+    barcode_engine.issue_card(db, portal_worker, "card_number")
+
+    client.post("/me/login", data={"card_value": portal_worker.card_barcode,
+                                   "pin": "4321"})
+
+    with client.session_transaction() as session:
+        assert session["worker_logged_in"] is True
+        assert session["worker_code"] == portal_worker.worker_id
+
+
+def test_a_voided_card_cannot_open_wage_history(client, portal_worker, setting):
+    import barcode_engine
+
+    setting("portal_require_card", "on")
+    setting("portal_require_face", "off")
+    barcode_engine.issue_card(db, portal_worker, "card_number")
+    value = portal_worker.card_barcode
+    barcode_engine.void_card(db, portal_worker)
+
+    client.post("/me/login", data={"card_value": value, "pin": "4321"})
+
+    with client.session_transaction() as session:
+        assert "worker_logged_in" not in session
+
+
+def test_the_sign_in_page_asks_for_what_the_mode_requires(client, portal_worker, setting):
+    setting("portal_require_card", "on")
+    setting("portal_require_pin", "off")
+    setting("portal_require_face", "off")
+
+    page = client.get("/me/").get_data(as_text=True)
+
+    assert 'name="card_value"' in page
+    assert 'name="pin"' not in page
+
+
+def test_changing_the_portal_mode_is_named_in_the_audit_log(client, signed_in, app_context):
+    from models import AuditLog
+
+    signed_in("admin")
+    data = {"clockin_mode": "pin_face", "portal_mode": "pin_face",
+            "portal_enabled": "on", "org_name": "Test Farm",
+            "face_match_threshold": "35", "geofence_radius_m": "500",
+            "payroll_period": "weekly"}
+    client.post("/settings", data=data)
+    data["portal_mode"] = "pin_only"
+    client.post("/settings", data=data)
+
+    entry = (AuditLog.query.filter_by(action="settings.portal_mode")
+             .order_by(AuditLog.id.desc()).first())
+    assert entry is not None
+    assert "PIN only" in entry.details
