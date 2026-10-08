@@ -86,7 +86,7 @@ created or reset later.
 | Standard day, overtime multiplier | Where overtime begins and what it pays |
 | Default hourly rate | Used for any worker without their own rate |
 | NAPSA and NHIMA rates | Deduction percentages. Confirm the current statutory rates before a real payroll run |
-| Shift start and end | Used to measure lateness and early departure |
+| **Work schedule** | The working week, the shift, the Saturday half day and the unpaid lunch. This is what decides which hours are ordinary and which are overtime - see section 4.1.3 |
 | **Pay cycle** | How often payroll runs for the whole farm: weekly, fortnightly, twice a month or monthly. Individual workers can differ - see section 9 |
 | Clip recording | Whether a short video is recorded at each punch, and how long |
 | **Portal sign-in** | Whether workers can sign in to see their own hours and payslips at all, and what they must present when they do. Set separately from clock-in verification - see section 4.1.2 |
@@ -165,6 +165,58 @@ history to PIN-only access. The two are kept apart so that cannot happen by
 accident.
 
 Changing it is written to the **Audit Log** by name, like the clock-in setting.
+
+#### 4.1.3 The work schedule
+
+**Settings -> Work Schedule.** Check this before you run payroll for the first
+time. It is the setting most likely to be wrong on a new installation, and
+unlike a wrong rate it is wrong *invisibly*: the figures still look like
+ordinary arithmetic.
+
+The system arrives set up for the week most farms here actually run:
+
+| | |
+| --- | --- |
+| Working week | Monday to Saturday |
+| Shift | 07:00 to 16:00 |
+| Lunch | One hour, unpaid, from 13:00 |
+| Saturday | Four hours - a half day |
+| **The week** | **44 hours** (five eight-hour days plus a Saturday morning) |
+
+The line at the top of the panel always states the schedule currently in force,
+so you can check it at a glance.
+
+**What each setting changes**
+
+- **Working week** - which days are ordinary working days. Hours worked on a
+  day *outside* the working week are **all** overtime, and nobody is marked
+  late on such a day, because there was no shift for them to be late for.
+- **Shift start** - lateness is measured from here. If Analytics tells you most
+  of the workforce is late by a similar small margin, this is almost certainly
+  the setting that is wrong, not the workforce.
+- **Shift end** - early departure is measured against this. On a half day the
+  system works out the earlier finish for itself, so leaving at midday on a
+  Saturday is not recorded as leaving early.
+- **Saturday hours** - the half day. Set it equal to the standard day, or leave
+  it at 0, if your Saturdays are worked in full.
+- **Lunch** - when the unpaid break starts and how long it is. Set the minutes
+  to 0 if lunch is paid.
+
+**How lunch is actually deducted.** Only from a worker who stayed *clocked in*
+through the break. Somebody who punches out at 13:00 and back in at 14:00 has
+already left the break out of their hours, and is not charged for it twice.
+This is worth explaining to workers, because the two honest ways of taking a
+break would otherwise look like they were treated differently.
+
+Lunch comes off **before** overtime is worked out. A worker on the clock from
+07:00 to 18:00 has worked ten hours, eight of them ordinary, so two are
+overtime - not three.
+
+**Changing the schedule** affects payslips generated from then on. Payslips
+that already exist keep the figures they were generated with, which is the
+point: a payslip has to stay reproducible.
+
+---
 
 ### 4.2 The clock-in camera (CCTV page)
 
@@ -248,13 +300,45 @@ directly with `python app.py`.
 ### 4.3 Workers
 
 **Workers -> Add Worker.** Name, phone and a PIN are required. The Worker ID is
-generated automatically (0001, 0002, ...). Set the hourly rate here; leave it
-blank to use the default.
+generated automatically (0001, 0002, ...).
+
+**Paid by** comes before the rate, and decides what the rate box means. Pick it
+first - the label on the rate box changes to match, so there is no way to type
+a monthly salary into a box that says "Hourly rate".
+
+| Paid by | The rate is | Who it suits |
+| --- | --- | --- |
+| **Hourly** | Kwacha per hour | Anyone paid for the hours they actually work. This is the default, and what every worker was before the other two existed |
+| **Daily** | Kwacha per day | Casual and seasonal labour. A day is a day's pay whether it ran long or short; a scheduled half day pays half |
+| **Monthly salary** | Kwacha per month | Permanent staff - supervisors, a mechanic, the farm manager. The salary does not move with the hours, so a sick day does not dock their pay |
+
+A few things worth knowing:
+
+- **A day labourer's Saturday pays half a day**, because Saturday is a half day
+  in the schedule. Hours beyond the day's schedule are still overtime, priced
+  from the daily rate divided by the standard day.
+- **A salary earns no overtime.** If you pay salaried staff for extra hours,
+  pay it as a separate allowance - the system will not invent it, because a
+  wage bill that grows on its own is how one gets out of control.
+- **A salary is prorated if the pay cycle is shorter than a month** - half on a
+  twice-monthly cycle, and on weekly and fortnightly cycles by the number of
+  weeks in a year rather than in a month, so a salaried worker is paid twelve
+  months' salary a year on every cycle.
+- **A salaried worker with no attendance at all in the period is still not
+  paid.** A salary is not conditional on hours, but it is conditional on the
+  person being there. Mark them present for at least one day, or pay them
+  outside the run.
+
+Leave the rate blank to use the farm default hourly rate.
 
 **Pay cycle** works the same way: leave it on *Farm default* for almost
 everybody, and change it only for a worker paid on a different cycle from the
 rest of the farm. Casual labour weekly and permanent staff monthly is a common
 arrangement and is fully supported - see section 9.
+
+**Pay basis and pay cycle are different questions.** The basis is *how* the pay
+is worked out; the cycle is *when* it is paid. A day labourer paid weekly and a
+day labourer paid monthly are both on the daily basis.
 
 ### 4.4 Enrolment (the step that makes it work)
 
@@ -569,9 +653,18 @@ The page does not reload while nobody is looking at the tab.
 3. Press **Generate Payroll**.
 
 For every active worker **on that cycle**, the system totals the recorded hours
-for the period, splits regular from overtime hours, applies the worker's rate,
-and computes gross pay, NAPSA, NHIMA and net pay. Workers with no hours are
-skipped and reported, and so are workers on a different cycle.
+for the period, splits regular from overtime hours, applies the worker's rate
+**on their own pay basis** - hourly, daily or monthly salary - and computes
+gross pay, NAPSA, NHIMA and net pay. Workers with no hours are skipped and
+reported, and so are workers on a different cycle.
+
+The rate column on the page and on every payslip is labelled with its unit, so
+a salaried worker's payslip reads "Monthly salary 6,000.00" rather than an
+hourly rate that would make no sense. A daily worker's payslip also shows the
+number of days paid.
+
+Each payslip records the basis it was generated on. Moving a worker from daily
+to a salary changes their next payslip, never their old ones.
 
 Periods already marked **paid** are never overwritten, so re-running is safe.
 
@@ -734,6 +827,10 @@ pulling figures for a report. Notable tables:
 | A card has a grey outline instead of a photograph | That worker's face is not enrolled. Enrol them on the Biometric page and reprint. The card still works |
 | "Scan with camera" button is missing | The browser cannot read barcodes. Use Chrome or Edge on a desktop, or a USB scanner, or type the code |
 | Analytics says almost everybody is late | The shift start time in Settings is earlier than work actually begins. The page says so itself; correct the setting |
+| Everyone's hours are an hour short of what they were on the clock | That is the unpaid lunch. Section 4.1.3 explains it; set lunch minutes to 0 if your farm pays the break |
+| Saturdays now show overtime that they never used to | Correct. Saturday is a half day, so hours beyond four are overtime. Before the schedule existed a full Saturday earned none |
+| A salaried worker was skipped with "no hours" | A salary is not conditional on hours, but it is conditional on the person being there. Mark them present for at least one day in the period |
+| A worker's pay changed and nobody changed their rate | Check **Paid by** on their record. A rate of 6,000 means something very different per hour, per day and per month |
 | Charts are out of date on the office screen | Auto refresh is off for that browser. Set it from the selector at the top of the page |
 
 ---
@@ -773,8 +870,15 @@ period does not touch the weekly casuals, and vice versa.
 and it is where a ghost worker, a failing camera or a wrong shift-start setting
 shows up before anyone complains.
 
-**When a worker joins:** add them on Workers, enrol at least three face samples
-before their first shift, and issue a card if the farm uses them.
+**When a worker joins:** add them on Workers, set **Paid by** and the rate, enrol
+at least three face samples before their first shift, and issue a card if the
+farm uses them.
+
+**Before your first real payroll run:** open Settings -> Work Schedule and
+confirm the line at the top of the panel describes your farm. It arrives set to
+Monday to Saturday, 07:00 to 16:00, an unpaid hour for lunch and a half day on
+Saturday - 44 hours a week. If that is not your week, change it before any
+payslip is generated, not after.
 
 **When a worker leaves:** deactivate them on Workers, and void their card if they
 had one. Their records stay for the audit trail, but they can no longer clock in.
@@ -821,8 +925,9 @@ sign in here — ask a supervisor to enrol you on the Biometric page.
   payslip
 - **Attendance** — every shift recorded for them, newest first, with the photo
   taken at clock-in
-- **Payslips** — each paid week, with hours, overtime, rate, gross pay, NAPSA,
-  NHIMA and net pay all shown
+- **Payslips** — each paid week, with hours, overtime, the rate *labelled with
+  its unit* (per hour, per day or per month), the days paid where the worker is
+  paid daily, gross pay, NAPSA, NHIMA and net pay all shown
 - **My record** — the last eight weeks as four figures (hours, days, punctuality,
   earnings), a chart of hours per week, and what they were paid in each closed
   period
@@ -830,11 +935,15 @@ sign in here — ask a supervisor to enrol you on the Biometric page.
   button, so a worker who has lost theirs can print a replacement without waiting
   for the office. Only shown when cards are switched on
 
-**About the earnings figure on Home.** It is worked out from recorded hours at
-the worker's rate, before deductions, and it is labelled as an estimate on the
-page. The payslip is the figure that counts. It is shown anyway because "how much
-have I earned this week" is the question workers actually ask, and an honest
-estimate answers it better than silence does.
+**About the earnings figure on Home.** It is worked out by the same calculation
+that generates the payslip, on the worker's own pay basis, before deductions,
+and it is labelled as an estimate on the page. The payslip is the figure that
+counts. It is shown anyway because "how much have I earned this week" is the
+question workers actually ask, and an honest estimate answers it better than
+silence does.
+
+For a salaried worker the figure does not climb through the period, because
+their salary does not. It shows the salary for the period from the first day.
 
 **About punctuality.** If the farm's shift start time is set earlier than work
 really begins, the system marks almost everybody late. Where that is happening,

@@ -336,20 +336,79 @@
                      value="{{ settings.get('nhima_rate', '0.01') }}" title="NHIMA employee contribution rate" />
               <div class="form-text">0.01 = 1%</div>
             </div>
-            <div class="col-md-3">
-              <label class="form-label">Shift Start</label>
-              <input type="time" class="form-control" name="shift_start_time"
-                     value="{{ settings.get('shift_start_time', '07:00') }}" title="Used to measure lateness" />
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Shift End</label>
-              <input type="time" class="form-control" name="shift_end_time"
-                     value="{{ settings.get('shift_end_time', '17:00') }}" title="Used to measure early departure" />
-            </div>
           </div>
           <div class="form-text mt-2">
             Deduction rates are settings rather than fixed numbers because statutory rates change.
             Confirm the current NAPSA and NHIMA rates before running a real payroll.
+          </div>
+        </div>
+      </div>
+
+      {# --- Work schedule -----------------------------------------------
+         Separated from the rates above because it answers a different
+         question. The rates decide what an hour is worth; this decides
+         which hours are ordinary and which are overtime, and it is the
+         single setting most likely to be wrong on a new installation. #}
+      <div class="card shadow-sm mb-3">
+        <div class="card-body p-4">
+          <h6 class="text-muted text-uppercase fw-bold mb-3">Work Schedule</h6>
+          <div class="alert alert-light border small">
+            <i class="bi bi-calendar-week me-1"></i>
+            <strong>Currently:</strong> {{ schedule_summary }}
+          </div>
+          <div class="row g-3 align-items-end">
+            <div class="col-md-4">
+              <label class="form-label">Working Week</label>
+              <select class="form-select" name="work_week" title="Which days the farm works">
+                {% for key, meta in work_weeks.items() %}
+                  <option value="{{ key }}" {% if settings.get('work_week', 'mon-sat') == key %}selected{% endif %}>{{ meta.label }}</option>
+                {% endfor %}
+              </select>
+              <div class="form-text">
+                Hours worked on a day outside this are <strong>all</strong> overtime.
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Shift Start</label>
+              <input type="time" class="form-control" name="shift_start_time"
+                     value="{{ settings.get('shift_start_time', '07:00') }}" title="Used to measure lateness" />
+              <div class="form-text">Lateness is measured from here.</div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Shift End</label>
+              <input type="time" class="form-control" name="shift_end_time"
+                     value="{{ settings.get('shift_end_time', '16:00') }}" title="Used to measure early departure" />
+              <div class="form-text">Early departure is measured against this.</div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Saturday Hours</label>
+              <input type="number" class="form-control" name="saturday_hours" min="0" max="16" step="0.5"
+                     value="{{ settings.get('saturday_hours', '4') }}" title="Ordinary hours on a Saturday" />
+              <div class="form-text">
+                The half day. Leave blank or set it equal to the standard day if
+                Saturday is worked in full.
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Lunch Starts</label>
+              <input type="time" class="form-control" name="lunch_start_time"
+                     value="{{ settings.get('lunch_start_time', '13:00') }}" title="When the unpaid break begins" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Lunch (minutes, unpaid)</label>
+              <input type="number" class="form-control" name="lunch_minutes" min="0" max="240" step="5"
+                     value="{{ settings.get('lunch_minutes', '60') }}" title="Unpaid break length" />
+              <div class="form-text">0 means lunch is paid and nothing is deducted.</div>
+            </div>
+          </div>
+          <div class="form-text mt-3">
+            Lunch is taken off only where the worker stayed <em>clocked in</em>
+            through it. Somebody who clocks out for their break and back in
+            afterwards has already excluded it from their hours, and is not
+            charged for it twice.
+            <br>
+            Changing the schedule affects payslips generated from now on.
+            Existing payslips keep the figures they were generated with.
           </div>
         </div>
       </div>

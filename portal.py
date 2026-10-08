@@ -490,7 +490,11 @@ def _shell(me: Worker, **extra) -> dict:
     # cards_enabled reaches every portal page because the tab bar in
     # portal_base.html shows the card tab only when the farm uses cards.
     return dict(me=me, org_name=_setting("org_name", "FMS Farm"),
-                cards_enabled=_flag("barcode_enabled", "off"), **extra)
+                cards_enabled=_flag("barcode_enabled", "off"),
+                # Every page that shows a rate needs the unit it is in, and
+                # getting it from one place means the dashboard and the
+                # payslip can never label the same number differently.
+                pay_bases=payroll_engine.PAY_BASES, **extra)
 
 
 @portal.route("/dashboard")

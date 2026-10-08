@@ -445,11 +445,15 @@ mkdir -p data && cp fms.db data/fms.db
 ### First-run checklist
 
 1. Sign in as `admin` / `admin` and set a real password.
-2. **Settings** — organisation name, farm coordinates, geofence radius, hourly
+2. **Settings** — organisation name, farm coordinates, geofence radius, the
+   **work schedule** (it arrives set to a 44-hour Monday-to-Saturday week with
+   an unpaid lunch and a half-day Saturday — check it matches your farm before
+   generating any payslip), hourly
    rate default, NAPSA and NHIMA rates, match threshold.
 3. **CCTV** — register the clock-in camera, press *Test*, then use the star
    button to make it the attendance camera. Add IP cameras for surveillance.
-4. **Workers** — add each worker with an hourly rate and a unique PIN.
+4. **Workers** — add each worker with a pay basis (hourly, daily or monthly
+   salary), a rate in that unit, and a unique PIN.
 5. **Biometric** — enrol at least three face samples per worker, at slightly
    different angles in even light. **Nobody can clock in until this is done.**
 6. Have a worker clock in from the home page and confirm the session appears on
@@ -482,7 +486,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-265 tests, about a minute. All should pass.
+295 tests, about a minute. All should pass.
 
 ### Check which cameras the machine can see
 

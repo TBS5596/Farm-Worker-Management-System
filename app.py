@@ -260,8 +260,22 @@ DEFAULT_SETTINGS = {
     "napsa_rate": "0.05",
     "nhima_rate": "0.01",
     "default_hourly_rate": "15",
+    # The working day and the working week.
+    #
+    # The defaults describe the schedule most Zambian farms actually run:
+    # Monday to Saturday, 07:00 to 16:00 with an unpaid hour for lunch, and a
+    # half day on Saturday. That is 5 x 8 + 4 = 44 hours a week.
+    #
+    # Every one of these is a setting rather than a constant because the
+    # schedule is the thing that decides what counts as overtime, and a farm
+    # that starts at 06:00 in the cutting season would otherwise have to be
+    # told its workers are an hour late every morning.
     "shift_start_time": "07:00",
-    "shift_end_time": "17:00",
+    "shift_end_time": "16:00",
+    "work_week": "mon-sat",
+    "saturday_hours": "4",
+    "lunch_start_time": "13:00",
+    "lunch_minutes": "60",
     # Identity card / barcode
     # Turning this on adds a third factor at the capture point: the card is
     # something the worker HAS, the PIN something they KNOW, the face
@@ -884,6 +898,7 @@ def _register_routes(app: Flask) -> None:
             default_rate=payroll_engine.rates()["default_hourly_rate"],
             periods=payroll_engine.PERIODS,
             farm_period=payroll_engine.farm_period(),
+            pay_bases=payroll_engine.PAY_BASES,
             cards_enabled=_get_setting("barcode_enabled", "off") == "on",
             card_source=_get_setting("barcode_source", barcode_engine.DEFAULT_SOURCE),
             card_stats=barcode_engine.stats(),
@@ -931,6 +946,8 @@ def _register_routes(app: Flask) -> None:
             emergency_contact=request.form.get("emergency_contact", "").strip(),
             department=request.form.get("department", "").strip(),
             hourly_rate=_float_or_none(request.form.get("hourly_rate")),
+            # How the rate above is read: per hour, per day or per month.
+            pay_basis=payroll_engine.normalize_basis(request.form.get("pay_basis")),
             # Blank means "follow the farm default", the same convention the
             # hourly rate uses.
             payroll_period=(request.form.get("payroll_period") or "").strip() or None,
@@ -961,6 +978,7 @@ def _register_routes(app: Flask) -> None:
         worker.nrc_number = request.form.get("nrc_number", "").strip() or None
         worker.status = request.form.get("status", "active").strip().lower() or "active"
         worker.hourly_rate = _float_or_none(request.form.get("hourly_rate"))
+        worker.pay_basis = payroll_engine.normalize_basis(request.form.get("pay_basis"))
         worker.payroll_period = (request.form.get("payroll_period") or "").strip() or None
 
         if not worker.name or not worker.phone_number:
@@ -1350,7 +1368,12 @@ def _register_routes(app: Flask) -> None:
                 "nhima_rate": request.form.get("nhima_rate", "0.01").strip() or "0.01",
                 "default_hourly_rate": request.form.get("default_hourly_rate", "15").strip() or "15",
                 "shift_start_time": request.form.get("shift_start_time", "07:00").strip() or "07:00",
-                "shift_end_time": request.form.get("shift_end_time", "17:00").strip() or "17:00",
+                "shift_end_time": request.form.get("shift_end_time", "16:00").strip() or "16:00",
+                "work_week": payroll_engine.normalize_work_week(
+                    request.form.get("work_week")),
+                "saturday_hours": request.form.get("saturday_hours", "4").strip() or "0",
+                "lunch_start_time": request.form.get("lunch_start_time", "13:00").strip() or "13:00",
+                "lunch_minutes": request.form.get("lunch_minutes", "60").strip() or "0",
                 "clip_recording_enabled": "on" if request.form.get("clip_recording_enabled") else "off",
                 "clip_seconds": request.form.get("clip_seconds", "6").strip() or "6",
                 "chart_refresh_seconds": (request.form.get("chart_refresh_seconds") or "0").strip(),
@@ -1398,6 +1421,9 @@ def _register_routes(app: Flask) -> None:
             settings={s.key: s.value for s in Setting.query.all()},
             engine=face_engine.engine_info(),
             periods=payroll_engine.PERIODS,
+            work_weeks=payroll_engine.WORK_WEEKS,
+            schedule_summary=payroll_engine.schedule_summary(),
+            pay_bases=payroll_engine.PAY_BASES,
             clockin_modes=attendance_service.CLOCKIN_MODES,
             clockin_mode=attendance_service.clockin_mode(),
             portal_modes=portal_blueprint_module.PORTAL_MODES,
@@ -1850,6 +1876,7 @@ def _register_routes(app: Flask) -> None:
             rates=payroll_engine.rates(),
             default_week_ending=default_week_ending.isoformat(),
             periods=payroll_engine.PERIODS,
+            pay_bases=payroll_engine.PAY_BASES,
             farm_period=payroll_engine.farm_period(),
             period_label=payroll_engine.period_label,
             worker_period=payroll_engine.worker_period,
@@ -1922,7 +1949,14 @@ def _register_routes(app: Flask) -> None:
         total_hours = _float_or_none(request.form.get("total_hours")) or 0.0
         overtime_hours = _float_or_none(request.form.get("overtime_hours")) or 0.0
         hourly_rate = _float_or_none(request.form.get("hourly_rate")) or payroll_engine.worker_rate(worker)
-        figures = payroll_engine.compute_pay(total_hours, overtime_hours, hourly_rate)
+        # A manual row still follows the worker's own pay basis, so a hand
+        # entered row for a salaried worker does not quietly pay them by the
+        # hour. The operator supplies days only when the basis needs them.
+        basis = payroll_engine.worker_basis(worker)
+        figures = payroll_engine.compute_pay(
+            total_hours, overtime_hours, hourly_rate, pay_basis=basis,
+            day_equivalents=_float_or_none(request.form.get("day_equivalents")) or 0.0,
+            period_type=payroll_engine.worker_period(worker))
 
         db.session.add(Payroll(
             worker_id=worker_pk,
@@ -1930,6 +1964,8 @@ def _register_routes(app: Flask) -> None:
             total_hours=figures["total_hours"],
             overtime_hours=figures["overtime_hours"],
             hourly_rate=figures["hourly_rate"],
+            pay_basis=figures["pay_basis"],
+            day_equivalents=figures["day_equivalents"],
             overtime_pay=figures["overtime_pay"],
             gross_pay=figures["gross_pay"],
             napsa_rate=figures["napsa_rate"],
@@ -1971,6 +2007,9 @@ def _register_routes(app: Flask) -> None:
             _float_or_none(request.form.get("total_hours")) or 0.0,
             _float_or_none(request.form.get("overtime_hours")) or 0.0,
             hourly_rate,
+            pay_basis=payroll_engine.worker_basis(worker),
+            day_equivalents=_float_or_none(request.form.get("day_equivalents")) or 0.0,
+            period_type=row.period_type or payroll_engine.worker_period(worker),
         )
 
         row.worker_id = worker_pk
@@ -1978,6 +2017,8 @@ def _register_routes(app: Flask) -> None:
         row.total_hours = figures["total_hours"]
         row.overtime_hours = figures["overtime_hours"]
         row.hourly_rate = figures["hourly_rate"]
+        row.pay_basis = figures["pay_basis"]
+        row.day_equivalents = figures["day_equivalents"]
         row.overtime_pay = figures["overtime_pay"]
         row.gross_pay = figures["gross_pay"]
         row.napsa_rate = figures["napsa_rate"]

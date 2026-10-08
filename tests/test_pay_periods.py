@@ -125,7 +125,7 @@ def test_a_nonsense_override_falls_back_to_the_farm_default(app_context, make_wo
 # Generation
 # ---------------------------------------------------------------------------
 
-def test_a_monthly_run_pays_the_whole_month(app_context, make_worker, setting):
+def test_a_monthly_run_pays_the_whole_month(app_context, make_worker, setting, flat_schedule):
     setting("payroll_period", "monthly")
     worker = make_worker(name="Monthly Staff", rate=20.0)
     _worked(worker, date(2026, 9, 1), days=20, hours=8.0)
@@ -143,7 +143,7 @@ def test_a_monthly_run_pays_the_whole_month(app_context, make_worker, setting):
     assert row.gross_pay == pytest.approx(160.0 * 20.0)
 
 
-def test_overtime_is_daily_so_the_period_does_not_change_it(app_context, make_worker, setting):
+def test_overtime_is_daily_so_the_period_does_not_change_it(app_context, make_worker, setting, flat_schedule):
     """Nine-hour days give one hour of overtime each, weekly or monthly.
 
     This is the property that made the whole feature cheap: overtime is decided

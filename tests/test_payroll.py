@@ -35,7 +35,7 @@ def test_compute_pay_never_lets_overtime_exceed_total_hours():
     assert figures["regular_hours"] == 0.0
 
 
-def test_rebuild_day_measures_hours_overtime_and_lateness(app_context, make_worker, setting):
+def test_rebuild_day_measures_hours_overtime_and_lateness(app_context, make_worker, setting, flat_schedule):
     setting("shift_start_time", "07:00")
     setting("shift_end_time", "17:00")
     setting("standard_day_hours", "8")
@@ -76,7 +76,7 @@ def test_rebuild_day_ignores_a_session_that_is_still_open(app_context, make_work
     assert summary.sessions_count == 1
 
 
-def test_generate_week_builds_payroll_from_recorded_sessions(app_context, make_worker, setting):
+def test_generate_week_builds_payroll_from_recorded_sessions(app_context, make_worker, setting, flat_schedule):
     setting("standard_day_hours", "8")
     setting("napsa_rate", "0.05")
     setting("nhima_rate", "0.01")

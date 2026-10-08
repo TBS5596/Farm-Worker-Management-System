@@ -45,7 +45,7 @@ stop attendance. Cloud upload is optional and queued.
 | `hardware_health_logs` | Never written | Camera probes and failures recorded |
 | Roles | `users.role` stored, never enforced | Permissions enforced in the routes and reflected in the UI |
 | API | None | `/api/v1`, 14 endpoints, API key auth |
-| Tests | None | 63 pytest tests |
+| Tests | None | 295 pytest tests |
 | Secret key | Regenerated every boot | From env, else cached in `.secret_key` |
 | Debug server | `debug=True` on `0.0.0.0` | Off unless `FMS_DEBUG` is set |
 | Default credentials | `admin`/`admin`, documented | Same, but a password change is forced before anything opens |
@@ -125,6 +125,9 @@ if __name__ == "__main__":
 | `geofence_enforce` | off | Geofence |
 | `standard_day_hours` | 8 | Overtime split |
 | `overtime_multiplier` | 1.5 | Pay |
+| `work_week` | `mon-sat` | Schedule |
+| `saturday_hours` | 4 | Schedule |
+| `lunch_start_time` / `lunch_minutes` | 13:00 / 60 | Schedule |
 | `napsa_rate` | 0.05 | Deductions |
 | `nhima_rate` | 0.01 | Deductions |
 | `default_hourly_rate` | 15 | Pay |
@@ -313,29 +316,66 @@ Check).
 `rebuild_day(worker_pk, day)` reads that worker's sessions for the day and writes
 one `daily_attendance_summary` row:
 
-- `total_hours` - sum of closed sessions only; an open session contributes zero
-- `overtime_hours` - `max(0, total_hours - standard_day_hours)`
-- `late_minutes` - first check-in minus `shift_start_time`, floored at zero
-- `early_departure_minutes` - `shift_end_time` minus last check-out, floored at zero
+- `total_hours` - sum of closed sessions only, **minus the unpaid break**; an
+  open session contributes zero
+- `break_hours` - the unpaid lunch deducted. The deduction is the *overlap*
+  between each clocked-in session and the lunch window, so a worker who clocks
+  out for their break is not charged for it twice
+- `overtime_hours` - `max(0, total_hours - standard_hours_for(day))`, where the
+  day's standard is the full day on Monday to Friday, the Saturday half day on
+  a Saturday, and **zero on a day outside the working week** - so every hour
+  worked on a rest day is overtime
+- `late_minutes` - first check-in minus `shift_start_time`, floored at zero,
+  and always zero on a day the farm does not work
+- `early_departure_minutes` - the day's scheduled end minus last check-out,
+  floored at zero. A half day's end is derived, not looked up, so a Saturday
+  finishing at midday is not an early departure
 - `sessions_count`, `verified_by_cctv`, `verified_by_face`
+
+The schedule is configured in Settings and ships as the 44-hour week most farms
+here run: Monday to Saturday, 07:00 to 16:00, one unpaid hour for lunch from
+13:00, and four hours on Saturday.
 
 `refresh_range(from, to)` rebuilds a window; the Attendance page exposes it as
 *Rebuild Daily Summaries*.
 
 ### 7.2 Pay arithmetic
 
-`compute_pay()` is pure, so the tests can pin it down:
+Each worker has a **pay basis** - `hourly`, `daily` or `monthly` - and
+`hourly_rate` holds their rate in the unit that basis names. `NULL` means
+hourly, so an upgraded database pays everybody exactly as it did before.
+
+`compute_pay()` is pure, so the tests can pin it down. Only `basic_pay` and
+`overtime_pay` differ by basis; the deductions and the net are shared:
 
 ```
 overtime_hours = min(overtime_hours, total_hours)
 regular_hours  = total_hours - overtime_hours
-basic_pay      = regular_hours  x rate
-overtime_pay   = overtime_hours x rate x overtime_multiplier
+
+hourly   basic_pay    = regular_hours  x rate
+         overtime_pay = overtime_hours x rate x overtime_multiplier
+
+daily    basic_pay    = day_equivalents x rate        (a half day counts 0.5)
+         overtime_pay = overtime_hours x (rate / standard_day_hours)
+                                       x overtime_multiplier
+
+monthly  basic_pay    = rate x monthly_fraction(period_type)
+         overtime_pay = 0                             (no overtime on a salary)
+
 gross_pay      = basic_pay + overtime_pay
 napsa          = gross_pay x napsa_rate
 nhima          = gross_pay x nhima_rate
 net_pay        = gross_pay - napsa - nhima
 ```
+
+`monthly_fraction` is 1 monthly, 1/2 twice-monthly, **12/26** fortnightly and
+**12/52** weekly. The last two are not 1/2 and 1/4: there are 26 fortnights and
+52 weeks in a year, and the obvious arithmetic would pay thirteen months'
+salary a year.
+
+The basis used is stored on the payroll row, so a payslip stays reproducible
+after the worker's basis changes - the same reasoning as storing the deduction
+rates per row.
 
 Worked example - 42 hours of which 2 overtime, ZMW 20/hour, 5% and 1%:
 
@@ -456,7 +496,7 @@ startup and never drops or renames.
 | --- | --- |
 | `settings` | Key/value configuration |
 | `users` | Dashboard accounts: `role`, `is_active`, `must_change_password`, `last_login_at` |
-| `workers` | Profile, `hourly_rate`, `pin_hash`, `pin_fingerprint`, `face_enrolled_at`, status |
+| `workers` | Profile, `hourly_rate` (in the unit `pay_basis` names), `pay_basis`, `pin_hash`, `pin_fingerprint`, `face_enrolled_at`, status |
 | `attendance` | Session with `verified_by_cctv`, `verified_by_face`, `check_in_match_score`, `check_out_match_score`, `within_geofence`, `distance_from_farm_m` |
 | `audit_logs` | Username, action, details, IP, timestamp |
 
@@ -480,8 +520,8 @@ startup and never drops or renames.
 
 | Table | Notes |
 | --- | --- |
-| `payroll` | Hours, overtime, rate, gross, rates used, deductions, net, `computed_from_attendance`; unique per `(worker, week_ending)` |
-| `daily_attendance_summary` | Per worker per day: hours, overtime, sessions, lateness, early departure, verification flags |
+| `payroll` | Hours, overtime, rate, `pay_basis`, `day_equivalents`, gross, rates used, deductions, net, `computed_from_attendance`; unique per `(worker, week_ending)` |
+| `daily_attendance_summary` | Per worker per day: hours (net of the unpaid break), `break_hours`, overtime against that day's schedule, sessions, lateness, early departure, verification flags |
 
 ### 11.5 Operations
 

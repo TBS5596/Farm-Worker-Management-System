@@ -33,8 +33,15 @@ read by a USB scanner or by the browser's own camera - no extra software.
 a short event clip, and how far the worker was from the farm when they punched.
 
 **Payroll from the record.** Hours, overtime, gross pay, NAPSA, NHIMA and net pay
-are computed from the recorded sessions and a stored hourly rate. Nothing is
-typed in by hand.
+are computed from the recorded sessions and a stored rate. Nothing is typed in
+by hand.
+
+Workers are paid **by the hour, by the day or on a monthly salary**, set per
+worker, so a day labourer and a salaried supervisor can sit on the same payroll
+without either being forced into an hourly rate that misprices them. Overtime
+is measured against the farm's own **work schedule** - which arrives set to the
+44-hour week most farms here run: Monday to Saturday, 07:00 to 16:00, an unpaid
+hour for lunch and a half day on Saturday.
 
 **Camera-only by design.** The project has no fingerprint scanner, so the camera
 is the biometric. USB webcams and RTSP IP cameras are both supported — and so is
@@ -241,10 +248,13 @@ PIN alone is then enough again - switch back once everyone is enrolled.
 
 1. Sign in as `admin` / `admin` and set a new password.
 2. **Settings** - organisation name, farm coordinates, geofence radius, hourly
-   rate defaults, NAPSA and NHIMA rates.
+   rate defaults, NAPSA and NHIMA rates, and the **work schedule**. Check the
+   schedule line reads like your farm's week before any payslip is generated:
+   it is what decides which hours are overtime.
 3. **CCTV** - register the clock-in camera, press *Test*, then the star button to
    make it the attendance camera. Add IP cameras for surveillance.
-4. **Workers** - add each worker with an hourly rate and a unique PIN.
+4. **Workers** - add each worker with a pay basis (hourly, daily or monthly
+   salary), a rate in that unit, and a unique PIN.
 5. **Biometric** - enrol at least three face samples per worker. Nobody can
    clock in until this is done.
 6. Have a worker clock in from the home page and confirm the session appears on
@@ -404,9 +414,11 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-265 tests covering worker ID generation and PIN uniqueness, face template storage
+295 tests covering worker ID generation and PIN uniqueness, face template storage
 and matching, the clock in/out session rules, geofence behaviour, payroll
-arithmetic and weekly generation, the worker portal, identity cards and the
+arithmetic on all three pay bases, the work schedule - the half-day Saturday,
+the rest day and the unpaid lunch that must not be deducted twice - weekly and
+monthly generation, the worker portal, identity cards and the
 scan-to-worker lookup, both card print layouts and the mirroring that keeps a
 double-sided sheet aligned, every clock-in verification combination and its round
 trip through the settings page, the Analytics figures, role enforcement, the API and

@@ -21,7 +21,20 @@
        computing pay from the records rather than transcribing it. #}
     <div class="p-row"><span class="k">Hours worked</span><span class="v p-money">{{ '%.2f'|format(row.total_hours or 0) }}</span></div>
     <div class="p-row"><span class="k">Of which overtime</span><span class="v p-money">{{ '%.2f'|format(row.overtime_hours or 0) }}</span></div>
-    <div class="p-row"><span class="k">Hourly rate</span><span class="v p-money">ZMW {{ '%.2f'|format(row.hourly_rate or 0) }}</span></div>
+    {# The rate, labelled with the unit it is actually in. A payslip that says
+       "Hourly rate: 6,000.00" to a salaried worker is not a rounding problem,
+       it is a figure that cannot be checked. #}
+    {% set basis = pay_bases[row.pay_basis or 'hourly'] %}
+    <div class="p-row">
+      <span class="k">{{ basis.noun }}</span>
+      <span class="v p-money">ZMW {{ '%.2f'|format(row.hourly_rate or 0) }}</span>
+    </div>
+    {% if row.pay_basis == 'daily' and row.day_equivalents %}
+    <div class="p-row">
+      <span class="k">Days paid</span>
+      <span class="v p-money">{{ '%g'|format(row.day_equivalents) }}</span>
+    </div>
+    {% endif %}
     {# Basic pay is not a stored column - it is gross minus the overtime
        component. Showing it means the four money rows visibly add up, which is
        the difference between a payslip a worker can check and one they have to

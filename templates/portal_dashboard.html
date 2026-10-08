@@ -107,7 +107,7 @@
     <div class="p-row"><span class="k">Department</span><span class="v">{{ me.department or '-' }}</span></div>
     <div class="p-row"><span class="k">Paid</span><span class="v">{{ my_period }}</span></div>
     <div class="p-row">
-      <span class="k">Hourly rate</span>
+      <span class="k">{{ pay_bases[me.pay_basis or 'hourly'].noun }}</span>
       <span class="v p-money">{% if me.hourly_rate %}ZMW {{ '%.2f'|format(me.hourly_rate) }}{% else %}Farm default{% endif %}</span>
     </div>
     <div class="p-row"><span class="k">Phone</span><span class="v">{{ me.phone_number or '-' }}</span></div>

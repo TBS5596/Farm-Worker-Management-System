@@ -48,6 +48,7 @@ document.addEventListener('DOMContentLoaded', function () {
         nrc_number: 'editNrc',
         status: 'editStatus',
         hourly_rate: 'editHourlyRate',
+        pay_basis: 'editPayBasis',
         payroll_period: 'editPayrollPeriod',
         enrollment_date: 'editEnrollmentDate'
       },
@@ -116,6 +117,7 @@ document.addEventListener('DOMContentLoaded', function () {
         total_hours: 'editPayrollHours',
         overtime_hours: 'editPayrollOvertime',
         hourly_rate: 'editPayrollRate',
+        day_equivalents: 'editPayrollDays',
         paid_status: 'editPayrollStatus'
       }
     }

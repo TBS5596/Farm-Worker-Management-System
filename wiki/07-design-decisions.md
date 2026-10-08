@@ -174,6 +174,72 @@ function testable across configurations.
 
 ---
 
+## 8b. The schedule decides what overtime is, not a single number
+
+**Decision:** the working week, the shift, a Saturday half day and an unpaid
+lunch are all settings, and `standard_hours_for(day)` answers "how many hours
+are ordinary on *this* date" rather than a flat `standard_day_hours`.
+
+**Why:** for most of this project's life there was one number applied to all
+seven days, and it was wrong in two directions at once — invisibly, because the
+output still looked like ordinary arithmetic. A worker who put in seven hours
+on a Saturday earned no overtime, because seven is less than eight, even though
+the farm's Saturday is a half day. A worker who came in on a Sunday was treated
+as though it were an ordinary working day *and* marked late for missing a shift
+that did not exist.
+
+**The two sharp edges, and how they were resolved:**
+
+- **A rest day returns 0 ordinary hours**, so every hour on it is overtime.
+  That is the point, not an oversight. The multiplier is the only thing in the
+  system that says somebody worked outside the schedule.
+- **Lunch is deducted as an overlap, never as a flat hour.** A worker who
+  clocks out for their break has already excluded it from their hours;
+  deducting again would charge them twice, and would quietly punish the worker
+  who used the clock honestly. The deduction also happens *before* overtime is
+  computed, or an hour at the table becomes an hour at time-and-a-half.
+
+**What it costs:** the schedule is now the single setting most likely to be
+wrong on a new installation, and wrong here means the wage bill is wrong. The
+Settings page states the schedule in force in one line at the top of the panel,
+and the manual tells an operator to read that line before the first payroll run.
+
+---
+
+## 8c. Three pay bases, one rate column
+
+**Decision:** `Worker.pay_basis` is `hourly`, `daily` or `monthly`, and
+`Worker.hourly_rate` holds the rate *in whatever unit the basis names*.
+
+**Why three bases:** a farm pays casual labour by the day, a tractor driver by
+the hour, and a manager a salary. With only an hourly rate, a salaried
+supervisor had to be entered as an invented hourly figure — so a sick day
+docked their pay. That is not a rounding error, it is the wrong answer, and
+nothing on the page revealed it.
+
+**Why one column, badly named:** the alternatives were worse.
+
+- Renaming `hourly_rate` is impossible under decision 13 below.
+- Adding `daily_rate` and `monthly_salary` would let one worker hold three
+  rates at once with nothing in the schema saying which counts. The first time
+  two disagreed, nobody could say which was right.
+
+One rate, one basis, no ambiguity — at the price of a column whose name is now
+too narrow. The project already carries the same wart in `pin_fingerprint`.
+
+**`NULL` means hourly**, because every worker on a database written before the
+column existed was paid by the hour, and an upgrade must never change somebody's
+pay.
+
+**Two refusals worth noting.** A salary earns no overtime: a farm that pays
+salaried staff for extra hours pays it as an allowance, where a person has to
+decide it, because a wage bill that grows on its own is how one gets out of
+control. And a salaried worker with no attendance at all in the period is still
+skipped — a salary is not conditional on hours, but it is conditional on the
+person being there, and that skip is the ghost-worker guard.
+
+---
+
 ## 9. The offline queue is a table, not a list
 
 **Decision:** pending uploads live in `offline_sync_queue` in the database.

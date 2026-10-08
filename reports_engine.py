@@ -653,12 +653,29 @@ def worker_dashboard_extras(worker: Worker, days: int = 28) -> dict:
     period_start, period_end = payroll_engine.period_bounds(today, period_type)
     so_far = totals(period_start, min(today, period_end))
     rate = payroll_engine.worker_rate(worker)
-    earned_so_far = round(so_far["hours"] * rate, 2)
+    basis = payroll_engine.worker_basis(worker)
+
+    # Run the real engine rather than multiplying hours by a rate. The two
+    # agreed only while hourly was the only basis; for a day labourer or a
+    # salaried supervisor an hours-times-rate estimate would be wrong by a
+    # wide margin, and a worker checking their pay against the page would be
+    # told a number the payslip then contradicts.
+    counted = payroll_engine.period_totals(
+        worker.id, period_start, min(today, period_end))
+    earned_so_far = payroll_engine.compute_pay(
+        counted["total_hours"], counted["overtime_hours"], rate,
+        pay_basis=basis, day_equivalents=counted["day_equivalents"],
+        period_type=period_type)["gross_pay"]
 
     elapsed = (min(today, period_end) - period_start).days + 1
     total_span = (period_end - period_start).days + 1
     on_course = None
-    if elapsed and so_far["hours"] and elapsed < total_span:
+    if basis == "monthly":
+        # A salary does not accumulate. The full amount IS the course it is
+        # on, from the first day of the period, and projecting it upward from
+        # a part-month would promise money that is not coming.
+        on_course = earned_so_far
+    elif elapsed and so_far["hours"] and elapsed < total_span:
         on_course = round((earned_so_far / elapsed) * total_span, 2)
 
     return {
@@ -682,6 +699,8 @@ def worker_dashboard_extras(worker: Worker, days: int = 28) -> dict:
         "earned_so_far": earned_so_far,
         "on_course": on_course,
         "rate": rate,
+        "pay_basis": basis,
+        "rate_unit": payroll_engine.PAY_BASES[basis]["unit"],
     }
 
 
