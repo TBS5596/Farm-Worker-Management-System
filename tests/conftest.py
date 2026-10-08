@@ -83,6 +83,24 @@ def setting(app_context):
 
 
 @pytest.fixture()
+def flat_schedule(setting):
+    """Eight hours a day, seven days, no lunch - the old implicit schedule.
+
+    Several tests here are about overtime arithmetic or pay periods and were
+    written before the farm had a working week, a half-day Saturday or an
+    unpaid lunch. Rather than rewrite their figures around the new defaults
+    and lose what they were actually pinning down, they ask for the flat
+    schedule explicitly. The real defaults are covered in test_schedule.py.
+    """
+    setting("work_week", "all")
+    setting("saturday_hours", "0")
+    setting("lunch_minutes", "0")
+    setting("standard_day_hours", "8")
+    setting("shift_start_time", "07:00")
+    setting("shift_end_time", "17:00")
+
+
+@pytest.fixture()
 def make_worker(app_context):
     def _make(name="Test Worker", pin="1234", rate=20.0, status="active"):
         worker = Worker(

@@ -132,7 +132,13 @@ class Worker(db.Model):
     address = db.Column(db.String(255), nullable=True)
     emergency_contact = db.Column(db.String(120), nullable=True)
     department = db.Column(db.String(80), nullable=True)
+    # The worker's rate IN THE UNIT THEIR BASIS NAMES - per hour, per day or
+    # per month. The column name predates the other two bases and could not
+    # be changed: migrations here are additive only, never renames.
     hourly_rate = db.Column(db.Float, nullable=True)
+    # hourly | daily | monthly. NULL means hourly, because every worker on a
+    # database written before this column existed was paid by the hour.
+    pay_basis = db.Column(db.String(20), nullable=True)
     # Pay cycle for this worker: "weekly", "fortnightly", "semi-monthly" or
     # "monthly". NULL means "use the farm default in Settings", exactly as a
     # NULL hourly_rate falls back to default_hourly_rate. Farms commonly run
@@ -267,6 +273,11 @@ class Payroll(db.Model):
     total_hours = db.Column(db.Float, nullable=True)
     overtime_hours = db.Column(db.Float, nullable=True)
     hourly_rate = db.Column(db.Float, nullable=True)
+    # Which basis produced this row, and how many day-equivalents it paid.
+    # Stored rather than looked up so a payslip stays reproducible after the
+    # worker's basis or rate changes - the same reasoning as napsa_rate.
+    pay_basis = db.Column(db.String(20), nullable=True)
+    day_equivalents = db.Column(db.Float, nullable=True)
     overtime_pay = db.Column(db.Float, nullable=True)
     gross_pay = db.Column(db.Float, nullable=True)
     napsa_rate = db.Column(db.Float, nullable=True)
@@ -483,6 +494,10 @@ class DailyAttendanceSummary(db.Model):
     check_in_time = db.Column(db.Time, nullable=True)
     check_out_time = db.Column(db.Time, nullable=True)
     total_hours = db.Column(db.Float, nullable=True)
+    # Unpaid lunch taken off this day's clocked time. Stored so a worker
+    # asking why nine hours on the clock became eight has an answer on the
+    # page rather than a number that looks like a mistake.
+    break_hours = db.Column(db.Float, default=0.0, nullable=True)
     overtime_hours = db.Column(db.Float, default=0.0, nullable=False)
     sessions_count = db.Column(db.Integer, default=0, nullable=False)
     late_minutes = db.Column(db.Integer, default=0, nullable=False)

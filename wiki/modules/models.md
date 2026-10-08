@@ -71,8 +71,9 @@ Dashboard accounts. **Not workers.**
 | `pin_hash` | Werkzeug hash of the PIN |
 | `pin_fingerprint` | SHA-256, used **only** for PIN uniqueness. **Nothing to do with fingerprints** |
 | `fingerprint_template` | **Dead.** Reserved for a scanner that was never bought |
-| `hourly_rate` | Blank falls back to the farm default |
-| `payroll_period` | This worker's pay cycle. **Blank falls back to the farm default**, same convention as the rate |
+| `hourly_rate` | The rate **in the unit the worker's basis names** - per hour, per day or per month. The name predates the other two bases; renaming is impossible under additive-only migrations. Blank falls back to the farm default |
+| `pay_basis` | `hourly`, `daily` or `monthly`. **NULL means hourly**, because every worker on a database written before this column existed was paid by the hour and an upgrade must not change anybody's pay |
+| `payroll_period` | This worker's pay cycle. **Blank falls back to the farm default**, same convention as the rate. Note this is *when* they are paid, not *how* - the basis above is how |
 | `face_enrolled_at` | Set on first sample, cleared when wiped. No samples = cannot clock in |
 | `status` | `active` / `inactive` / `suspended`. Only `active` can clock in |
 | `card_barcode` | The value printed on the identity card. **Unique**, nullable. Its content depends on the `barcode_source` setting — see [barcode_engine](barcode_engine.md) |
@@ -137,7 +138,8 @@ interpretable after somebody changes the setting.
 | Column | Notes |
 | --- | --- |
 | `worker_id`, `summary_date` | The pair identifies the row |
-| `total_hours`, `overtime_hours` | Closed sessions only |
+| `total_hours`, `overtime_hours` | Closed sessions only, **net of the unpaid break**. Overtime is measured against *this day's* schedule, so a Saturday's is four hours and a rest day's is nothing |
+| `break_hours` | The unpaid lunch actually deducted. Stored so a worker asking why nine hours on the clock became eight has an answer on the page rather than a number that looks like a mistake |
 | `check_in_time`, `check_out_time` | First in, last out — `Time`, not `DateTime` |
 | `sessions_count`, `late_minutes`, `early_departure_minutes` | |
 | `verified_by_face`, `verified_by_cctv` | |
@@ -149,6 +151,7 @@ interpretable after somebody changes the setting.
 | `worker_id`, `week_ending` | The pair identifies the row. `week_ending` now means **period** ending for every cycle — it could not be renamed, since migrations are additive only |
 | `period_start`, `period_type` | What this row actually covers. Recorded on the row so a farm that switches cycles can still read old payslips |
 | `total_hours`, `overtime_hours`, `hourly_rate` | |
+| `pay_basis`, `day_equivalents` | Which basis produced this row, and how many day-equivalents it paid. Stored rather than looked up from the worker, for the same reason `napsa_rate` is: a payslip has to stay reproducible after the worker moves from daily to salaried |
 | `overtime_pay`, `gross_pay` | |
 | `napsa_rate`, `nhima_rate` | **The rates in force when it was generated** |
 | `napsa_deduction`, `nhima_deduction`, `net_pay` | |

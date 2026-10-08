@@ -95,7 +95,11 @@ def payroll_csv() -> str:
             _stamp(row.week_ending),
             row.total_hours or 0,
             row.overtime_hours or 0,
+            # The rate is meaningless without its unit: 6000 per month and
+            # 6000 per hour are the same number in a spreadsheet column.
+            row.pay_basis or "hourly",
             row.hourly_rate or 0,
+            row.day_equivalents or 0,
             row.overtime_pay or 0,
             row.gross_pay or 0,
             row.napsa_deduction or 0,
@@ -108,7 +112,8 @@ def payroll_csv() -> str:
     return _csv([
         "payroll_id", "worker_id", "worker_name",
         "period_type", "period_start", "period_end", "total_hours",
-        "overtime_hours", "hourly_rate", "overtime_pay", "gross_pay_zmw",
+        "overtime_hours", "pay_basis", "rate", "days_paid",
+        "overtime_pay", "gross_pay_zmw",
         "napsa_deduction_zmw", "nhima_deduction_zmw", "net_pay_zmw", "source",
         "paid_status", "payment_date",
     ], rows)
@@ -127,6 +132,9 @@ def daily_summary_csv() -> str:
             _stamp(row.check_in_time),
             _stamp(row.check_out_time),
             row.total_hours or 0,
+            # Paid hours are net of lunch, so the break has to be a column of
+            # its own or the figures look like an arithmetic error.
+            row.break_hours or 0,
             row.overtime_hours or 0,
             row.sessions_count or 0,
             row.late_minutes or 0,
@@ -135,7 +143,8 @@ def daily_summary_csv() -> str:
         ])
     return _csv([
         "date", "worker_id", "worker_name", "first_in", "last_out", "total_hours",
-        "overtime_hours", "sessions", "late_minutes", "early_departure_minutes",
+        "unpaid_break_hours", "overtime_hours", "sessions", "late_minutes",
+        "early_departure_minutes",
         "face_verified",
     ], rows)
 

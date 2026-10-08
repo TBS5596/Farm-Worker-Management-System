@@ -65,6 +65,39 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+
+  // --- Pay basis -----------------------------------------------------------
+  //
+  // The rate box means something different depending on the basis chosen,
+  // and 6000 typed into a box labelled "Hourly rate" is a payroll disaster
+  // that nothing downstream can detect. So the label and the help text are
+  // rewritten from the chosen option the moment it changes.
+  function syncPayBasis(select) {
+    if (!select) { return; }
+    var option = select.options[select.selectedIndex];
+    if (!option) { return; }
+    var label = document.getElementById(select.dataset.rateTarget);
+    var help = document.getElementById(select.dataset.helpTarget);
+    if (label) { label.textContent = option.dataset.noun || 'Rate'; }
+    if (help) { help.textContent = option.dataset.summary || ''; }
+  }
+
+  var basisSelects = document.querySelectorAll('.pay-basis-select');
+  Array.prototype.forEach.call(basisSelects, function (select) {
+    select.addEventListener('change', function () { syncPayBasis(select); });
+    syncPayBasis(select);
+  });
+
+  // The edit modal's select is filled by edit-modals.js when the row's
+  // pencil is clicked. shown.bs.modal fires after that, so this is the one
+  // moment the value is guaranteed to be the worker's own.
+  var editModal = document.getElementById('editWorkerModal');
+  if (editModal) {
+    editModal.addEventListener('shown.bs.modal', function () {
+      syncPayBasis(document.getElementById('editPayBasis'));
+    });
+  }
+
   // Delegated so the button keeps working on pages 2, 3, ... of the table.
   // Example: clicking reset on worker 0007 points the form at
   // /workers/7/reset-pin and names the worker in the modal.

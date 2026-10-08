@@ -199,7 +199,7 @@ portal.py               The worker self-service portal at /me
 
 templates/              HTML
 static/css/, static/js/ Styles and browser scripts
-tests/                  265 tests
+tests/                  295 tests
 tools/                  Scripts: demo data, benchmarks, experiments
 ```
 

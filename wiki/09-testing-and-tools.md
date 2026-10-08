@@ -11,7 +11,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-265 tests, about a minute, twelve modules.
+295 tests, about a minute, fourteen modules.
 
 ```
 tests/test_attendance.py        11 tests
@@ -19,16 +19,29 @@ tests/test_cards.py             54 tests
 tests/test_cctv_and_sync.py     15 tests
 tests/test_pages_render.py      40 tests
 tests/test_face_engine.py        9 tests
+tests/test_pay_bases.py         17 tests
 tests/test_pay_periods.py       21 tests
 tests/test_payroll.py            7 tests
 tests/test_portal.py            47 tests
 tests/test_real_face.py          4 tests
 tests/test_reports.py           27 tests
+tests/test_schedule.py          13 tests
 tests/test_security_and_api.py  19 tests
 tests/test_workers.py           11 tests
 
-265 passed
+295 passed
 ```
+
+`test_schedule.py` pins down the working week, the Saturday half day and the
+unpaid lunch; `test_pay_bases.py` pins down hourly, daily and monthly pay. Both
+are worth reading before changing anything in `payroll_engine.py`, because
+between them they encode most of what "correct" means for a wage bill.
+
+Note the `flat_schedule` fixture in `conftest.py`. Several older tests are
+about overtime arithmetic or pay periods and were written before the farm had a
+schedule at all. Rather than rewrite their figures around the new defaults and
+lose what they were actually pinning down, they ask for the flat eight-hour,
+seven-day, no-lunch schedule explicitly.
 
 Useful invocations:
 

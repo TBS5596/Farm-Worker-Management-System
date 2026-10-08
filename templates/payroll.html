@@ -145,8 +145,17 @@
             <input type="number" step="0.01" min="0" class="form-control" name="overtime_hours" placeholder="e.g. 2" />
           </div>
           <div class="col-6">
-            <label class="form-label small mb-1">Hourly rate</label>
+            <label class="form-label small mb-1">Rate</label>
             <input type="number" step="0.01" min="0" class="form-control" name="hourly_rate" placeholder="Worker default" />
+            <div class="form-text small">In the unit of the worker's own pay basis.</div>
+          </div>
+          {# Only the daily basis needs this, but the form does not know which
+             worker is about to be chosen, so it is always offered and ignored
+             by the other two bases. #}
+          <div class="col-6">
+            <label class="form-label small mb-1">Days paid</label>
+            <input type="number" step="0.5" min="0" class="form-control" name="day_equivalents" placeholder="Daily workers only" />
+            <div class="form-text small">A half day counts 0.5.</div>
           </div>
           <div class="col-12">
             {% if can('payroll.manage') %}
@@ -204,7 +213,12 @@
             </td>
             <td>{{ '%.2f'|format(p.total_hours) if p.total_hours is not none else '-' }}</td>
             <td>{{ '%.2f'|format(p.overtime_hours) if p.overtime_hours else '-' }}</td>
-            <td>{{ '%.2f'|format(p.hourly_rate) if p.hourly_rate is not none else '-' }}</td>
+            <td class="text-nowrap">
+              {{ '%.2f'|format(p.hourly_rate) if p.hourly_rate is not none else '-' }}
+              {% if p.hourly_rate is not none %}
+                <small class="text-muted">{{ pay_bases[p.pay_basis or 'hourly'].unit }}</small>
+              {% endif %}
+            </td>
             <td class="fw-semibold">{{ '%.2f'|format(p.gross_pay) if p.gross_pay is not none else '-' }}</td>
             <td class="text-muted">{{ '%.2f'|format(p.napsa_deduction) if p.napsa_deduction is not none else '-' }}</td>
             <td class="text-muted">{{ '%.2f'|format(p.nhima_deduction) if p.nhima_deduction is not none else '-' }}</td>
@@ -240,6 +254,7 @@
                   "total_hours": p.total_hours if p.total_hours is not none else "",
                   "overtime_hours": p.overtime_hours if p.overtime_hours is not none else "",
                   "hourly_rate": p.hourly_rate if p.hourly_rate is not none else "",
+                  "day_equivalents": p.day_equivalents if p.day_equivalents is not none else "",
                   "paid_status": p.paid_status or "pending",
                   "payment_date": p.payment_date.strftime("%Y-%m-%d") if p.payment_date else ""
                 } | tojson | forceescape }}'
@@ -304,8 +319,12 @@
               <input type="number" step="0.01" min="0" class="form-control" name="overtime_hours" id="editPayrollOvertime" title="Overtime hours" />
             </div>
             <div class="col-md-4">
-              <label class="form-label">Hourly Rate (ZMW)</label>
-              <input type="number" step="0.01" min="0" class="form-control" name="hourly_rate" id="editPayrollRate" title="Hourly rate" />
+              <label class="form-label">Rate (ZMW)</label>
+              <input type="number" step="0.01" min="0" class="form-control" name="hourly_rate" id="editPayrollRate" title="Rate, in the unit of the worker's pay basis" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Days Paid</label>
+              <input type="number" step="0.5" min="0" class="form-control" name="day_equivalents" id="editPayrollDays" title="Days paid, for a worker paid by the day" />
             </div>
             <div class="col-md-6">
               <label class="form-label">Status</label>

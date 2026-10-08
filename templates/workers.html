@@ -140,6 +140,7 @@
             <td data-order="{{ worker.hourly_rate or 0 }}">
               {% if worker.hourly_rate %}
                 ZMW {{ '%.2f'|format(worker.hourly_rate) }}
+                <small class="text-muted">{{ pay_bases[worker.pay_basis or 'hourly'].unit }}</small>
               {% else %}
                 <span class="text-muted" title="Falls back to the default rate in Settings">
                   ZMW {{ '%.2f'|format(default_rate) }} <small>(default)</small>
@@ -213,6 +214,7 @@
                         "nrc_number": worker.nrc_number or "",
                         "status": worker.status or "active",
                         "hourly_rate": worker.hourly_rate or "",
+                        "pay_basis": worker.pay_basis or "hourly",
                         "payroll_period": worker.payroll_period or "",
                         "enrollment_date": worker.enrollment_date.strftime("%Y-%m-%d") if worker.enrollment_date else ""
                       } | tojson | forceescape }}'
@@ -345,10 +347,24 @@
               <input type="text" class="form-control" name="address" placeholder="e.g. Plot 22, East Farm" title="Worker address" />
             </div>
             <div class="col-md-6">
-              <label class="form-label">Hourly Rate (ZMW)</label>
+              {# How the rate below is read. Pick the basis first: the label
+                 and the helper text underneath change with it, so there is
+                 no way to type 6000 into a box that says "per hour". #}
+              <label class="form-label">Paid By</label>
+              <select class="form-select pay-basis-select" name="pay_basis"
+                      data-rate-target="addRateLabel" data-help-target="addRateHelp"
+                      title="How this worker's rate is read">
+                {% for key, meta in pay_bases.items() %}
+                  <option value="{{ key }}" data-noun="{{ meta.noun }}"
+                          data-summary="{{ meta.summary }}">{{ meta.label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label"><span id="addRateLabel">Hourly rate</span> (ZMW)</label>
               <input type="number" class="form-control" name="hourly_rate" min="0" step="0.5"
-                     placeholder="Leave blank to use the default rate" title="Hourly rate in ZMW" />
-              <div class="form-text">Used to calculate this worker's pay from their recorded hours.</div>
+                     placeholder="Leave blank to use the default rate" title="Pay rate in ZMW" />
+              <div class="form-text" id="addRateHelp">{{ pay_bases['hourly'].summary }}</div>
             </div>
             <div class="col-md-6">
               <label class="form-label">Pay Cycle</label>
@@ -431,9 +447,21 @@
               </select>
             </div>
             <div class="col-md-6">
-              <label class="form-label">Hourly Rate (ZMW)</label>
+              <label class="form-label">Paid By</label>
+              <select class="form-select pay-basis-select" name="pay_basis" id="editPayBasis"
+                      data-rate-target="editRateLabel" data-help-target="editRateHelp"
+                      title="How this worker's rate is read">
+                {% for key, meta in pay_bases.items() %}
+                  <option value="{{ key }}" data-noun="{{ meta.noun }}"
+                          data-summary="{{ meta.summary }}">{{ meta.label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label"><span id="editRateLabel">Hourly rate</span> (ZMW)</label>
               <input type="number" class="form-control" name="hourly_rate" id="editHourlyRate" min="0" step="0.5"
-                     placeholder="Leave blank to use the default rate" title="Hourly rate in ZMW" />
+                     placeholder="Leave blank to use the default rate" title="Pay rate in ZMW" />
+              <div class="form-text" id="editRateHelp">{{ pay_bases['hourly'].summary }}</div>
             </div>
             <div class="col-md-6">
               <label class="form-label">Pay Cycle</label>

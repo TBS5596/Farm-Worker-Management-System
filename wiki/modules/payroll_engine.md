@@ -141,11 +141,78 @@ The statutory basis, so you know what the numbers mean:
 | `nhima_rate` | 0.01 | NHIMA Act No. 2 of 2018: **1% employee**, matched by 1% employer |
 | `standard_day_hours` | 8 | Operating convention |
 | `overtime_multiplier` | 1.5 | Operating convention |
+| `work_week` | `mon-sat` | The week most farms here run |
+| `saturday_hours` | 4 | The half day |
+| `lunch_start_time` / `lunch_minutes` | 13:00 / 60 | Unpaid break |
+
+The last three, with the 07:00-16:00 shift, add up to the **44 hour week** the
+system arrives configured for: five eight-hour days and a Saturday morning.
 
 > **Not implemented:** pay-as-you-earn income tax, the NAPSA contribution
 > ceiling, terminal benefits. The ceiling in particular means a high earner would
 > currently be **over-deducted**. This is the most consequential outstanding item
 > in the module and it should be fixed before the system pays anyone real money.
+
+## The work schedule
+
+Before any of the pay arithmetic is worth anything, something has to say which
+hours are ordinary. For most of this project's life nothing did: there was a
+single `standard_day_hours`, applied identically to all seven days.
+
+That is wrong in two directions at once, and both are invisible on the page.
+
+- A worker who put in **seven hours on a Saturday** earned no overtime, because
+  seven is less than eight — even though the farm's Saturday is a half day.
+- A worker who came in on a **Sunday** was treated as though it were an
+  ordinary working day, and was additionally marked *late* for missing a shift
+  that did not exist.
+
+### `standard_hours_for(day, config)`
+
+The one function that decides it.
+
+```python
+if weekday not in working_days(config):   return 0.0     # every hour is overtime
+if weekday == SATURDAY:                   return saturday_hours or standard_day
+return standard_day
+```
+
+A rest day returning **0** is the point, not an oversight. Somebody working
+outside the schedule is working entirely outside it, and the multiplier is the
+only thing that says so.
+
+Note the `or` on the Saturday line. A blank `saturday_hours` means *a full
+Saturday*, not *no Saturday*. A farm that works Saturdays in full should not
+have to retype the standard day in a second box, and should certainly not be
+able to zero its Saturdays by clearing a field that reads like a half-day option.
+
+### `unpaid_break_hours(sessions, day, config)` — the overlap rule
+
+Lunch is unpaid, and the deduction is the **overlap between each clocked-in
+session and the lunch window** rather than a flat hour. That distinction is the
+whole design:
+
+| What the worker did | Overlap | Deducted | Why that is right |
+| --- | --- | --- | --- |
+| Clocked out 13:00, back in 14:00 | none | nothing | The break is already missing from their hours. A flat hour would charge them twice — and would punish the worker who used the clock honestly |
+| Stayed clocked in 07:00-16:00 | one hour | one hour | The case a flat rule was written for |
+| Short day ending 11:00 | none | nothing | They were not there |
+
+The limit of the rule is worth stating plainly: attendance data records
+*presence*, not whether a meal was eaten, so a worker who genuinely works
+through lunch still has the hour deducted. A farm that pays worked lunches
+records the extra time as overtime, or sets `lunch_minutes` to 0.
+
+**Order matters.** The break comes off *before* overtime is computed. Otherwise
+an hour at the table becomes an hour at time-and-a-half — 07:00 to 18:00 is ten
+hours worked, two of them overtime, not three.
+
+### `scheduled_end(day, standard, config)`
+
+A half day finishes earlier than `shift_end_time`, and the earlier finish has
+to be *derived* rather than looked up: shift start, plus the hours owed, plus
+lunch only if lunch falls inside that span. Without it, every Saturday reads as
+the entire workforce walking out four hours early.
 
 ## `rebuild_day(worker_pk, day)`
 
@@ -184,7 +251,74 @@ imported or edited directly.
 A payroll week is the **seven days ending on** `week_ending`, inclusive. One
 place defines it so no caller can get the arithmetic subtly wrong.
 
-## `compute_pay(total_hours, overtime_hours, hourly_rate, config=None)`
+## Pay bases — hourly, daily, monthly
+
+A farm does not pay everybody the same way, and until these existed all three
+kinds of worker had to be entered as an hourly rate. The consequence was not
+cosmetic: **a salaried supervisor lost pay for a sick day**, because their
+"salary" was a made-up hourly figure multiplied by hours they did not work.
+
+| Basis | The rate means | Overtime |
+| --- | --- | --- |
+| `hourly` | per hour | hours beyond the day's schedule, at the multiplier |
+| `daily` | per day | yes, priced at `rate / standard_day_hours` |
+| `monthly` | per month | **none** |
+
+### The column name is wrong, deliberately
+
+`Worker.hourly_rate` now holds "the rate in whatever unit the basis names".
+That is a wart, and it is the lesser of the options available:
+
+- **Renaming it** is not possible. `migrations.py` is additive only — it issues
+  `ALTER TABLE ADD COLUMN` and nothing else, by design, because a rename on
+  SQLite means rebuilding the table and that is not a thing to do to a farm's
+  only copy of its payroll.
+- **Adding `daily_rate` and `monthly_salary`** would let one worker hold three
+  rates at once with nothing in the schema saying which one counts. The first
+  time two of them disagreed, no one could say which was right.
+
+One rate, one basis, no ambiguity. The project already carries a comparable
+wart in `pin_fingerprint`.
+
+### `NULL` means hourly
+
+Every worker on a database written before the column existed was being paid by
+the hour. If `NULL` meant anything else, their pay would change the day the
+farm upgraded — which is the one thing a migration must never do.
+
+### Proration: 12/26 and 12/52, not 1/2 and 1/4
+
+```python
+"monthly": 1.0, "semi-monthly": 0.5,
+"fortnightly": 12.0 / 26.0, "weekly": 12.0 / 52.0,
+```
+
+The obvious arithmetic is wrong. There are 26 fortnights and 52 weeks in a
+year, not 24 and 48, so paying half a month every fortnight pays **thirteen
+months' salary a year**. A test asserts that 26 fortnightly payments come to
+exactly twelve months.
+
+### A salary earns no overtime, and that is a refusal
+
+Silently paying overtime on a salary is how a wage bill runs away. A farm that
+pays salaried staff for extra hours pays it as an allowance, outside this
+engine, where somebody has to decide it.
+
+### A salaried worker with no attendance is still skipped
+
+`skipped_no_hours` applies to every basis. A salary is not conditional on
+hours, but it *is* conditional on the person being there, and a name on the
+register with no attendance behind it for a whole month is precisely how a
+ghost worker gets paid — in full, in this case.
+
+### The basis is stored on the payroll row
+
+`Payroll.pay_basis` and `Payroll.day_equivalents`, for the same reason
+`napsa_rate` is stored per row: a payslip has to stay reproducible after the
+worker moves from daily to salaried. Looking the basis up from the worker at
+print time would silently rewrite history.
+
+## `compute_pay(total_hours, overtime_hours, hourly_rate, config=None, pay_basis="hourly", day_equivalents=0.0, period_type=None)`
 
 **The most important function in the module, and it is pure.** No database, no
 request context, no Flask. Give it numbers, get numbers back.
@@ -221,6 +355,19 @@ directly with absurd inputs, which no amount of clicking would have produced.
 
 **Every step rounds to 2 decimal places** as it goes, rather than once at the
 end, so the components a payslip displays always add up to the total shown.
+
+The daily and monthly branches replace `basic_pay` and `overtime_pay` only;
+every deduction and the net calculation are shared, so a change to NAPSA
+cannot apply to one basis and miss another.
+
+```
+daily     5.5 days x 160.00            = 880.00
+          overtime 2 h x (160/8) x 1.5 =  60.00
+monthly   6000.00 x 12/52 (weekly)     = 1384.62   no overtime
+```
+
+**An unrecognised basis falls back to hourly**, never to something expensive.
+A typo must not pay somebody a month's salary.
 
 Returns all twelve components — hours, rate, basic, overtime, gross, each rate,
 each deduction, net — not just `net_pay`, so a worker who queries a payment can

@@ -39,15 +39,21 @@ from models import (  # noqa: E402
 # Fictional workers. No name here belongs to anyone connected with the project,
 # and none is drawn from the live database - the demonstration dataset must be
 # safe to screenshot for a report or a presentation.
+# Name, department, rate, pay basis. The rate is in the unit the basis names,
+# so 6000.0 on "monthly" is a salary and 150.0 on "daily" is a day's pay.
+#
+# The mix is deliberate. A demonstration in which everybody is paid by the hour
+# would hide the thing most likely to be set up wrongly on a real farm, and the
+# screenshots would not show a payslip reading "Monthly salary" at all.
 WORKERS = [
-    ("Musonda Banda", "Harvesting", 18.0),
-    ("Mwiza Tembo", "Irrigation", 22.0),
-    ("Kondwani Zulu", "Packhouse", 22.0),
-    ("Chipo Mwale", "Harvesting", 18.0),
-    ("Lubasi Nyambe", "Security", 20.0),
-    ("Thandiwe Kunda", "Packhouse", 19.0),
-    ("Kabwe Mulenga", "Maintenance", 25.0),
-    ("Bwalya Chanda", "Harvesting", 18.0),
+    ("Musonda Banda", "Harvesting", 18.0, "hourly"),
+    ("Mwiza Tembo", "Irrigation", 22.0, "hourly"),
+    ("Kondwani Zulu", "Packhouse", 150.0, "daily"),
+    ("Chipo Mwale", "Harvesting", 150.0, "daily"),
+    ("Lubasi Nyambe", "Security", 20.0, "hourly"),
+    ("Thandiwe Kunda", "Packhouse", 6000.0, "monthly"),
+    ("Kabwe Mulenga", "Maintenance", 25.0, "hourly"),
+    ("Bwalya Chanda", "Harvesting", 18.0, "hourly"),
 ]
 
 
@@ -109,7 +115,7 @@ def _set(key: str, value: str) -> None:
 #: The eight fictional workers this script creates. A database containing only
 #: these names is demo data and can be replaced without asking; anything else is
 #: somebody's real work.
-_DEMO_NAMES = {name for name, _department, _rate in WORKERS}
+_DEMO_NAMES = {name for name, _department, _rate, _basis in WORKERS}
 
 
 def _looks_like_real_data() -> bool:
@@ -173,12 +179,13 @@ def main(force: bool, assume_yes: bool = False) -> None:
 
         random.seed(7)
         workers = []
-        for index, (name, department, rate) in enumerate(WORKERS):
+        for index, (name, department, rate, basis) in enumerate(WORKERS):
             worker = Worker(
                 worker_id=_generate_worker_id(),
                 name=name,
                 department=department,
                 hourly_rate=rate,
+                pay_basis=basis,
                 # Masked, deliberately not a dialable number: the format is
                 # shown so the field looks realistic in a screenshot, but no
                 # real subscriber can be reached on it.
@@ -232,11 +239,18 @@ def main(force: bool, assume_yes: bool = False) -> None:
             day = start + timedelta(days=offset)
             if day.weekday() == 6:      # no Sunday shift
                 continue
+            saturday = day.weekday() == 5
             for index, worker in enumerate(workers[:6]):
                 if random.random() < 0.12:   # occasional absence
                     continue
                 in_hour, in_minute = 7, random.choice([0, 3, 8, 12, 25, 41])
-                worked = random.choice([8, 8, 8, 8.5, 9, 9.5, 7.5])
+                # Hours ON THE CLOCK, which is what attendance records. The
+                # unpaid hour for lunch comes off these in rebuild_day, so a
+                # nine-hour day here is the eight-hour day the farm schedules.
+                # Saturday is the half day and finishes before lunch, so its
+                # figures are short by design rather than by accident.
+                worked = (random.choice([4, 4, 4.5, 3.5, 5]) if saturday
+                          else random.choice([9, 9, 9, 9.5, 10, 10.5, 8.5]))
                 check_in = datetime.combine(day, time(in_hour, in_minute))
                 check_out = check_in + timedelta(hours=worked)
                 score = round(random.uniform(52, 88), 2)
