@@ -26,6 +26,7 @@ os.environ["FMS_SECRET_KEY"] = "test-secret-key"
 
 import app as app_module  # noqa: E402
 import face_engine  # noqa: E402
+import paths  # noqa: E402
 from database import db  # noqa: E402
 from models import Setting, User, Worker  # noqa: E402
 
@@ -39,6 +40,25 @@ _FACES_DIR = os.path.join(_CAPTURES_DIR, "faces")
 os.makedirs(_FACES_DIR, exist_ok=True)
 face_engine.BASE_DIR = _CAPTURES_DIR
 face_engine.FACES_DIR = _FACES_DIR
+
+# Rebinding face_engine alone is not enough, and the gap had a real cost.
+# `app.py` does `from paths import ... FACES_DIR ...`, so it holds its OWN
+# reference to the project's real captures directory and hands that to
+# face_engine.enroll_frame(). The enrolment route therefore wrote into
+# captures/faces/ no matter what face_engine had been pointed at - which is
+# how the real photograph used by test_real_face.py came to overwrite a demo
+# worker's enrolment crops, and from there appeared on a printed identity
+# card in a report figure.
+#
+# Every module that captured a copy of the path is redirected here. A test
+# run must not be able to touch the project's own captures directory at all.
+for _module in (app_module, face_engine, paths):
+    for _name, _value in (("CAPTURES_DIR", _CAPTURES_DIR),
+                          ("FACES_DIR", _FACES_DIR),
+                          ("CLIPS_DIR", os.path.join(_CAPTURES_DIR, "clips"))):
+        if hasattr(_module, _name):
+            setattr(_module, _name, _value)
+os.makedirs(os.path.join(_CAPTURES_DIR, "clips"), exist_ok=True)
 
 
 def _reset_captures() -> None:

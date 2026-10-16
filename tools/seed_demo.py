@@ -23,12 +23,13 @@ import face_engine  # noqa: E402
 import payroll_engine  # noqa: E402
 from app import _generate_worker_id, _pin_fingerprint, app  # noqa: E402
 from database import db  # noqa: E402
-from paths import FACES_DIR  # noqa: E402
+from paths import CAPTURES_DIR as CAPTURES, FACES_DIR  # noqa: E402
 from models import (  # noqa: E402
     Attendance,
     BiometricTransaction,
     CCTVFeed,
     DailyAttendanceSummary,
+    EventSnapshot,
     FaceTemplate,
     HardwareHealthLog,
     Payroll,
@@ -103,6 +104,36 @@ def _synthetic_face(seed: int):
     grain = rng.integers(0, 14, size=(height, width), dtype=np.uint8)
     return np.clip(canvas.astype(np.int16) + grain - 7, 0, 255).astype(np.uint8)
 
+
+
+def _seed_snapshots(session, worker, worker_index, check_in, check_out):
+    """Attach a clock-in and clock-out still to a demonstration session.
+
+    Without these, every attendance figure in the report and the defence deck
+    shows an empty evidence column - which is the one claim the project turns
+    on. A real installation stores a frame from the camera at each punch; the
+    demonstration stores the same drawn placeholder portrait used for
+    enrolment, so the evidence trail is visible without any real face being
+    published.
+    """
+    os.makedirs(CAPTURES, exist_ok=True)
+    for kind, when in (("check_in", check_in), ("check_out", check_out)):
+        if when is None:
+            continue
+        name = f"{worker.worker_id}_{when:%Y%m%d_%H%M%S}_{kind}.jpg"
+        path = os.path.join(CAPTURES, name)
+        if not os.path.exists(path):
+            frame = _synthetic_face(worker_index * 97 + when.toordinal())
+            try:
+                cv2.imwrite(path, cv2.resize(frame, (320, 320)))
+            except Exception:
+                continue
+        db.session.add(EventSnapshot(
+            attendance_id=session.attendance_id,
+            snapshot_type=kind,
+            file_path=f"captures/{name}",
+            captured_at=when,
+        ))
 
 def _set(key: str, value: str) -> None:
     row = Setting.query.filter_by(key=key).first()
@@ -255,7 +286,7 @@ def main(force: bool, assume_yes: bool = False) -> None:
                 check_out = check_in + timedelta(hours=worked)
                 score = round(random.uniform(52, 88), 2)
                 near = random.random() > 0.1
-                db.session.add(Attendance(
+                session = Attendance(
                     worker_id=worker.id,
                     check_in_time=check_in,
                     check_out_time=check_out,
@@ -268,7 +299,10 @@ def main(force: bool, assume_yes: bool = False) -> None:
                     within_geofence=near,
                     distance_from_farm_m=round(random.uniform(20, 260) if near
                                                else random.uniform(700, 2400), 1),
-                ))
+                )
+                db.session.add(session)
+                db.session.flush()        # the snapshots need its id
+                _seed_snapshots(session, worker, index, check_in, check_out)
                 db.session.add(BiometricTransaction(
                     worker_id=worker.id,
                     transaction_type="face_verify_in",
