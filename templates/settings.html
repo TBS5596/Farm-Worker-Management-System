@@ -208,6 +208,68 @@
         </div>
       </div>
 
+      {# ====================================================================
+         Forgotten PINs. A worker who forgets a PIN is the ordinary case, not
+         the suspicious one, and the only thing worse than making them wait
+         for a supervisor is letting anyone who knows a worker number set a
+         new PIN. So the reset asks for exactly what the clock-in asks for -
+         the face, and the card where cards are in use - and that is derived
+         from the setting above rather than chosen again here.
+         ==================================================================== #}
+      <div class="card shadow-sm mb-3" id="pin-reset">
+        <div class="card-body p-4">
+          <h6 class="text-muted text-uppercase fw-bold mb-1">Forgotten PINs</h6>
+          <p class="text-muted small mb-3">
+            Whether a worker can set a new PIN themselves at the terminal, after
+            the same checks their clock-in would ask for.
+          </p>
+
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" role="switch" id="pinResetEnabled"
+                   name="pin_reset_enabled"
+                   {% if settings.get('pin_reset_enabled', 'on') == 'on' %}checked{% endif %} />
+            <label class="form-check-label" for="pinResetEnabled">
+              Workers can reset a forgotten PIN at the clock-in terminal
+            </label>
+          </div>
+
+          {% if settings.get('pin_reset_enabled', 'on') == 'on' and not pin_reset_available %}
+          <div class="alert alert-warning d-flex align-items-start gap-2 mb-0">
+            <i class="bi bi-shield-exclamation mt-1"></i>
+            <div>
+              <strong>Switched on, but not offered.</strong>
+              Clock-in verification is currently
+              <strong>{{ clockin_modes[clockin_mode].short }}</strong>, which does not
+              check a face. With no face to check, a reset would hand a new PIN to
+              anyone holding a worker number, so the page refuses and tells the worker
+              to see a supervisor. Turn a face check on under
+              <a href="#clockin-verification">Clock-in Verification</a> to make this work.
+            </div>
+          </div>
+          {% elif pin_reset_available %}
+          <div class="alert alert-success d-flex align-items-start gap-2 mb-0">
+            <i class="bi bi-shield-check mt-1"></i>
+            <div>
+              <strong>Currently: {% if pin_reset_factors.card %}card and face{% else %}face only{% endif %}.</strong>
+              A worker identifies themselves{% if pin_reset_factors.card %} by scanning their card{% else %} with their worker number{% endif %},
+              passes the same face match the gate uses, then chooses a new PIN. Three
+              failures in fifteen minutes stop that worker number for the rest of the
+              window, and every reset is written to the audit trail.
+            </div>
+          </div>
+          {% else %}
+          <div class="alert alert-light border d-flex align-items-start gap-2 mb-0">
+            <i class="bi bi-info-circle mt-1"></i>
+            <div>
+              Switched off. A forgotten PIN is then a supervisor's errand:
+              <a href="{{ url_for('workers_page') }}">Workers</a> &rarr; the worker &rarr;
+              set a new PIN.
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
       <div class="card shadow-sm mb-3">
         <div class="card-body p-4">
           <h6 class="text-muted text-uppercase fw-bold mb-3">Face Verification</h6>

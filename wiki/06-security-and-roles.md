@@ -46,6 +46,58 @@ class Worker(db.Model):
 Nothing readable is stored. A forgotten PIN is *reset*, never *retrieved* — a
 route exists for resetting, none exists for reading.
 
+### Resetting a forgotten PIN, without opening a second door
+
+`pin_reset.py` lets a worker set a new PIN at the terminal. The whole module is
+built around one sentence:
+
+> A reset must never be an easier door than the clock-in it protects.
+
+The temptation is to accept a face alone. That would be measurably weaker than
+the clock-in on a card + PIN + face farm, and weaker in a way this system can
+be specific about: there is no liveness detection (see *Known limitations*
+below), so a photograph of a worker can sometimes pass the face check. Face-only
+resets would hand an attacker the account with one of the three factors.
+
+So the reset requires **every factor the farm's own clock-in mode requires,
+except the PIN** — the thing being replaced. The requirement is *derived* from
+`clockin_mode()` rather than configured separately, so the two cannot drift
+apart: tightening the clock-in tightens the reset in the same move.
+
+```python
+def required_factors():
+    mode = CLOCKIN_MODES[clockin_mode()]
+    card, _pin, face = mode["factors"]
+    return {"card": bool(card), "face": bool(face), "mode": mode}
+
+def available():
+    if not enabled():                  return False, DISABLED
+    if not required_factors()["face"]: return False, NO_FACE_FACTOR
+    return True, ""
+```
+
+The second branch is the honest consequence: a farm that does not check faces
+has nothing to prove identity with, so it gets no self-service reset at all.
+That is not a gap to fill later — filling it would mean a new PIN for anyone who
+can read a worker number off a card.
+
+Three smaller things finish it. Attempts are throttled harder than a sign-in
+(three in fifteen minutes) because a reset *changes* a credential rather than
+merely using one. A passed face check is held for 180 seconds only, so an
+unattended terminal is not an open door. And a PIN another worker already holds
+is refused without naming who holds it, since saying so would disclose their
+PIN to whoever guessed it.
+
+### Why administrators get no equivalent
+
+There is no self-service password reset for the dashboard, and that is a
+decision rather than an omission. The system runs on a farm office machine with
+no mail server and no second channel, so a reset link has nowhere to go, and
+every alternative — a security question, a recovery PIN — is a second, weaker
+password on the account that reaches payroll. `/account-help` names the two
+routes that do exist: another administrator resetting it from Users, or
+`tools/reset_admin.py` run on the machine itself.
+
 ### The third factor, when the farm uses cards
 
 With `barcode_enabled` on, the clock-in checks something the worker **has** as

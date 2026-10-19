@@ -109,6 +109,7 @@ attendance and payroll with it; this is the reason not to.
 | Clip recording | Whether a short video is recorded at each punch, and how long |
 | **Portal sign-in** | Whether workers can sign in to see their own hours and payslips at all, and what they must present when they do. Set separately from clock-in verification - see section 4.1.2 |
 | **Worker cards** | What the barcode carries, and whether the browser camera may be used as a scanner. Whether cards are scanned at all is part of Clock-in verification - see section 4.1.1 |
+| **Forgotten PINs** | Whether a worker may set a new PIN themselves at the terminal, after the same checks their clock-in would ask for. See section 5.1 |
 | **Refresh charts every** | How often a page that shows charts reloads itself. Useful on an office screen left open all day. Anyone can override it for their own browser from the selector on the page |
 
 #### 4.1.1 Choosing what a clock-in checks
@@ -595,6 +596,53 @@ What the worker sees:
 their phone to see their hours and payslips, without asking the office. Section
 16 covers it.
 
+### 5.1 A forgotten PIN
+
+This is the commonest reason somebody is turned away at the gate, and it used to
+mean finding a supervisor with a dashboard login before the queue moved.
+
+**The worker's own route.** Under the clock-in button there is a link,
+**Forgotten your PIN?** It asks for the worker number (and the card, on a farm
+that scans cards), checks the face against the enrolled samples exactly as a
+clock-in would, and then lets them type a new PIN twice. The whole thing takes
+about as long as a punch.
+
+**Why that is not a back door.** The reset asks for *everything the farm's own
+clock-in asks for, except the PIN* - which is the thing being replaced. A farm
+on card + PIN + face resets on card + face, so an attacker still needs the
+physical card **and** the face, which is what they needed before. It follows
+that a farm whose clock-in does not check faces has no self-service reset at
+all: there would be nothing to prove identity with, and a new PIN handed out on
+a worker number alone is a giveaway, not a reset. Such a farm is told to see a
+supervisor, and the Settings page says so plainly.
+
+Three other things keep it honest:
+
+- Three failures against the same worker number stop it for fifteen minutes.
+- The face check is good for three minutes only, so a terminal walked away from
+  does not stay open on somebody else's account.
+- A PIN another worker already holds is refused - without saying who holds it.
+
+Every refusal and every successful reset is written to the **Audit Log** with
+the worker's number and the match score.
+
+**Switching it off.** Settings -> Forgotten PINs. With it off, a forgotten PIN
+is a supervisor's errand again: Workers -> the worker -> set a new PIN. The
+change itself is written to the Audit Log, because who may reset a credential
+is not a cosmetic setting.
+
+**An administrator who cannot sign in** is a different problem, and there is
+deliberately no self-service reset for it: this runs on a farm office machine
+with no mail server, so a reset link has nowhere to go, and anything else would
+be a second, weaker password on the account that reaches payroll. The
+**Forgotten your password?** link on the admin tab names the two routes that do
+work - another administrator resetting it from **Users**, or, if nobody can get
+in at all, running `python tools/reset_admin.py` on the office machine. That
+prints a new password once and forces whoever uses it to choose their own.
+
+> Never delete the records file to get back in. That file is the farm's
+> attendance and payroll.
+
 ---
 
 ## 6. Checking attendance
@@ -849,6 +897,10 @@ pulling figures for a report. Notable tables:
 | Saturdays now show overtime that they never used to | Correct. Saturday is a half day, so hours beyond four are overtime. Before the schedule existed a full Saturday earned none |
 | A salaried worker was skipped with "no hours" | A salary is not conditional on hours, but it is conditional on the person being there. Mark them present for at least one day in the period |
 | A worker's pay changed and nobody changed their rate | Check **Paid by** on their record. A rate of 6,000 means something very different per hour, per day and per month |
+| A worker forgot their PIN and the queue is moving | **Forgotten your PIN?** under the clock-in button. Face check, then they choose a new one. See section 5.1 |
+| The "Forgotten your PIN?" link says to see a supervisor | Clock-in verification does not include the face check, so there is nothing to prove identity with. Section 4.1.1, or reset the PIN on the Workers page |
+| "Too many attempts" on a PIN reset | Three failures in fifteen minutes. Waiting clears it; so does a supervisor resetting the PIN on the Workers page |
+| Nobody can sign in to the dashboard at all | Run `python tools/reset_admin.py` on the office machine. It prints a new password once. Do not delete the records file |
 | Charts are out of date on the office screen | Auto refresh is off for that browser. Set it from the selector at the top of the page |
 
 ---

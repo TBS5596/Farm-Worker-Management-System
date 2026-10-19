@@ -1,0 +1,87 @@
+{# ===========================================================================
+   account_help.html - what to do when an administrator cannot sign in.
+
+   There is deliberately no self-service reset here and there is not going to
+   be one. This runs on a farm office machine with no mail server and no
+   second channel to send a reset link down, so anything offered on this page
+   would amount to a second, weaker password on the account that reaches
+   Settings and payroll. The page names the two routes that actually exist.
+   =========================================================================== #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ org_name }} &ndash; Cannot sign in</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap.min.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}" />
+</head>
+<body>
+<div class="container login-shell">
+  <div class="card">
+    <div class="card-header text-white text-center py-4">
+      <i class="bi bi-shield-lock d-block mb-2" style="font-size: 2rem;"></i>
+      <h1 class="h4 mb-1">Cannot sign in?</h1>
+      <p class="mb-0 small opacity-75">{{ org_name }}</p>
+    </div>
+
+    <div class="card-body p-4">
+      <p class="text-muted small">
+        There is no automatic password reset on this system, and that is on
+        purpose: it runs on the farm's own machine with no mail server, so a
+        reset link has nowhere to go and anything else would just be a second,
+        weaker password on the account that reaches payroll. Two things do work.
+      </p>
+
+      <div class="mb-4">
+        <h2 class="h6 fw-bold"><span class="badge bg-success me-1">1</span>
+          Ask another administrator</h2>
+        <p class="small mb-1">
+          Any administrator can reset your password from
+          <strong>Users</strong> in the dashboard. You will be asked to choose
+          your own the moment you sign in with what they give you.
+        </p>
+        {% if admin_count <= 1 %}
+        <p class="small text-warning-emphasis fw-semibold mb-0">
+          <i class="bi bi-exclamation-triangle me-1"></i>
+          This farm has only one administrator account, so there is nobody else
+          to ask. Use the second route below, and consider adding a second
+          administrator afterwards.
+        </p>
+        {% endif %}
+      </div>
+
+      <div class="mb-3">
+        <h2 class="h6 fw-bold"><span class="badge bg-success me-1">2</span>
+          Reset it on the office machine</h2>
+        <p class="small mb-2">
+          If nobody can get in at all, run this where the system is installed:
+        </p>
+        <pre class="bg-light border rounded p-2 small mb-2"><code>python tools/reset_admin.py</code></pre>
+        <p class="small mb-0">
+          It prints a new password once and makes whoever uses it choose their
+          own straight away. No worker, attendance record or payroll row is
+          touched &mdash; <strong>do not delete the records file</strong> to get
+          back in, because that is the farm's attendance and payroll.
+        </p>
+      </div>
+
+      <hr />
+      <p class="small text-muted mb-0">
+        <i class="bi bi-person-badge me-1"></i>
+        Looking for a <strong>worker's</strong> forgotten PIN instead? That is
+        <a href="{{ url_for('pin_reset_page') }}">on the clock-in screen</a>,
+        or any supervisor can reset it from the Workers page.
+      </p>
+    </div>
+
+    <div class="card-footer text-center bg-light">
+      <a href="{{ url_for('login') }}" class="small text-decoration-none">
+        <i class="bi bi-arrow-left me-1"></i>Back to sign in
+      </a>
+    </div>
+  </div>
+</div>
+</body>
+</html>

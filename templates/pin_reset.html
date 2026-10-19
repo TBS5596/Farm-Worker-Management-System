@@ -1,0 +1,150 @@
+{# ===========================================================================
+   pin_reset.html - a worker who has forgotten their PIN proves who they are
+   with their face and sets a new one.
+
+   Two stages on one page. "identify" asks for the worker number, and the card
+   as well when the farm's clock-in mode uses one; the server then opens the
+   camera and matches the face against the samples enrolled for that worker.
+   "choose" is only reached once that match has passed, and is good for three
+   minutes.
+
+   Nothing here decides anything: every refusal and the reset itself are
+   decided server-side in pin_reset.py and app.py.
+   =========================================================================== #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ org_name }} &ndash; Forgotten PIN</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap.min.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}" />
+</head>
+<body>
+<div class="container login-shell">
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show mb-3" role="alert">
+          {{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" title="Dismiss message"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <div class="card">
+    <div class="card-header text-white text-center py-4">
+      <i class="bi bi-key d-block mb-2" style="font-size: 2rem;"></i>
+      <h1 class="h4 mb-1">Forgotten your PIN?</h1>
+      <p class="mb-0 small opacity-75">{{ org_name }}</p>
+    </div>
+
+    <div class="card-body p-4">
+
+      {% if not available %}
+        {# The farm has either switched this off, or does not use the face
+           check at all - in which case there is nothing to prove identity
+           with, and saying so is better than offering a reset that cannot
+           work. #}
+        <div class="alert alert-warning mb-3">
+          <i class="bi bi-info-circle me-1"></i>{{ unavailable_reason }}
+        </div>
+        <a href="{{ url_for('login') }}" class="btn btn-outline-secondary w-100">
+          <i class="bi bi-arrow-left me-1"></i>Back to sign in
+        </a>
+
+      {% elif stage == 'identify' %}
+        <p class="text-muted small">
+          Your face is what proves this is you, so stand square to the camera in
+          good light. Your new PIN is set only once the face matches the one
+          enrolled for your worker number.
+        </p>
+
+        <form method="POST" action="{{ url_for('pin_reset_page') }}">
+          {% if needs_card %}
+          <div class="mb-3">
+            <label class="form-label fw-semibold" for="prCard">Scan your card</label>
+            <div class="input-group">
+              <span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
+              <input type="text" class="form-control" id="prCard" name="card_code"
+                     placeholder="Scan the card, or type the code" autofocus />
+            </div>
+            <div class="form-text">
+              This farm's clock-in uses the card, so resetting your PIN needs it too.
+            </div>
+          </div>
+          {% endif %}
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold" for="prWorker">Worker ID</label>
+            <div class="input-group">
+              <span class="input-group-text"><i class="bi bi-person"></i></span>
+              <input type="text" class="form-control" id="prWorker" name="worker_id"
+                     placeholder="e.g. 0001" {% if not needs_card %}autofocus{% endif %} />
+            </div>
+          </div>
+
+          <button class="btn btn-success w-100 btn-lg" type="submit">
+            <i class="bi bi-camera me-1"></i>Check my face
+          </button>
+        </form>
+
+        <hr class="my-4" />
+        <p class="text-muted small mb-0">
+          If your face is not enrolled, or the camera is not working, your
+          supervisor can reset your PIN for you on the Workers page.
+        </p>
+
+      {% else %}
+        <div class="alert alert-success">
+          <i class="bi bi-person-check me-1"></i>
+          Your face was matched{% if score %} at {{ '%.0f'|format(score) }}%{% endif %}.
+          You are <strong>{{ worker_name }}</strong> ({{ worker_code }}).
+        </div>
+        <p class="text-muted small">
+          Choose a new PIN now. It must be at least four digits, and different
+          from every other worker's.
+        </p>
+
+        <form method="POST" action="{{ url_for('pin_reset_set') }}">
+          <div class="mb-3">
+            <label class="form-label fw-semibold" for="prNew">New PIN</label>
+            <div class="input-group">
+              <span class="input-group-text"><i class="bi bi-key"></i></span>
+              <input type="password" class="form-control" id="prNew" name="new_pin"
+                     inputmode="numeric" minlength="4" required autofocus />
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold" for="prConfirm">Type it again</label>
+            <div class="input-group">
+              <span class="input-group-text"><i class="bi bi-key-fill"></i></span>
+              <input type="password" class="form-control" id="prConfirm" name="confirm_pin"
+                     inputmode="numeric" minlength="4" required />
+            </div>
+          </div>
+          <button class="btn btn-success w-100 btn-lg" type="submit">
+            <i class="bi bi-check2-circle me-1"></i>Set my new PIN
+          </button>
+        </form>
+        <p class="text-muted small mt-3 mb-0">
+          This check lasts three minutes. If it expires, start again.
+        </p>
+      {% endif %}
+
+    </div>
+
+    <div class="card-footer text-center bg-light">
+      <a href="{{ url_for('login') }}" class="small text-decoration-none">
+        <i class="bi bi-arrow-left me-1"></i>Back to sign in
+      </a>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='vendor/bootstrap.bundle.min.js') }}"></script>
+</body>
+</html>

@@ -11,26 +11,32 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-295 tests, about a minute, fourteen modules.
+333 tests, about a minute, sixteen modules.
 
 ```
-tests/test_attendance.py        11 tests
-tests/test_cards.py             54 tests
-tests/test_cctv_and_sync.py     15 tests
-tests/test_pages_render.py      40 tests
-tests/test_face_engine.py        9 tests
-tests/test_pay_bases.py         17 tests
-tests/test_pay_periods.py       21 tests
-tests/test_payroll.py            7 tests
-tests/test_portal.py            47 tests
-tests/test_real_face.py          4 tests
-tests/test_reports.py           27 tests
-tests/test_schedule.py          13 tests
-tests/test_security_and_api.py  19 tests
-tests/test_workers.py           11 tests
+tests/test_attendance.py          11 tests
+tests/test_captures_isolation.py   2 tests
+tests/test_cards.py               54 tests
+tests/test_cctv_and_sync.py       15 tests
+tests/test_face_engine.py          9 tests
+tests/test_pages_render.py        42 tests
+tests/test_pay_bases.py           17 tests
+tests/test_pay_periods.py         21 tests
+tests/test_payroll.py              7 tests
+tests/test_pin_reset.py           34 tests
+tests/test_portal.py              47 tests
+tests/test_real_face.py            4 tests
+tests/test_reports.py             27 tests
+tests/test_schedule.py            13 tests
+tests/test_security_and_api.py    19 tests
+tests/test_workers.py             11 tests
 
-295 passed
+333 passed
 ```
+
+`test_pin_reset.py` is almost entirely refusals, and deliberately so: a PIN
+reset is a way of handing out a credential, so nearly every test there is a way
+it must say no. Read it before touching `pin_reset.py`.
 
 `test_schedule.py` pins down the working week, the Saturday half day and the
 unpaid lunch; `test_pay_bases.py` pins down hourly, daily and monthly pay. Both

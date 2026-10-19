@@ -300,7 +300,7 @@ analysis, no continuous recording and no movement tracking.
 attendance are routinely extended into other monitoring. The defence is not a
 policy promise — it is not building the capability. There is no interface
 through which retained material could be repurposed into a performance ranking,
-and that claim is verifiable by inspecting the 54 routes and 15 endpoints.
+and that claim is verifiable by inspecting the 57 routes and 15 endpoints.
 
 **The Analytics page is the closest this comes to a line, and it stays on the
 right side of it deliberately.** It aggregates — cost by department, hours by
@@ -373,7 +373,7 @@ down.
 
 Honest list — if you have time, these are worth improving:
 
-- **`app.py` is about 1,900 lines.** All 54 routes in one file. Blueprints would
+- **`app.py` is about 2,300 lines.** All 57 routes in one file. Blueprints would
   split it sensibly — `portal.py` shows it works. Nothing depends on it being one
   file.
 - **`pin_fingerprint` is badly named.** It is a uniqueness hash, nothing to do

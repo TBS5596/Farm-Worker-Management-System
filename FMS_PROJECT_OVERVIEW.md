@@ -74,6 +74,7 @@ and worked examples where the behaviour is not obvious from the code.
 | `geofence.py` | Coordinate validation and distance from the farm centre |
 | `sync_engine.py` | Firebase upload, offline queue, per-record sync state |
 | `security.py` | Role to permission mapping and route decorators |
+| `pin_reset.py` | A worker proves who they are by face and sets a new PIN; refuses wherever that would be the weaker door |
 | `exports.py` | CSV builders |
 | `api.py` | JSON API blueprint |
 | `tools/export_schema.py` | Regenerates `Workers.sql` from the models |
@@ -764,7 +765,7 @@ server does. 5000 collides with AirPlay Receiver on macOS.
 
 **Engines:** `face_engine.py`, `attendance_service.py`, `cctv_engine.py`,
 `payroll_engine.py`, `geofence.py`, `sync_engine.py`, `security.py`,
-`exports.py`, `api.py`
+`pin_reset.py`, `exports.py`, `api.py`
 
 **Infra:** `Dockerfile`, `docker-compose.yml`, `requirements.txt`
 
