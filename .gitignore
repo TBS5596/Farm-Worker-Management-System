@@ -1,5 +1,17 @@
 # Database
+#
+# `*.db` alone is not enough, and the gap is not theoretical: a backup named
+# fms.db.before-password-reset was not matched by it, and that file holds every
+# worker record, every attendance row and the enrolled face templates. SQLite's
+# own sidecar files carry live transaction data and were equally unmatched.
+# Anything that is or was a database is ignored, whatever suffix it picked up.
 *.db
+*.db.*
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
 
 # Captured photos
 captures/
