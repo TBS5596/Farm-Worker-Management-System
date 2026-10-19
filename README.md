@@ -414,14 +414,15 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-295 tests covering worker ID generation and PIN uniqueness, face template storage
+333 tests covering worker ID generation and PIN uniqueness, face template storage
 and matching, the clock in/out session rules, geofence behaviour, payroll
 arithmetic on all three pay bases, the work schedule - the half-day Saturday,
 the rest day and the unpaid lunch that must not be deducted twice - weekly and
 monthly generation, the worker portal, identity cards and the
 scan-to-worker lookup, both card print layouts and the mirroring that keeps a
 double-sided sheet aligned, every clock-in verification combination and its round
-trip through the settings page, the Analytics figures, role enforcement, the API and
+trip through the settings page, the face-verified PIN reset and every way it must
+refuse, the Analytics figures, role enforcement, the API and
 CSV exports. The suite uses a temporary database and never touches `fms.db`.
 
 Four of those tests use a real photograph - enrolling it through the actual HTTP

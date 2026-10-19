@@ -31,6 +31,7 @@ import exports
 import face_engine
 import geofence
 import payroll_engine
+import pin_reset
 import reports_engine
 import sync_engine
 import attendance_service
@@ -302,6 +303,12 @@ DEFAULT_SETTINGS = {
     # Allow a supervisor to read a card with the device camera instead of a
     # dedicated scanner.
     "barcode_camera_scan": "on",
+    # Whether a worker who has forgotten their PIN may prove who they are at
+    # the terminal with their face and set a new one. The reset always asks
+    # for every factor the clock-in mode requires except the PIN itself, so
+    # turning this on can never make the reset an easier door than the gate -
+    # see pin_reset.py. Off means a supervisor does it on the Workers page.
+    "pin_reset_enabled": "on",
     # How often a page carrying charts reloads itself, in seconds. 0 is off.
     # A farm office leaves the dashboard open all day, so a stale screen is the
     # common failure; a viewer can override this for their own browser.
@@ -810,6 +817,139 @@ def _register_routes(app: Flask) -> None:
             active_page="dashboard",
             org_name=_get_setting("org_name", "FMS Farm"),
         )
+
+    # ---- Forgotten PIN and forgotten password ----------------------------- #
+
+    @app.route("/account-help")
+    def account_help():
+        """What to do when an administrator cannot sign in.
+
+        There is no self-service password reset and there is not going to be
+        one: this runs on a farm office machine with no mail server and no
+        second channel to send a link down, so anything offered here would be
+        a second, weaker password on the account that reaches payroll. The
+        page names the two routes that actually exist instead of pretending.
+        """
+        return render_template(
+            "account_help.html",
+            org_name=_get_setting("org_name", "FMS Farm"),
+            admin_count=User.query.filter(
+                db.func.lower(User.role) == "admin").filter_by(is_active=True).count(),
+        )
+
+    @app.route("/pin-reset", methods=["GET", "POST"])
+    def pin_reset_page():
+        """A worker proves who they are with their face and sets a new PIN."""
+        cards_on = _get_setting("barcode_enabled", "off") == "on"
+        ok, why = pin_reset.available()
+        ctx = {
+            "org_name": _get_setting("org_name", "FMS Farm"),
+            "available": ok,
+            "unavailable_reason": pin_reset.MESSAGES.get(why, ""),
+            "needs_card": pin_reset.required_factors()["card"] and cards_on,
+            "stage": "identify",
+        }
+
+        if request.method == "GET" or not ok:
+            return render_template("pin_reset.html", **ctx)
+
+        worker_code = request.form.get("worker_id", "").strip()
+        card_value = request.form.get("card_code", "").strip()
+        key = (worker_code or card_value or request.remote_addr or "?").upper()
+
+        if pin_reset.recent_attempts(key) >= pin_reset.MAX_ATTEMPTS:
+            _log_audit("worker.pin_reset_refused",
+                       f"PIN reset throttled for '{key}'")
+            flash(pin_reset.MESSAGES[pin_reset.THROTTLED], "danger")
+            return render_template("pin_reset.html", **ctx)
+
+        worker, reason = pin_reset.resolve(worker_code, card_value)
+        if worker is None:
+            pin_reset.record_attempt(key)
+            _log_audit("worker.pin_reset_refused",
+                       f"PIN reset refused for '{key}': {reason}")
+            flash(pin_reset.MESSAGES.get(reason, "That could not be checked."), "danger")
+            return render_template("pin_reset.html", **ctx)
+
+        frames, status = cctv_engine.grab_frames(count=8)
+        if status != "ok" or not frames:
+            _log_audit("worker.pin_reset_refused",
+                       f"PIN reset refused for {worker.worker_id}: camera_error")
+            flash(pin_reset.MESSAGES[pin_reset.CAMERA], "danger")
+            return render_template("pin_reset.html", **ctx)
+
+        threshold = float(_get_setting("face_match_threshold", "35") or 35)
+        require_eyes = _get_setting("face_require_eyes", "on") == "on"
+        check = pin_reset.verify_face(worker, frames, threshold, require_eyes)
+        attendance_service.log_transaction(
+            worker.id, "face_verify_pin_reset", bool(check["matched"]),
+            score=check["score"], threshold=threshold,
+            error_message=None if check["matched"] else check["reason"])
+
+        if not check["matched"]:
+            pin_reset.record_attempt(key)
+            _log_audit("worker.pin_reset_refused",
+                       f"PIN reset refused for {worker.worker_id}: {check['reason']} "
+                       f"(score {check['score']})")
+            flash(attendance_service.REASON_MESSAGES.get(
+                check["reason"], "Your face could not be matched. Please try again."), "danger")
+            return render_template("pin_reset.html", **ctx)
+
+        # The face passed. Hold that for a few minutes while they type.
+        pin_reset.clear_attempts(key)
+        session["pin_reset_worker"] = worker.id
+        session["pin_reset_until"] = (
+            datetime.utcnow() + timedelta(seconds=pin_reset.GRANT_SECONDS)).isoformat()
+        _log_audit("worker.pin_reset_verified",
+                   f"Face verified for PIN reset: {worker.worker_id} "
+                   f"(score {check['score']})")
+        ctx.update(stage="choose", worker_name=worker.name,
+                   worker_code=worker.worker_id, score=check["score"])
+        return render_template("pin_reset.html", **ctx)
+
+    @app.route("/pin-reset/set", methods=["POST"])
+    def pin_reset_set():
+        """Write the new PIN, but only while the face check is still good."""
+        ctx = {"org_name": _get_setting("org_name", "FMS Farm"),
+               "available": True, "unavailable_reason": "", "needs_card": False,
+               "stage": "identify"}
+
+        worker_pk = session.get("pin_reset_worker")
+        until = session.get("pin_reset_until")
+        expired = True
+        try:
+            expired = datetime.utcnow() > datetime.fromisoformat(until)
+        except (TypeError, ValueError):
+            expired = True
+
+        if not worker_pk or expired:
+            session.pop("pin_reset_worker", None)
+            session.pop("pin_reset_until", None)
+            flash("That took too long, so the identity check has expired. "
+                  "Please start again.", "warning")
+            return redirect(url_for("pin_reset_page"))
+
+        worker = Worker.query.get(worker_pk)
+        if worker is None or (worker.status or "").lower() != "active":
+            session.pop("pin_reset_worker", None)
+            return redirect(url_for("pin_reset_page"))
+
+        new_pin = request.form.get("new_pin", "")
+        confirm = request.form.get("confirm_pin", "")
+        problem = pin_reset.pin_problem(worker, new_pin, confirm)
+        if problem:
+            flash(problem, "danger")
+            ctx.update(stage="choose", worker_name=worker.name,
+                       worker_code=worker.worker_id)
+            return render_template("pin_reset.html", **ctx)
+
+        pin_reset.apply(worker, new_pin.strip())
+        session.pop("pin_reset_worker", None)
+        session.pop("pin_reset_until", None)
+        _log_audit("worker.pin_reset",
+                   f"PIN reset by the worker after a face check: {worker.worker_id}")
+        flash("Your PIN has been changed. Use the new one to clock in.", "success")
+        return redirect(url_for("login"))
 
     @app.route("/profile/change-password", methods=["POST"])
     @admin_required
@@ -1352,6 +1492,13 @@ def _register_routes(app: Flask) -> None:
             portal_mode_settings = portal_blueprint_module.settings_for_portal_mode(
                 portal_mode_key)
 
+            # Whether a worker may reset their own PIN. Read before the save so
+            # the change itself can be named in the audit trail: this switch
+            # decides whether a forgotten PIN is a supervisor's errand or a
+            # face check at the gate, and either answer should be traceable.
+            previous_pin_reset = pin_reset.enabled()
+            pin_reset_wanted = bool(request.form.get("pin_reset_enabled"))
+
             _save_settings({
                 "org_name": request.form.get("org_name", "").strip(),
                 "face_match_threshold": str(threshold_value),
@@ -1394,7 +1541,14 @@ def _register_routes(app: Flask) -> None:
                 # page that appeared to offer them.
                 "portal_enabled": "on" if request.form.get("portal_enabled") else "off",
                 **portal_mode_settings,
+                "pin_reset_enabled": "on" if pin_reset_wanted else "off",
             })
+            if pin_reset_wanted != previous_pin_reset:
+                _log_audit(
+                    "settings.pin_reset",
+                    "Self-service PIN reset turned "
+                    + ("on" if pin_reset_wanted else "off"),
+                )
             # A change of clock-in mode changes what the attendance record
             # means, so it is named in the audit trail rather than buried in a
             # generic "settings updated".
@@ -1428,6 +1582,8 @@ def _register_routes(app: Flask) -> None:
             clockin_mode=attendance_service.clockin_mode(),
             portal_modes=portal_blueprint_module.PORTAL_MODES,
             portal_mode=portal_blueprint_module.portal_mode(),
+            pin_reset_available=pin_reset.available()[0],
+            pin_reset_factors=pin_reset.required_factors(),
             card_sources=barcode_engine.SOURCES,
             card_symbologies=barcode_engine.SYMBOLOGIES,
             card_stats=barcode_engine.stats(),

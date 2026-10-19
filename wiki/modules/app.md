@@ -2,7 +2,7 @@
 
 ← [Module index](README.md) · [Wiki index](../README.md)
 
-**~1980 lines. The biggest file in the project, and the one you will open most.**
+**~2300 lines. The biggest file in the project, and the one you will open most.**
 
 ---
 
@@ -13,9 +13,9 @@ Four things, in this order:
 1. **The application factory** — `create_app()`
 2. **Seeding** — `_seed_defaults()`, `_ensure_default_cctv_entries()`
 3. **Helpers** — settings, audit, worker IDs, date parsing, streaming
-4. **`_register_routes(app)`** — all 54 routes, in one very long function
+4. **`_register_routes(app)`** — all 57 routes, in one very long function
 
-> **Yes, it is too long.** All 54 routes in one function is the main piece of
+> **Yes, it is too long.** All 57 routes in one function is the main piece of
 > technical debt in the project. Splitting into Flask blueprints — one per area —
 > would be a clean improvement and nothing depends on the current shape. It is
 > listed under "not deliberate" in
@@ -96,6 +96,9 @@ behaviour; a 500 error is not.
 | `/logout` | GET | |
 | `/profile/password-change` | GET | The forced-change page |
 | `/profile/change-password` | POST | |
+| `/pin-reset` | GET, POST | A worker proves who they are with their face — see [pin_reset](pin_reset.md) |
+| `/pin-reset/set` | POST | Writes the new PIN, but only while that face check is still good |
+| `/account-help` | GET | *(open)* What an administrator does when they cannot sign in. No reset here, on purpose |
 
 ### Main pages
 
@@ -186,9 +189,9 @@ browser refresh re-submits the form and the action happens twice.
 
 ## What it produces
 
-Forty-nine routes, each rendering a page like this one:
+Fifty-two routes, each rendering a page like this one:
 
-![The dashboard, one of the 54 routes registered by this module](../images/dashboard.png)
+![The dashboard, one of the 57 routes registered by this module](../images/dashboard.png)
 
 ## Gotchas
 

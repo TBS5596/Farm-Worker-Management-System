@@ -26,6 +26,7 @@ flowchart TB
         REP["reports_engine.py"]
         GEO["geofence.py"]
         SEC["security.py"]
+        PIN["pin_reset.py"]
         SYNC["sync_engine.py"]
         EXP["exports.py"]
     end
@@ -46,7 +47,7 @@ back up.
 
 | Page | Module | Lines | What it is |
 | --- | --- | --- | --- |
-| [app.md](app.md) | `app.py` | ~1980 | Application factory, 54 routes, seeding, helpers |
+| [app.md](app.md) | `app.py` | ~2300 | Application factory, 57 routes, seeding, helpers |
 | [models.md](models.md) | `models.py` | ~523 | The sixteen tables |
 | [face_engine.md](face_engine.md) | `face_engine.py` | ~445 | Detection, enrolment, matching, the card photograph |
 | [attendance_service.md](attendance_service.md) | `attendance_service.py` | ~415 | The clock-in transaction |
@@ -60,6 +61,7 @@ back up.
 | [exports.md](exports.md) | `exports.py` | ~175 | CSV generation |
 | [api.md](api.md) | `api.py` | ~390 | The 15 JSON endpoints |
 | [portal.md](portal.md) | `portal.py` | ~555 | The worker self-service portal at `/me` |
+| [pin_reset.md](pin_reset.md) | `pin_reset.py` | ~215 | Letting a worker prove who they are and set a new PIN |
 | [frontend.md](frontend.md) | `templates/`, `static/` | — | HTML, CSS, JavaScript |
 | [support-modules.md](support-modules.md) | `database.py`, `paths.py`, `migrations.py` | ~100 | The small ones |
 
@@ -69,6 +71,7 @@ back up.
 - **"How is pay calculated?"** → [payroll_engine](payroll_engine.md)
 - **"Where is this URL handled?"** → [app.md](app.md), the route tables
 - **"What can a supervisor do?"** → [security](security.md)
+- **"What happens when somebody forgets a PIN?"** → [pin_reset](pin_reset.md)
 - **"How do I store a new field?"** → [models](models.md), then [support-modules](support-modules.md) for migrations
 - **"Why is the camera behaving oddly?"** → [cctv_engine](cctv_engine.md)
 - **"What is printed on a worker's card?"** → [barcode_engine](barcode_engine.md)

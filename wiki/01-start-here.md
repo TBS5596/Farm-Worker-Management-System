@@ -192,6 +192,7 @@ barcode_engine.py       Worker identity cards: the value, the barcode, the looku
 reports_engine.py       The figures behind the Analytics page
 geofence.py             Distance from the farm
 security.py             Roles and permissions
+pin_reset.py            Resetting a forgotten PIN, without opening a weaker door
 sync_engine.py          Cloud upload queue
 exports.py              CSV files
 api.py                  The JSON API
@@ -199,7 +200,7 @@ portal.py               The worker self-service portal at /me
 
 templates/              HTML
 static/css/, static/js/ Styles and browser scripts
-tests/                  295 tests
+tests/                  333 tests
 tools/                  Scripts: demo data, benchmarks, experiments
 ```
 

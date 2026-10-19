@@ -462,7 +462,13 @@ mkdir -p data && cp fms.db data/fms.db
 8. **Settings → Clock-in verification** — choose what a worker must present to
    clock in: the card they *have*, the PIN they *know*, the face they *are*. A
    fresh installation starts at PIN + face. Add the card once cards are printed.
-9. *Optional:* **Settings → Worker cards** — if you are using cards, choose what
+9. **Settings → Forgotten PINs** — on by default. A worker who forgets a PIN
+   can set a new one at the terminal after the same face check their clock-in
+   makes, so a forgotten PIN does not hold up the queue. It switches itself off
+   in effect if clock-in verification does not check faces, because then there
+   is nothing to prove identity with. Turn it off if you would rather a
+   supervisor did every reset.
+10. *Optional:* **Settings → Worker cards** — if you are using cards, choose what
    the barcode carries and which barcode type to print, then go to
    **Workers → Issue cards**. See [the operator manual](manual.md) for what each
    barcode option means, and read its printing section before you print a batch:
@@ -486,7 +492,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-295 tests, about a minute. All should pass.
+333 tests, about a minute. All should pass.
 
 ### Get back in when the administrator password is lost
 
@@ -501,6 +507,10 @@ worker, no attendance record, no payroll row.
 
 `python tools/reset_admin.py --list` shows the accounts without changing
 anything, and `--user NAME` resets a different one.
+
+If another administrator can still sign in, they do not need this at all: they
+can reset the password from **Users** in the dashboard. The **Forgotten your
+password?** link on the sign-in page says the same thing.
 
 This exists so that a forgotten password is not a reason to delete the records
 file. On a farm, that file is the attendance and the payroll.
