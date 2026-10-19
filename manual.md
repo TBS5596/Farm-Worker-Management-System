@@ -69,6 +69,24 @@ Username `admin`, password `admin`. The system immediately asks you to set a rea
 password and nothing else opens until you do. The same applies to any user account
 created or reset later.
 
+**If `admin` / `admin` is refused**, it does not mean the password is wrong: it
+means somebody has already changed it on that records file. Which file you are
+opening decides which password applies, and `python tools/db_info.py` says which
+one the system is using.
+
+**If the administrator password has been lost**, the records are not lost with
+it. Run:
+
+```
+python tools/reset_admin.py
+```
+
+It prints a new password once, writes it to the account, and makes whoever
+signs in with it choose their own straight away - the same gate as a new
+installation. No worker, attendance record or payroll row is touched. Deleting
+the records file would also get you back in, and would take the farm's
+attendance and payroll with it; this is the reason not to.
+
 ---
 
 ## 4. Setting up, in order

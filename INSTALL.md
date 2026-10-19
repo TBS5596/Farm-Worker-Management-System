@@ -488,6 +488,28 @@ pytest
 
 295 tests, about a minute. All should pass.
 
+### Get back in when the administrator password is lost
+
+```bash
+python tools/reset_admin.py
+```
+
+Prints a new password once, writes it to the `admin` account, and makes whoever
+signs in with it choose their own immediately - the same gate a new
+installation passes through. Nothing else in the database is touched: no
+worker, no attendance record, no payroll row.
+
+`python tools/reset_admin.py --list` shows the accounts without changing
+anything, and `--user NAME` resets a different one.
+
+This exists so that a forgotten password is not a reason to delete the records
+file. On a farm, that file is the attendance and the payroll.
+
+**If `admin` / `admin` is refused on a system you have just started**, the
+password has already been changed on that records file. Run `python
+tools/db_info.py` to see which file is open - starting with `python app.py` and
+starting under Docker use two different ones.
+
 ### Check which cameras the machine can see
 
 ```bash
